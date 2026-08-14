@@ -30,3 +30,4 @@ Bottom tabs: Accueil / Recettes / Assistant / Profil
 ## Implemented Features (updated 2026-08-14)
 - Iteration 1-2: Auth (email+Google), 20 recettes seed, tips, favoris, partage avec photo, assistant IA Claude Sonnet 5, profil
 - Iteration 3: Aimer & Commenter (likes + comments par recette), Calculateur du boulanger (pourcentages boulanger, mode farine/pâte, hydratation/sel/levure/levain), Minuteur intégré (détecte durées dans les étapes, barre flottante pause/stop), Notes personnelles par recette (onglet Communauté)
+- Iteration 4: Réponses aux avis (commentaires en fil / threaded), Minuteur multi-étapes (séquence enchaînée avec skip), Partager le calcul (bouton "Enregistrer comme recette" pré-remplit le formulaire de partage), Badges "Coup de cœur" (top 5 recettes les plus aimées, badge sur cartes + section dédiée sur l'accueil)

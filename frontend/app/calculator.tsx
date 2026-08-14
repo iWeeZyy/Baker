@@ -87,6 +87,25 @@ export default function Calculator() {
             <View style={styles.divider} />
             <ResultRow label="Poids total de pâte" value={`${result.dough} g`} strong />
           </View>
+
+          <Pressable testID="save-as-recipe" onPress={() => {
+            const ings = [
+              `${result.flour} g de farine`,
+              `${result.water} g d'eau (hydratation ${hydration}%)`,
+              `${result.salt} g de sel`,
+              `${result.yeast} g de levure`,
+              ...(useLevain ? [`${result.levain} g de levain`] : []),
+            ].join('\n');
+            router.push({ pathname: '/share', params: {
+              prefillTitle: 'Ma recette calculée',
+              prefillHydration: String(hydration),
+              prefillIngredients: ings,
+              prefillDescription: `Pâte de ${result.dough} g à ${hydration}% d'hydratation, calculée avec la méthode du boulanger.`,
+            }});
+          }} style={styles.saveRecipeBtn}>
+            <Feather name="bookmark" size={16} color="#fff" />
+            <Text style={styles.saveRecipeText}>Enregistrer comme recette</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -136,4 +155,6 @@ const styles = StyleSheet.create({
   resultLabel: { fontSize: 15, color: theme.color.onSurfaceSecondary },
   resultValue: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface },
   divider: { height: 1, backgroundColor: theme.color.borderStrong, marginVertical: 8 },
+  saveRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 15, borderRadius: 8, marginTop: 20 },
+  saveRecipeText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

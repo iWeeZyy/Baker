@@ -172,6 +172,7 @@ class ChatMessageInput(BaseModel):
 
 class CommentInput(BaseModel):
     content: str
+    parent_id: Optional[str] = None
 
 class NoteInput(BaseModel):
     content: str
@@ -258,31 +259,70 @@ async def logout(authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 # ---------- Recipes ----------
+COUP_DE_COEUR_TOP_N = 5
+
+async def _like_counts(recipe_ids):
+    counts = {}
+    if not recipe_ids:
+        return counts
+    pipeline = [
+        {"$match": {"recipe_id": {"$in": recipe_ids}}},
+        {"$group": {"_id": "$recipe_id", "c": {"$sum": 1}}},
+    ]
+    async for row in db.likes.aggregate(pipeline):
+        counts[row["_id"]] = row["c"]
+    return counts
+
+async def _global_top_liked():
+    pipeline = [
+        {"$group": {"_id": "$recipe_id", "c": {"$sum": 1}}},
+        {"$sort": {"c": -1}},
+        {"$limit": COUP_DE_COEUR_TOP_N},
+    ]
+    ids = set()
+    async for row in db.likes.aggregate(pipeline):
+        if row["c"] > 0:
+            ids.add(row["_id"])
+    return ids
+
+async def enrich_recipes(docs):
+    ids = [d["id"] for d in docs]
+    counts = await _like_counts(ids)
+    top = await _global_top_liked()
+    for d in docs:
+        d["like_count"] = counts.get(d["id"], 0)
+        d["coup_de_coeur"] = d["id"] in top
+    return docs
+
 @api_router.get("/recipes")
-async def list_recipes(category: Optional[str] = None, mine: bool = False, user: Optional[dict] = None):
+async def list_recipes(category: Optional[str] = None):
     q = {}
     if category and category != "Tous":
         q["category"] = category
     cursor = db.recipes.find(q, {"_id": 0}).sort("created_at", -1)
-    return await cursor.to_list(500)
+    docs = await cursor.to_list(500)
+    return await enrich_recipes(docs)
 
 @api_router.get("/recipes/mine")
 async def my_recipes(user: dict = Depends(get_current_user)):
     cursor = db.recipes.find({"author_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1)
-    return await cursor.to_list(500)
+    docs = await cursor.to_list(500)
+    return await enrich_recipes(docs)
 
 @api_router.get("/recipes/favorites")
 async def my_favorites(user: dict = Depends(get_current_user)):
     favs = await db.favorites.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(500)
     ids = [f["recipe_id"] for f in favs]
     cursor = db.recipes.find({"id": {"$in": ids}}, {"_id": 0})
-    return await cursor.to_list(500)
+    docs = await cursor.to_list(500)
+    return await enrich_recipes(docs)
 
 @api_router.get("/recipes/{recipe_id}")
 async def get_recipe(recipe_id: str):
     r = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
     if not r:
         raise HTTPException(404, "Recette introuvable")
+    (r,) = await enrich_recipes([r])
     return r
 
 @api_router.post("/recipes")
@@ -334,7 +374,7 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
 # ---------- Comments ----------
 @api_router.get("/recipes/{recipe_id}/comments")
 async def get_comments(recipe_id: str):
-    cursor = db.comments.find({"recipe_id": recipe_id}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.comments.find({"recipe_id": recipe_id}, {"_id": 0}).sort("created_at", 1)
     return await cursor.to_list(500)
 
 @api_router.post("/recipes/{recipe_id}/comments")
@@ -342,6 +382,7 @@ async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(ge
     doc = {
         "id": str(uuid.uuid4()),
         "recipe_id": recipe_id,
+        "parent_id": inp.parent_id,
         "user_id": user["user_id"],
         "user_name": user.get("name") or "Boulanger",
         "user_picture": user.get("picture"),

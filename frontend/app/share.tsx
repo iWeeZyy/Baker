@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
@@ -13,13 +13,14 @@ const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
 
 export default function ShareRecipe() {
   const router = useRouter();
-  const [title, setTitle] = useState('');
+  const params = useLocalSearchParams<{ prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string }>();
+  const [title, setTitle] = useState(params.prefillTitle || '');
   const [category, setCategory] = useState('Pains');
   const [difficulty, setDifficulty] = useState('Facile');
   const [time, setTime] = useState('');
-  const [hydration, setHydration] = useState('');
-  const [description, setDescription] = useState('');
-  const [ingredients, setIngredients] = useState('');
+  const [hydration, setHydration] = useState(params.prefillHydration || '');
+  const [description, setDescription] = useState(params.prefillDescription || '');
+  const [ingredients, setIngredients] = useState(params.prefillIngredients || '');
   const [steps, setSteps] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);

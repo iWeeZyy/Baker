@@ -9,7 +9,7 @@ import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { theme } from '@/src/theme';
 
-type Comment = { id: string; user_name: string; content: string; created_at: string };
+type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
 
 // Parse a duration mentioned in a step text -> seconds (first match)
 function parseDuration(text: string): number | null {
@@ -28,13 +28,14 @@ function parseDuration(text: string): number | null {
 export default function RecipeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { start } = useTimer();
+  const { start, startSequence } = useTimer();
   const [recipe, setRecipe] = useState<any>(null);
   const [tab, setTab] = useState<'ingredients' | 'steps' | 'community'>('ingredients');
   const [favorited, setFavorited] = useState(false);
   const [likes, setLikes] = useState({ count: 0, liked: false });
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
+  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -73,9 +74,11 @@ export default function RecipeDetail() {
     const txt = commentText.trim();
     if (!txt) return;
     setCommentText('');
+    const parent = replyTo?.id || null;
+    setReplyTo(null);
     try {
-      const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt }) });
-      setComments(prev => [c, ...prev]);
+      const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt, parent_id: parent }) });
+      setComments(prev => [...prev, c]);
     } catch {}
   };
 
@@ -103,7 +106,15 @@ export default function RecipeDetail() {
             </Pressable>
           </SafeAreaView>
           <View style={styles.heroBottom}>
-            <Text style={styles.category}>{recipe.category.toUpperCase()}</Text>
+            <View style={styles.heroBadgeRow}>
+              <Text style={styles.category}>{recipe.category.toUpperCase()}</Text>
+              {recipe.coup_de_coeur && (
+                <View style={styles.cdcBadge} testID="cdc-badge">
+                  <Feather name="award" size={11} color={theme.color.onBrandPrimary} />
+                  <Text style={styles.cdcText}>COUP DE CŒUR</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.title}>{recipe.title}</Text>
             {recipe.author_name && <Text style={styles.author}>par {recipe.author_name}</Text>}
           </View>
@@ -148,23 +159,39 @@ export default function RecipeDetail() {
             </View>
           ))}
 
-          {tab === 'steps' && recipe.steps.map((s: string, i: number) => {
-            const dur = parseDuration(s);
+          {tab === 'steps' && (() => {
+            const seq = recipe.steps
+              .map((s: string, i: number) => ({ i, dur: parseDuration(s) }))
+              .filter((x: any) => x.dur)
+              .map((x: any) => ({ label: `Étape ${x.i + 1}`, seconds: x.dur }));
             return (
-              <View key={i} style={styles.stepRow} testID={`step-${i}`}>
-                <Text style={styles.stepNum}>{String(i + 1).padStart(2, '0')}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stepText}>{s}</Text>
-                  {dur && (
-                    <Pressable testID={`timer-step-${i}`} onPress={() => start(`Étape ${i + 1}`, dur)} style={styles.timerChip}>
-                      <Feather name="clock" size={13} color={theme.color.brand} />
-                      <Text style={styles.timerChipText}>Lancer le minuteur ({Math.round(dur / 60)} min)</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
+              <>
+                {seq.length > 1 && (
+                  <Pressable testID="start-all-timers" onPress={() => startSequence(seq)} style={styles.seqBtn}>
+                    <Feather name="play-circle" size={16} color="#fff" />
+                    <Text style={styles.seqBtnText}>Lancer les {seq.length} minuteurs en séquence</Text>
+                  </Pressable>
+                )}
+                {recipe.steps.map((s: string, i: number) => {
+                  const dur = parseDuration(s);
+                  return (
+                    <View key={i} style={styles.stepRow} testID={`step-${i}`}>
+                      <Text style={styles.stepNum}>{String(i + 1).padStart(2, '0')}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.stepText}>{s}</Text>
+                        {dur && (
+                          <Pressable testID={`timer-step-${i}`} onPress={() => start(`Étape ${i + 1}`, dur)} style={styles.timerChip}>
+                            <Feather name="clock" size={13} color={theme.color.brand} />
+                            <Text style={styles.timerChipText}>Lancer le minuteur ({Math.round(dur / 60)} min)</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
 
           {tab === 'community' && (
             <View>
@@ -192,12 +219,20 @@ export default function RecipeDetail() {
 
               {/* Comments */}
               <Text style={styles.commentsTitle}>Avis de la communauté</Text>
+              {replyTo && (
+                <View style={styles.replyBanner} testID="reply-banner">
+                  <Text style={styles.replyBannerText}>Réponse à {replyTo.name}</Text>
+                  <Pressable testID="cancel-reply" onPress={() => setReplyTo(null)}>
+                    <Feather name="x" size={16} color={theme.color.muted} />
+                  </Pressable>
+                </View>
+              )}
               <View style={styles.commentInputRow}>
                 <TextInput
                   testID="comment-input"
                   value={commentText}
                   onChangeText={setCommentText}
-                  placeholder="Partagez votre avis…"
+                  placeholder={replyTo ? `Répondre à ${replyTo.name}…` : 'Partagez votre avis…'}
                   placeholderTextColor={theme.color.muted}
                   style={styles.commentInput}
                   multiline
@@ -207,19 +242,39 @@ export default function RecipeDetail() {
                 </Pressable>
               </View>
 
-              {comments.length === 0 ? (
-                <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>
-              ) : comments.map((c) => (
-                <View key={c.id} style={styles.commentCard} testID={`comment-${c.id}`}>
-                  <View style={styles.commentAvatar}>
-                    <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+              {(() => {
+                const roots = comments.filter(c => !c.parent_id);
+                const repliesFor = (pid: string) => comments.filter(c => c.parent_id === pid);
+                if (roots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
+                return roots.map((c) => (
+                  <View key={c.id} testID={`comment-${c.id}`}>
+                    <View style={styles.commentCard}>
+                      <View style={styles.commentAvatar}>
+                        <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.commentName}>{c.user_name}</Text>
+                        <Text style={styles.commentBody}>{c.content}</Text>
+                        <Pressable testID={`reply-btn-${c.id}`} onPress={() => setReplyTo({ id: c.id, name: c.user_name })} style={styles.replyBtn}>
+                          <Feather name="corner-up-left" size={13} color={theme.color.brand} />
+                          <Text style={styles.replyBtnText}>Répondre</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    {repliesFor(c.id).map((r) => (
+                      <View key={r.id} style={styles.replyCard} testID={`comment-${r.id}`}>
+                        <View style={styles.replyAvatar}>
+                          <Text style={styles.replyAvatarText}>{(r.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.commentName}>{r.user_name}</Text>
+                          <Text style={styles.commentBody}>{r.content}</Text>
+                        </View>
+                      </View>
+                    ))}
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.commentName}>{c.user_name}</Text>
-                    <Text style={styles.commentBody}>{c.content}</Text>
-                  </View>
-                </View>
-              ))}
+                ));
+              })()}
             </View>
           )}
         </View>
@@ -236,6 +291,9 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },
   heroBottom: { position: 'absolute', bottom: 24, left: 24, right: 24 },
+  heroBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cdcBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  cdcText: { color: theme.color.onBrandPrimary, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   category: { color: theme.color.brandSecondary, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: '#fff', marginTop: 6, lineHeight: 36 },
   author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 6, fontStyle: 'italic' },
@@ -261,6 +319,8 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 15, color: theme.color.onSurface, lineHeight: 22 },
   timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   timerChipText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '600' },
+  seqBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 12, borderRadius: 8, marginBottom: 24 },
+  seqBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   noteCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 28 },
   noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   noteTitle: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
@@ -272,6 +332,13 @@ const styles = StyleSheet.create({
   commentInput: { flex: 1, backgroundColor: theme.color.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface, minHeight: 44, maxHeight: 120 },
   commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   noComments: { color: theme.color.muted, fontSize: 14, fontStyle: 'italic' },
+  replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
+  replyBannerText: { fontSize: 13, color: theme.color.onBrandTertiary, fontWeight: '500' },
+  replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+  replyBtnText: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  replyCard: { flexDirection: 'row', gap: 10, marginBottom: 16, marginLeft: 34, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: theme.color.border },
+  replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: theme.color.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+  replyAvatarText: { color: theme.color.onSurfaceTertiary, fontFamily: theme.serif, fontSize: 14 },
   commentCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   commentAvatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },

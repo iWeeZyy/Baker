@@ -66,7 +66,10 @@ export default function Recipes() {
               onPress={() => router.push(`/recipe/${item.id}`)}
               style={styles.card}
             >
-              <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
+              <View>
+                <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
+                {item.coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={12} color="#fff" /></View>}
+              </View>
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
               <Text style={styles.cardMeta}>{item.difficulty} · {item.time_minutes} min</Text>
             </Pressable>
@@ -92,6 +95,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   chipTextActive: { color: theme.color.onSurfaceInverse },
   card: { flex: 1 },
+  cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4 },
   cardTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },

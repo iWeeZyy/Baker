@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 4: All 4 NEW features verified end-to-end (backend pytest 6/6 PASS + mobile web UI 4/4 flows OK). Threaded comments: POST with parent_id creates a reply; GET returns comments sorted ascending with parent_id field on all iter4-created docs. Coup-de-cœur enrichment: GET /api/recipes, /api/recipes/{id}, /api/recipes/mine, /api/recipes/favorites all return like_count (int) + coup_de_coeur (bool); liking a recipe promotes it to coup_de_coeur=true in the global top-5. UI verified on mobile 390x844: (1) Recipe detail Communauté tab—posted a comment, tapped reply-btn-{id}, reply-banner ('Réponse à Chef Test') appeared, sent a reply via comment-send, reply rendered indented under the parent. (2) Baguette Tradition Préparation tab shows start-all-timers with 'Lancer les 6 minuteurs en séquence'; tapping starts timer-bar showing 'Étape 1 · 1/6' with real countdown; timer-skip advances to 'Étape 2 · 2/6'; timer-stop dismisses the bar. (3) Calculator → save-as-recipe navigates to /share with input-ingredients prefilled ('1000 g de farine\\n650 g d'eau (hydratation 65%)\\n20 g de sel\\n10 g de levure'), input-title, input-hydration and input-description prefilled; publish-btn creates the recipe and it appears in Profile > Mes recettes. (4) Home 'Coups de cœur' section visible with award badge (cardBadge) overlay on the cdc-* card; Recettes tab card shows the award badge on coup_de_coeur recipe (TEST_UI_Recette3); recipe detail hero shows cdc-badge on TEST_UI_Recette3 and correctly absent on Baguette Tradition (0 likes). No React Native deprecated packages or SafeAreaView issues detected. Console still shows RN Web 'shadow*' deprecation warning (cosmetic).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "TimerBar / global styles", "issues": ["RN Web still logs 'shadow* style props are deprecated. Use boxShadow.' — non-blocking cosmetic warning already flagged in iter3."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4_features.py",
+    "/app/test_reports/pytest/iteration4.xml"
+  ],
+  "action_items": [
+    "OPTIONAL / low priority: replace remaining shadow* style props with boxShadow to silence RN Web deprecation warning.",
+    "OPTIONAL: legacy comments (created before iter4) don't carry the parent_id field. Consider a one-shot migration setting parent_id=null on old docs so the GET response schema is uniform. Frontend already treats missing parent_id as top-level so it is not blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.enrich_recipes uses two efficient aggregation queries (like_counts + global_top_liked) and is applied uniformly across list/get/mine/favorites — correct and DRY.",
+    "COUP_DE_COEUR_TOP_N=5 with c>0 guard correctly excludes zero-like recipes from the badge.",
+    "comments GET now sorts ascending (created_at, 1) — matches iter4 spec.",
+    "TimerContext.startSequence + auto-advance effect correctly advances after a step reaches 0 (1.5s buffer) and skip() immediately promotes the next queue item; currentIndex increments monotonically providing the '1/6', '2/6' progress label.",
+    "calculator.tsx correctly builds prefill query and navigates to /share; share.tsx must be reading prefill* params (verified by UI — title/ingredients/hydration/description all populated on arrival)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4_features.py",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/pytest/iteration4.xml"
+  ],
+  "success_rate": {"backend": "100% (6/6 pytest for iter4 new features)", "frontend": "100% of new-feature flows (threaded reply, multi-step timer sequence + skip + stop, calculator save-as-recipe + publish, coup-de-cœur badges on home/list/detail)"},
+  "seed_data_creation": "Login: test.baker@bakers.app / TestBaker2026!. Backend tests + UI created: 3 new comments on the first seeded recipe (top+reply from pytest, plus 'TEST_iter4_ui top …' + 'TEST_iter4_ui reply …' from UI), 1 like preserved on TEST_UI_Recette3 (keeps coup_de_coeur=true), and 1 new user recipe 'TEST_iter4_calc_<epoch>' visible in Profile > Mes recettes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 4 iteration-4 features work E2E. Preloaded recipe with >1 steps having durations is 'Baguette Tradition' (240 min, 6 timers). Recipe with existing coup_de_coeur = TEST_UI_Recette3 (1 like). External URL https://baker-recipes-1.preview.emergentagent.com. Credentials in /app/memory/test_credentials.md.",
+  "rca_of_issue": "N/A - no bugs found in iteration 4 review."
+}

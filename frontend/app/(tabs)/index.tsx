@@ -30,6 +30,7 @@ export default function Home() {
   useEffect(() => { load(); }, [load]);
 
   const featured = recipes[0];
+  const coupsDeCoeur = recipes.filter((r: any) => r.coup_de_coeur);
   const classics = recipes.filter(r => !r.is_user_submitted).slice(1, 8);
   const community = recipes.filter((r: any) => r.is_user_submitted).slice(0, 6);
 
@@ -68,6 +69,29 @@ export default function Home() {
               <Text style={styles.heroMeta}>{featured.difficulty} · {featured.time_minutes} min</Text>
             </View>
           </Pressable>
+        )}
+
+        {coupsDeCoeur.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.cdcHeaderRow}>
+                <Feather name="award" size={18} color={theme.color.brand} />
+                <Text style={styles.sectionTitle}>Coups de cœur</Text>
+              </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
+              {coupsDeCoeur.map(r => (
+                <Pressable key={r.id} testID={`cdc-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
+                  <View>
+                    <Image source={{ uri: r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.classicImage} contentFit="cover" />
+                    <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>
+                  </View>
+                  <Text style={styles.classicTitle}>{r.title}</Text>
+                  <Text style={styles.classicMeta}>{(r as any).like_count} {"j'aime"}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
         )}
 
         <View style={styles.section}>
@@ -109,7 +133,10 @@ export default function Home() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
               {community.map(r => (
                 <Pressable key={r.id} testID={`community-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
-                  <Image source={{ uri: r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.classicImage} contentFit="cover" />
+                  <View>
+                    <Image source={{ uri: r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.classicImage} contentFit="cover" />
+                    {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>}
+                  </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
                   <Text style={styles.classicMeta}>par {r.author_name || 'Anonyme'}</Text>
                 </Pressable>
@@ -138,6 +165,8 @@ const styles = StyleSheet.create({
   heroTitle: { fontFamily: theme.serif, fontSize: 28, color: '#fff', lineHeight: 32 },
   heroMeta: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 6 },
   section: { marginTop: 40 },
+  cdcHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: theme.color.onSurface },
   tipCard: { width: 260, padding: 20, backgroundColor: theme.color.surfaceSecondary, borderRadius: 4 },
