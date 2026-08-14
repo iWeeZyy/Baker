@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 3: All 4 NEW features verified end-to-end on backend + mobile web preview (390x844). Backend pytest (test_iteration3_features.py) 11/11 PASS covering likes (auth + toggle on/off + persistence via GET), comments (public GET, auth POST, user_name persistence), and personal notes (auth GET/PUT, upsert overwrite, empty string for non-existent note). Frontend E2E: home shows calculator-card and navigates to /calculator; mode-flour and mode-dough toggle; calc-amount + calc-hydration recompute (amount=1000 flour, h=70 -> Farine=1000g, Eau=700g); toggle-levain reveals calc-levain; mode-dough with amount=1900 correctly back-solves flour ~984g; recipe detail like-btn toggles from '0 j'aime' -> '1 j'aime'; segment-community shows note-input (saves via save-note and persists after page reload) and comment-input + comment-send (added comment appears immediately in list); segment-steps shows step 02 'Repos 1h' with a 'Lancer le minuteur (60 min)' chip (testID timer-step-1) that opens a floating timer-bar with timer-toggle (pause/resume) and timer-stop (dismisses bar). No react-native deprecated packages or SafeAreaView issues detected. Only console noise: 'shadow*' style props deprecated warning from RN Web (already-known cosmetic, not blocking).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "TimerBar / global styles", "issues": ["React Native Web logs 'shadow*' style props are deprecated. Use boxShadow. Source likely TimerBar.tsx elevation/shadow* usage. Non-blocking cosmetic warning."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_features.py",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: replace shadow* style props with boxShadow-equivalent (or use Platform.select) in TimerBar.tsx to silence RN Web deprecation warning.",
+    "OPTIONAL: expose the total-count of likes on the recipe list card so users see popularity without opening detail (not requested by spec)."
+  ],
+  "critical_code_review_comments": [
+    "server.py get_note returns {content: ''} when no doc exists (good, prevents 404).",
+    "toggle_like recomputes count with count_documents after upsert/delete (correct and race-safe enough for single-user actions).",
+    "recipe/[id].tsx parseDuration correctly extracts hours + minutes (e.g. '1h 30min' -> 5400s) and only shows the timer chip when a duration is present.",
+    "calculator.tsx correctly implements baker's percentages: totalPct = 100+h+s+y+l; flour = amount/(totalPct/100) in dough mode; verified numerically."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_features.py",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "success_rate": {"backend": "100% (11/11 pytest for iter3 new features)", "frontend": "100% of new-feature flows (calculator, like, comments, note persistence, timer start/pause/stop)"},
+  "seed_data_creation": "Login used test.baker@bakers.app / TestBaker2026!. During UI test: 1 like added on 'TEST_UI_Recette3', a personal note saved on same recipe, and one comment 'TEST_iter3_ui commentaire top ...' created. Backend tests also created a TEST_iter3 comment and a TEST_iter3 note on the first seeded recipe.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 4 iteration-3 features are fully functional both API-side and UI-side. Test recipe used in UI = the first recipe returned by GET /api/recipes (was 'TEST_UI_Recette3' created in iter2). For timer testing, that recipe conveniently has a step 'Repos 1h' triggering timer-step-1. Public URL: https://baker-recipes-1.preview.emergentagent.com. Credentials: test.baker@bakers.app / TestBaker2026!.",
+  "rca_of_issue": "N/A - no bugs found in iteration 3 review."
+}

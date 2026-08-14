@@ -7,6 +7,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
+import { TimerProvider } from "@/src/TimerContext";
+import TimerBar from "@/src/TimerBar";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -24,7 +26,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAF8F5' } }} />
+          <TimerProvider>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAF8F5' } }} />
+            <TimerBar />
+          </TimerProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

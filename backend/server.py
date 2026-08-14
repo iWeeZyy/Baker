@@ -170,6 +170,12 @@ class ChatMessageInput(BaseModel):
     message: str
     session_id: Optional[str] = None
 
+class CommentInput(BaseModel):
+    content: str
+
+class NoteInput(BaseModel):
+    content: str
+
 # ---------- Auth Endpoints ----------
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
@@ -306,6 +312,61 @@ async def is_favorite(recipe_id: str, user: dict = Depends(get_current_user)):
     existing = await db.favorites.find_one({"user_id": user["user_id"], "recipe_id": recipe_id})
     return {"favorited": bool(existing)}
 
+# ---------- Likes ----------
+@api_router.get("/recipes/{recipe_id}/likes")
+async def get_likes(recipe_id: str, user: dict = Depends(get_current_user)):
+    count = await db.likes.count_documents({"recipe_id": recipe_id})
+    liked = await db.likes.find_one({"user_id": user["user_id"], "recipe_id": recipe_id})
+    return {"count": count, "liked": bool(liked)}
+
+@api_router.post("/recipes/{recipe_id}/like")
+async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
+    existing = await db.likes.find_one({"user_id": user["user_id"], "recipe_id": recipe_id})
+    if existing:
+        await db.likes.delete_one({"user_id": user["user_id"], "recipe_id": recipe_id})
+        liked = False
+    else:
+        await db.likes.insert_one({"user_id": user["user_id"], "recipe_id": recipe_id, "created_at": datetime.now(timezone.utc)})
+        liked = True
+    count = await db.likes.count_documents({"recipe_id": recipe_id})
+    return {"liked": liked, "count": count}
+
+# ---------- Comments ----------
+@api_router.get("/recipes/{recipe_id}/comments")
+async def get_comments(recipe_id: str):
+    cursor = db.comments.find({"recipe_id": recipe_id}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(500)
+
+@api_router.post("/recipes/{recipe_id}/comments")
+async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "recipe_id": recipe_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name") or "Boulanger",
+        "user_picture": user.get("picture"),
+        "content": inp.content.strip(),
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.comments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+# ---------- Personal Notes ----------
+@api_router.get("/recipes/{recipe_id}/note")
+async def get_note(recipe_id: str, user: dict = Depends(get_current_user)):
+    note = await db.notes.find_one({"user_id": user["user_id"], "recipe_id": recipe_id}, {"_id": 0})
+    return {"content": note["content"] if note else ""}
+
+@api_router.put("/recipes/{recipe_id}/note")
+async def save_note(recipe_id: str, inp: NoteInput, user: dict = Depends(get_current_user)):
+    await db.notes.update_one(
+        {"user_id": user["user_id"], "recipe_id": recipe_id},
+        {"$set": {"content": inp.content, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"content": inp.content}
+
 # ---------- Tips ----------
 @api_router.get("/tips")
 async def list_tips(category: Optional[str] = None):
@@ -397,6 +458,10 @@ async def startup():
     await db.recipes.create_index("id", unique=True)
     await db.recipes.create_index("category")
     await db.favorites.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
+    await db.likes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
+    await db.likes.create_index("recipe_id")
+    await db.comments.create_index("recipe_id")
+    await db.notes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
 
     # Seed recipes if empty
     count = await db.recipes.count_documents({})

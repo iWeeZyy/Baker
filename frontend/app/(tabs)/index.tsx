@@ -47,6 +47,17 @@ export default function Home() {
           <Text style={styles.headerTitle}>Bonjour, boulanger</Text>
         </View>
 
+        <Pressable testID="calculator-card" onPress={() => router.push('/calculator')} style={styles.calcCard}>
+          <View style={styles.calcIcon}>
+            <Feather name="percent" size={20} color={theme.color.brand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.calcTitle}>Calculateur du boulanger</Text>
+            <Text style={styles.calcSub}>Adaptez vos quantités par hydratation</Text>
+          </View>
+          <Feather name="chevron-right" size={20} color={theme.color.muted} />
+        </Pressable>
+
         {featured && (
           <Pressable testID={`hero-recipe-${featured.id}`} onPress={() => router.push(`/recipe/${featured.id}`)} style={styles.hero}>
             <Image source={{ uri: featured.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
@@ -117,6 +128,10 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: theme.color.muted, fontWeight: '500' },
   headerTitle: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurface, marginTop: 4 },
+  calcCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, padding: 16, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, gap: 14 },
+  calcIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  calcTitle: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
+  calcSub: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
   hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4 },
   heroContent: { position: 'absolute', bottom: 20, left: 20, right: 20 },
   heroBadge: { color: theme.color.brandSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '600', marginBottom: 6 },

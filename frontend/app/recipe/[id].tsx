@@ -1,20 +1,54 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useTimer } from '@/src/TimerContext';
 import { theme } from '@/src/theme';
+
+type Comment = { id: string; user_name: string; content: string; created_at: string };
+
+// Parse a duration mentioned in a step text -> seconds (first match)
+function parseDuration(text: string): number | null {
+  // hours
+  const h = text.match(/(\d+)\s*(h|heure)/i);
+  const min = text.match(/(\d+)\s*(min|minute)/i);
+  if (h) {
+    let sec = parseInt(h[1]) * 3600;
+    if (min) sec += parseInt(min[1]) * 60;
+    return sec;
+  }
+  if (min) return parseInt(min[1]) * 60;
+  return null;
+}
 
 export default function RecipeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { start } = useTimer();
   const [recipe, setRecipe] = useState<any>(null);
-  const [tab, setTab] = useState<'ingredients' | 'steps'>('ingredients');
+  const [tab, setTab] = useState<'ingredients' | 'steps' | 'community'>('ingredients');
   const [favorited, setFavorited] = useState(false);
+  const [likes, setLikes] = useState({ count: 0, liked: false });
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [note, setNote] = useState('');
+  const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
+
+  const loadCommunity = useCallback(async () => {
+    try {
+      const [l, c, n] = await Promise.all([
+        api(`/recipes/${id}/likes`),
+        api(`/recipes/${id}/comments`),
+        api(`/recipes/${id}/note`),
+      ]);
+      setLikes(l); setComments(c); setNote(n.content || '');
+    } catch (e) { console.warn(e); }
+  }, [id]);
 
   useEffect(() => {
     (async () => {
@@ -22,12 +56,31 @@ export default function RecipeDetail() {
         const r = await api(`/recipes/${id}`);
         setRecipe(r);
         try { const f = await api(`/recipes/${id}/favorite`); setFavorited(f.favorited); } catch {}
+        await loadCommunity();
       } finally { setLoading(false); }
     })();
-  }, [id]);
+  }, [id, loadCommunity]);
 
   const toggleFav = async () => {
     try { const res = await api(`/recipes/${id}/favorite`, { method: 'POST' }); setFavorited(res.favorited); } catch {}
+  };
+
+  const toggleLike = async () => {
+    try { const res = await api(`/recipes/${id}/like`, { method: 'POST' }); setLikes(res); } catch {}
+  };
+
+  const sendComment = async () => {
+    const txt = commentText.trim();
+    if (!txt) return;
+    setCommentText('');
+    try {
+      const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt }) });
+      setComments(prev => [c, ...prev]);
+    } catch {}
+  };
+
+  const saveNote = async () => {
+    try { await api(`/recipes/${id}/note`, { method: 'PUT', body: JSON.stringify({ content: note }) }); setNoteSaved(true); } catch {}
   };
 
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
@@ -36,7 +89,8 @@ export default function RecipeDetail() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
         <View style={styles.heroWrap}>
           <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={['rgba(42,31,26,0.4)', 'transparent', 'rgba(42,31,26,0.7)']} style={StyleSheet.absoluteFillObject} />
@@ -45,7 +99,7 @@ export default function RecipeDetail() {
               <Feather name="arrow-left" size={20} color="#fff" />
             </Pressable>
             <Pressable testID="fav-btn" onPress={toggleFav} style={styles.iconBtn}>
-              <Feather name={favorited ? 'bookmark' : 'bookmark'} size={20} color={favorited ? theme.color.brandSecondary : '#fff'} />
+              <Feather name="bookmark" size={20} color={favorited ? theme.color.brandSecondary : '#fff'} />
             </Pressable>
           </SafeAreaView>
           <View style={styles.heroBottom}>
@@ -61,6 +115,17 @@ export default function RecipeDetail() {
           {recipe.hydration > 0 && <View style={styles.metaCol}><Text style={styles.metaLabel}>HYDRATATION</Text><Text style={styles.metaVal}>{recipe.hydration}%</Text></View>}
         </View>
 
+        <View style={styles.likeRow}>
+          <Pressable testID="like-btn" onPress={toggleLike} style={styles.likeBtn}>
+            <Feather name="heart" size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            <Text style={styles.likeText}>{likes.count} j'aime</Text>
+          </Pressable>
+          <Pressable testID="comment-jump" onPress={() => setTab('community')} style={styles.likeBtn}>
+            <Feather name="message-square" size={18} color={theme.color.onSurfaceSecondary} />
+            <Text style={styles.likeText}>{comments.length} avis</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.description}>{recipe.description}</Text>
 
         <View style={styles.segment}>
@@ -70,26 +135,96 @@ export default function RecipeDetail() {
           <Pressable testID="segment-steps" onPress={() => setTab('steps')} style={[styles.segBtn, tab === 'steps' && styles.segActive]}>
             <Text style={[styles.segText, tab === 'steps' && styles.segTextActive]}>Préparation</Text>
           </Pressable>
+          <Pressable testID="segment-community" onPress={() => setTab('community')} style={[styles.segBtn, tab === 'community' && styles.segActive]}>
+            <Text style={[styles.segText, tab === 'community' && styles.segTextActive]}>Communauté</Text>
+          </Pressable>
         </View>
 
         <View style={styles.content}>
-          {tab === 'ingredients' ? (
-            recipe.ingredients.map((ing: string, i: number) => (
-              <View key={i} style={styles.ingredientRow} testID={`ing-${i}`}>
-                <View style={styles.dot} />
-                <Text style={styles.ingredientText}>{ing}</Text>
-              </View>
-            ))
-          ) : (
-            recipe.steps.map((s: string, i: number) => (
+          {tab === 'ingredients' && recipe.ingredients.map((ing: string, i: number) => (
+            <View key={i} style={styles.ingredientRow} testID={`ing-${i}`}>
+              <View style={styles.dot} />
+              <Text style={styles.ingredientText}>{ing}</Text>
+            </View>
+          ))}
+
+          {tab === 'steps' && recipe.steps.map((s: string, i: number) => {
+            const dur = parseDuration(s);
+            return (
               <View key={i} style={styles.stepRow} testID={`step-${i}`}>
                 <Text style={styles.stepNum}>{String(i + 1).padStart(2, '0')}</Text>
-                <Text style={styles.stepText}>{s}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stepText}>{s}</Text>
+                  {dur && (
+                    <Pressable testID={`timer-step-${i}`} onPress={() => start(`Étape ${i + 1}`, dur)} style={styles.timerChip}>
+                      <Feather name="clock" size={13} color={theme.color.brand} />
+                      <Text style={styles.timerChipText}>Lancer le minuteur ({Math.round(dur / 60)} min)</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
-            ))
+            );
+          })}
+
+          {tab === 'community' && (
+            <View>
+              {/* Personal note */}
+              <View style={styles.noteCard}>
+                <View style={styles.noteHeader}>
+                  <Feather name="edit-3" size={15} color={theme.color.brand} />
+                  <Text style={styles.noteTitle}>Mes notes personnelles</Text>
+                </View>
+                <TextInput
+                  testID="note-input"
+                  value={note}
+                  onChangeText={(t) => { setNote(t); setNoteSaved(false); }}
+                  placeholder="Vos ajustements, astuces, tour de main…"
+                  placeholderTextColor={theme.color.muted}
+                  style={styles.noteInput}
+                  multiline
+                />
+                {!noteSaved && (
+                  <Pressable testID="save-note" onPress={saveNote} style={styles.saveNoteBtn}>
+                    <Text style={styles.saveNoteText}>Enregistrer</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Comments */}
+              <Text style={styles.commentsTitle}>Avis de la communauté</Text>
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  testID="comment-input"
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  placeholder="Partagez votre avis…"
+                  placeholderTextColor={theme.color.muted}
+                  style={styles.commentInput}
+                  multiline
+                />
+                <Pressable testID="comment-send" onPress={sendComment} disabled={!commentText.trim()} style={[styles.commentSend, !commentText.trim() && { opacity: 0.4 }]}>
+                  <Feather name="send" size={18} color="#fff" />
+                </Pressable>
+              </View>
+
+              {comments.length === 0 ? (
+                <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>
+              ) : comments.map((c) => (
+                <View key={c.id} style={styles.commentCard} testID={`comment-${c.id}`}>
+                  <View style={styles.commentAvatar}>
+                    <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commentName}>{c.user_name}</Text>
+                    <Text style={styles.commentBody}>{c.content}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -108,11 +243,14 @@ const styles = StyleSheet.create({
   metaCol: { flex: 1 },
   metaLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
   metaVal: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, marginTop: 4 },
-  description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 20, fontStyle: 'italic' },
-  segment: { flexDirection: 'row', marginTop: 24, marginHorizontal: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 24 },
+  likeRow: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, gap: 24 },
+  likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
+  description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
+  segment: { flexDirection: 'row', marginTop: 24, marginHorizontal: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 20 },
   segBtn: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   segActive: { borderBottomColor: theme.color.brand },
-  segText: { fontSize: 15, color: theme.color.muted, fontWeight: '500' },
+  segText: { fontSize: 14, color: theme.color.muted, fontWeight: '500' },
   segTextActive: { color: theme.color.onSurface },
   content: { paddingHorizontal: 24, paddingTop: 24 },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 12 },
@@ -120,5 +258,23 @@ const styles = StyleSheet.create({
   ingredientText: { fontSize: 15, color: theme.color.onSurface, flex: 1 },
   stepRow: { flexDirection: 'row', marginBottom: 24, gap: 16 },
   stepNum: { fontFamily: theme.serif, fontSize: 24, color: theme.color.brand, minWidth: 36 },
-  stepText: { fontSize: 15, color: theme.color.onSurface, lineHeight: 22, flex: 1 },
+  stepText: { fontSize: 15, color: theme.color.onSurface, lineHeight: 22 },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  timerChipText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '600' },
+  noteCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 28 },
+  noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  noteTitle: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
+  noteInput: { fontSize: 15, color: theme.color.onSurface, minHeight: 60, textAlignVertical: 'top' },
+  saveNoteBtn: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: theme.color.brand, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 4 },
+  saveNoteText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 16 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 24 },
+  commentInput: { flex: 1, backgroundColor: theme.color.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface, minHeight: 44, maxHeight: 120 },
+  commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
+  noComments: { color: theme.color.muted, fontSize: 14, fontStyle: 'italic' },
+  commentCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  commentAvatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
+  commentName: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface, marginBottom: 2 },
+  commentBody: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20 },
 });

@@ -25,4 +25,8 @@ Application mobile React Native (Expo) dédiée aux boulangers, regroupant recet
 
 ## Navigation
 Bottom tabs: Accueil / Recettes / Assistant / Profil
-+ Stack screens: /auth, /recipe/[id], /share
++ Stack screens: /auth, /recipe/[id], /share, /calculator
+
+## Implemented Features (updated 2026-08-14)
+- Iteration 1-2: Auth (email+Google), 20 recettes seed, tips, favoris, partage avec photo, assistant IA Claude Sonnet 5, profil
+- Iteration 3: Aimer & Commenter (likes + comments par recette), Calculateur du boulanger (pourcentages boulanger, mode farine/pâte, hydratation/sel/levure/levain), Minuteur intégré (détecte durées dans les étapes, barre flottante pause/stop), Notes personnelles par recette (onglet Communauté)
