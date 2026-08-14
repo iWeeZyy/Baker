@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 2 re-test on Bakers app. Both previous blockers are FIXED. Backend: all 13 pytest cases pass, including POST /api/chat (Claude Sonnet 5 responds with a valid ~200-word French baking answer) and GET /api/chat/history. Frontend E2E: after login the Redirect guard in app/auth.tsx correctly navigates to /(tabs). Verified: hero-recipe + tips carousel + classics carousel on Accueil; chip-Tous/Pains/Viennoiseries/Pâtisseries filter the recipe grid; recipe/[id] shows back-btn, fav-btn, segment-ingredients, segment-steps and ing-* items; Assistant chat-input + chat-send trigger Claude Sonnet 5 and the reply renders on screen; share form (title/time/ingredients/steps/description/publish) publishes and appears in Profile > Mes recettes; tab-mine, tab-favs and logout-btn work (logout returns to /auth). Minor issues: (1) segmented tab testIDs are `segment-ingredients` / `segment-steps` (spec called them `seg-*`); (2) bottom-nav tabs have no testID (only visible French text); (3) chat message bubbles have no `msg-*` testIDs; (4) share form has required `description` and hydration/category selectors that were not called out in the review spec.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/recipes", "issue": "Unused `user: Optional[dict] = None` in signature (cosmetic; still there)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "assistant", "issues": ["Chat message bubbles render text correctly but do not have per-message testIDs (e.g. msg-user, msg-assistant), which makes automated assertions of the AI reply harder."]},
+      {"screen": "(tabs) bottom navigation", "issues": ["Bottom-nav Tabs (Accueil/Recettes/Assistant/Profil) do not expose testIDs like tab-home/tab-recipes/tab-assistant/tab-profile. Automation must fall back to text or route navigation."]},
+      {"screen": "recipe/[id]", "issues": ["Segmented tabs use testIDs `segment-ingredients` and `segment-steps` (the review spec expected `seg-ingredients` / `seg-preparation`). Functionality works; naming inconsistent with spec."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_bakers_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "OPTIONAL (frontend, low priority): add testIDs to bottom Tab bar screens (`tab-home`, `tab-recipes`, `tab-assistant`, `tab-profile`) via `tabBarButtonTestID` or a wrapping Pressable, to ease E2E.",
+    "OPTIONAL: rename segmented tab testIDs on recipe/[id] to match the spec (`seg-ingredients`, `seg-preparation`) or update the spec.",
+    "OPTIONAL: add per-message testIDs in Assistant (e.g. `msg-<index>-<role>`) to allow asserting AI reply text.",
+    "OPTIONAL cleanup: remove unused `user` param from `list_recipes` in backend/server.py."
+  ],
+  "critical_code_review_comments": [
+    "server.py list_recipes still has an unused Optional user param (cosmetic).",
+    "share.tsx `submit` requires title+description+ingredients+steps+time — the review spec listed only 4 fields; description is mandatory (works, but doc mismatch)."
+  ],
+  "updated_files": ["/app/test_reports/iteration_2.json"],
+  "success_rate": {"backend": "100% (13/13 pytest)", "frontend": "100% of critical flows verified (auth redirect, home, recipes filter, recipe detail + fav, assistant AI chat, share publish, profile mine/favs, logout)"},
+  "seed_data_creation": "Login used test.baker@bakers.app / TestBaker2026!. Published a TEST_UI_Recette3 (Pains, Facile, 45min) which is now stored in Mongo and appears under Profile > Mes recettes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All previously blocked flows now pass. If further work is done on Assistant UI or Recipe detail segmented tabs, consider adding testIDs called out under design_issues. Public URL: https://baker-recipes-1.preview.emergentagent.com. Test user: test.baker@bakers.app / TestBaker2026!.",
+  "rca_of_issue": "Iteration 1 blockers verified fixed: (a) app/auth.tsx now has `if (user) return <Redirect href='/(tabs)'/>` (line 38) so successful login/register triggers navigation on the next render; (b) EMERGENT_LLM_KEY budget recharged — POST /api/chat now returns a valid 200 with a French Claude Sonnet 5 answer (~200 words including Fermentation/Façonnage/Cuisson advice)."
+}

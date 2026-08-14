@@ -1,0 +1,174 @@
+{
+  "app_name": "BAKERS",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "A premium, editorial-style bakery companion balancing the warm, rustic soul of French artisanship with clean, modern utility.",
+  "color": {
+    "surface": "#FAF8F5",
+    "onSurface": "#2A1F1A",
+    "surfaceSecondary": "#F3EFEA",
+    "onSurfaceSecondary": "#4A3D36",
+    "surfaceTertiary": "#EAE3DB",
+    "onSurfaceTertiary": "#5D4D44",
+    "surfaceInverse": "#2A1F1A",
+    "onSurfaceInverse": "#FAF8F5",
+    "brand": "#C05A35",
+    "brandPrimary": "#C05A35",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D4A373",
+    "onBrandSecondary": "#2A1F1A",
+    "brandTertiary": "#F0DAC6",
+    "onBrandTertiary": "#8B4527",
+    "success": "#5C7658",
+    "onSuccess": "#FFFFFF",
+    "warning": "#CBA244",
+    "onWarning": "#2A1F1A",
+    "error": "#B74D4D",
+    "onError": "#FFFFFF",
+    "info": "#7B6F63",
+    "onInfo": "#FFFFFF",
+    "border": "#EAE3DB",
+    "borderStrong": "#CFC4B6",
+    "divider": "#EAE3DB"
+  },
+  "typography": {
+    "displayFontFamily": "CormorantGaramond-Medium",
+    "textFontFamily": "Geist-Regular",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous magazine-like vertical rhythms. Elements should breathe heavily. Intentional whitespace over crammed cards.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 0,
+    "md": 4,
+    "lg": 8,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use over hero recipe image for title/metadata overlays.",
+      "Use for sticky tab bars if content scrolls underneath.",
+      "Pair with >70% surfaceInverse tint underneath when applying text to guarantee readability."
+    ],
+    "dont's": [
+      "Avoid on form inputs or dense text areas.",
+      "Do not use on regular recipe list cards (use flat surfaceSecondary instead)."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Accueil (Home)",
+      "purpose": "Editorially curated discovery feed for recipes and tips.",
+      "states": {
+        "loading": "Centered minimal spinner with 'Préparation du four...'",
+        "empty": "Illustration of flour dusting, 'Aucune recette à l\\'affiche.'",
+        "error": "Error message with a retry button 'Relancer'."
+      },
+      "layout": "NYT Cooking style layout. Start with a massive hero recipe card (image filling width, gradient scrim bottom, title in Cormorant). Followed by horizontal scrolling sections: 'Astuces du jour' (Tip of the day) and 'Grands Classiques' (Baguette, Croissant)."
+    },
+    {
+      "name": "Recettes (Library)",
+      "purpose": "Browse and filter the ~20 classic French bakery recipes.",
+      "states": {
+        "loading": "Skeleton grids of recipe cards.",
+        "empty": "Illustration of an empty bread basket.",
+        "error": "Standard error prompt."
+      },
+      "layout": "Sticky top horizontal scroll for category chips (Pains, Viennoiseries, Pâtes). Underneath, a clean 2-column grid of recipe cards. Cards have square images, elegant titles below (no borders, no shadows)."
+    },
+    {
+      "name": "Recipe Detail",
+      "purpose": "Step-by-step cooking guide with hydration/fermentation data.",
+      "states": {
+        "loading": "Skeleton loader for image and text blocks.",
+        "empty": "N/A",
+        "error": "Standard error with retry."
+      },
+      "layout": "Large hero image at the top. Back button in a glass FAB. Below image: Title, Author, Difficulty, Time. Then a sticky Segmented Control (Ingrédients / Préparation). In Ingrédients: clean checklist format. In Préparation: numbered steps with bold headers."
+    },
+    {
+      "name": "Assistant IA",
+      "purpose": "Claude Sonnet 5 powered chat for technical baking questions.",
+      "states": {
+        "loading": "Chat skeletons.",
+        "empty": "'Demandez-moi comment réussir votre levain...'",
+        "error": "Connection error banner."
+      },
+      "layout": "Clean chat interface. AI bubbles in surfaceSecondary, user bubbles in brandTertiary. Input field at bottom pinned to keyboard, using subtle borders instead of heavy input boxes."
+    },
+    {
+      "name": "Share Recipe",
+      "purpose": "Form to upload personal recipes (photo, ingredients, steps).",
+      "states": {
+        "loading": "Spinner during submit.",
+        "empty": "N/A",
+        "error": "Toast error if upload fails."
+      },
+      "layout": "Single column form inside KeyboardAvoidingView. Minimalist inputs with labels above. Large dotted-border area for photo upload. Sticky 'Publier' CTA button at the bottom."
+    },
+    {
+      "name": "Profil",
+      "purpose": "Manage saved recipes, own shared recipes, and settings.",
+      "states": {
+        "loading": "Skeleton UI.",
+        "empty": "'Vous n\\'avez pas encore partagé de recette.'",
+        "error": "Standard error."
+      },
+      "layout": "Editorial header with user avatar (or initials). Two tabs: 'Mes Recettes' and 'Sauvegardées'. Settings accessible via a subtle gear icon in the header."
+    }
+  ],
+  "images": {
+    "hero_baguette": {
+      "url": "https://images.unsplash.com/photo-1599819055803-717bba43890f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHwxfHxydXN0aWMlMjBmcmVuY2glMjBicmVhZCUyMGJha2VyeSUyMGJhZ3VldHRlfGVufDB8fHx8MTc4NjY4NzMyNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Rustic French Baguette in a brown paper bag"
+    },
+    "hero_croissant": {
+      "url": "https://images.unsplash.com/photo-1631129023315-7ef0e76faaed?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwxfHxjcm9pc3NhbnQlMjBwYWluJTIwYXUlMjBjaG9jb2xhdCUyMGJha2VyeXxlbnwwfHx8fDE3ODY2ODczMjV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Pain au chocolat close up"
+    },
+    "baker_hands": {
+      "url": "https://images.unsplash.com/photo-1580913408395-1518ca89cb0f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwyfHxmbG91ciUyMGRvdWdoJTIwYmFrZXIlMjBoYW5kcyUyMHdvb2RlbiUyMHRhYmxlfGVufDB8fHx8MTc4NjY4NzMyNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Baker's hands rolling dough with flour on a wooden table"
+    },
+    "brioche": {
+      "url": "https://images.unsplash.com/photo-1620921568790-c1cf8984624c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwxfHxmcmVzaGx5JTIwYmFrZWQlMjBicmlvY2hlfGVufDB8fHx8MTc4NjY4NzMyNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Freshly baked brioche loaf"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Follow the 'Editorial Mobile LIGHT' layout deeply. Minimal borders, no drop shadows (shadow_tier: 0). Rely on generous padding and typography sizes to establish hierarchy.",
+    "Ensure 'Cormorant Garamond' is used for headings and 'Geist' or a similar highly legible sans-serif for body copy and UI elements (buttons, chips). Cap font weights at 500.",
+    "Whenever applying text over images (e.g., hero recipe cards), you MUST apply the gradient-to-dark scrim pattern (bottom stop opacity ≥70% of surfaceInverse) behind the text to ensure WCAG AA contrast.",
+    "For the recipe detail view, mimic NYT Cooking's split tab behavior for Ingredients vs Preparation, so the UI remains uncluttered.",
+    "Keep color usage strictly within the defined warm artisanal palette. Absolutely NO blue, purple, or indigo tokens. Use the rust-orange 'brand' (#C05A35) for primary calls to action."
+  ]
+}
