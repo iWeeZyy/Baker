@@ -12,6 +12,7 @@ import hmac
 import base64
 import json
 import time
+import re
 import requests
 import httpx
 from pathlib import Path
@@ -150,6 +151,7 @@ class Recipe(BaseModel):
     description: str
     ingredients: List[str]
     steps: List[str]
+    step_images: List[Optional[str]] = Field(default_factory=list)
     author_id: Optional[str] = None
     author_name: Optional[str] = None
     is_user_submitted: bool = False
@@ -164,6 +166,7 @@ class RecipeCreateInput(BaseModel):
     description: str
     ingredients: List[str]
     steps: List[str]
+    step_images: List[Optional[str]] = Field(default_factory=list)
     image_path: Optional[str] = None
 
 class ChatMessageInput(BaseModel):
@@ -175,6 +178,15 @@ class CommentInput(BaseModel):
     parent_id: Optional[str] = None
 
 class NoteInput(BaseModel):
+    content: str
+
+class FriendRequestInput(BaseModel):
+    user_id: str
+
+class RespondInput(BaseModel):
+    accept: bool
+
+class MessageInput(BaseModel):
     content: str
 
 # ---------- Auth Endpoints ----------
@@ -295,13 +307,16 @@ async def enrich_recipes(docs):
     return docs
 
 @api_router.get("/recipes")
-async def list_recipes(category: Optional[str] = None):
+async def list_recipes(category: Optional[str] = None, sort: Optional[str] = None):
     q = {}
     if category and category != "Tous":
         q["category"] = category
     cursor = db.recipes.find(q, {"_id": 0}).sort("created_at", -1)
     docs = await cursor.to_list(500)
-    return await enrich_recipes(docs)
+    docs = await enrich_recipes(docs)
+    if sort == "popular":
+        docs.sort(key=lambda d: d.get("like_count", 0), reverse=True)
+    return docs
 
 @api_router.get("/recipes/mine")
 async def my_recipes(user: dict = Depends(get_current_user)):
@@ -408,6 +423,169 @@ async def save_note(recipe_id: str, inp: NoteInput, user: dict = Depends(get_cur
     )
     return {"content": inp.content}
 
+# ---------- Friends ----------
+def _pair(a: str, b: str):
+    return sorted([a, b])
+
+def _pair_key(a: str, b: str) -> str:
+    return "|".join(sorted([a, b]))
+
+async def _are_friends(a: str, b: str) -> bool:
+    return bool(await db.friendships.find_one({"users": _pair(a, b)}))
+
+async def _friend_status(me: str, other: str) -> str:
+    if me == other:
+        return "me"
+    if await _are_friends(me, other):
+        return "friends"
+    if await db.friend_requests.find_one({"from_user_id": me, "to_user_id": other, "status": "pending"}):
+        return "pending_sent"
+    if await db.friend_requests.find_one({"from_user_id": other, "to_user_id": me, "status": "pending"}):
+        return "pending_received"
+    return "none"
+
+def _public_user(u: dict) -> dict:
+    return {"user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture")}
+
+@api_router.get("/users/search")
+async def search_users(q: str = "", user: dict = Depends(get_current_user)):
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    cursor = db.users.find(
+        {"name": {"$regex": re.escape(q), "$options": "i"}, "user_id": {"$ne": user["user_id"]}},
+        {"_id": 0, "password_hash": 0},
+    ).limit(20)
+    out = []
+    for u in await cursor.to_list(20):
+        pu = _public_user(u)
+        pu["friend_status"] = await _friend_status(user["user_id"], u["user_id"])
+        out.append(pu)
+    return out
+
+@api_router.get("/users/{user_id}/profile")
+async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not u:
+        raise HTTPException(404, "Utilisateur introuvable")
+    docs = await db.recipes.find({"author_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    docs = await enrich_recipes(docs)
+    total_likes = sum(d.get("like_count", 0) for d in docs)
+    pu = _public_user(u)
+    pu["created_at"] = u.get("created_at")
+    return {
+        "user": pu,
+        "recipes": docs,
+        "recipe_count": len(docs),
+        "total_likes": total_likes,
+        "friend_status": await _friend_status(user["user_id"], user_id),
+    }
+
+@api_router.post("/friends/request")
+async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    target = inp.user_id
+    if target == me:
+        raise HTTPException(400, "Impossible de s'ajouter soi-même")
+    if not await db.users.find_one({"user_id": target}):
+        raise HTTPException(404, "Utilisateur introuvable")
+    if await _are_friends(me, target):
+        return {"status": "friends"}
+    # If the other user already sent a pending request, accept it directly
+    rev = await db.friend_requests.find_one({"from_user_id": target, "to_user_id": me, "status": "pending"})
+    if rev:
+        await db.friend_requests.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
+        await db.friendships.insert_one({"users": _pair(me, target), "created_at": datetime.now(timezone.utc)})
+        return {"status": "friends"}
+    existing = await db.friend_requests.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
+    if existing:
+        return {"status": "pending_sent"}
+    await db.friend_requests.insert_one({
+        "id": str(uuid.uuid4()),
+        "from_user_id": me,
+        "to_user_id": target,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+    })
+    return {"status": "pending_sent"}
+
+@api_router.get("/friends/requests")
+async def incoming_requests(user: dict = Depends(get_current_user)):
+    reqs = await db.friend_requests.find({"to_user_id": user["user_id"], "status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    out = []
+    for r in reqs:
+        u = await db.users.find_one({"user_id": r["from_user_id"]}, {"_id": 0, "password_hash": 0})
+        if u:
+            out.append({"id": r["id"], "from_user": _public_user(u), "created_at": r["created_at"]})
+    return out
+
+@api_router.post("/friends/requests/{request_id}/respond")
+async def respond_request(request_id: str, inp: RespondInput, user: dict = Depends(get_current_user)):
+    req = await db.friend_requests.find_one({"id": request_id, "to_user_id": user["user_id"], "status": "pending"})
+    if not req:
+        raise HTTPException(404, "Demande introuvable")
+    new_status = "accepted" if inp.accept else "declined"
+    await db.friend_requests.update_one({"id": request_id}, {"$set": {"status": new_status}})
+    if inp.accept:
+        if not await _are_friends(user["user_id"], req["from_user_id"]):
+            await db.friendships.insert_one({"users": _pair(user["user_id"], req["from_user_id"]), "created_at": datetime.now(timezone.utc)})
+        return {"status": "friends"}
+    return {"status": "declined"}
+
+@api_router.get("/friends")
+async def list_friends(user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    fs = await db.friendships.find({"users": me}, {"_id": 0}).to_list(500)
+    out = []
+    for f in fs:
+        other_id = next((x for x in f["users"] if x != me), None)
+        if not other_id:
+            continue
+        u = await db.users.find_one({"user_id": other_id}, {"_id": 0, "password_hash": 0})
+        if not u:
+            continue
+        pk = _pair_key(me, other_id)
+        last = await db.messages.find_one({"pair": pk}, {"_id": 0}, sort=[("created_at", -1)])
+        unread = await db.messages.count_documents({"pair": pk, "to_user_id": me, "read": False})
+        pu = _public_user(u)
+        pu["last_message"] = {"content": last["content"], "from_me": last["from_user_id"] == me, "created_at": last["created_at"]} if last else None
+        pu["unread"] = unread
+        out.append(pu)
+    out.sort(key=lambda x: (x["last_message"]["created_at"] if x["last_message"] else datetime.min), reverse=True)
+    return out
+
+# ---------- Messages ----------
+@api_router.get("/messages/{friend_id}")
+async def get_messages(friend_id: str, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    if not await _are_friends(me, friend_id):
+        raise HTTPException(403, "Vous devez être amis pour discuter")
+    pk = _pair_key(me, friend_id)
+    msgs = await db.messages.find({"pair": pk}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    await db.messages.update_many({"pair": pk, "to_user_id": me, "read": False}, {"$set": {"read": True}})
+    return msgs
+
+@api_router.post("/messages/{friend_id}")
+async def send_message(friend_id: str, inp: MessageInput, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    if not await _are_friends(me, friend_id):
+        raise HTTPException(403, "Vous devez être amis pour discuter")
+    content = inp.content.strip()
+    if not content:
+        raise HTTPException(400, "Message vide")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "pair": _pair_key(me, friend_id),
+        "from_user_id": me,
+        "to_user_id": friend_id,
+        "content": content,
+        "read": False,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.messages.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
 # ---------- Tips ----------
 @api_router.get("/tips")
 async def list_tips(category: Optional[str] = None):
@@ -503,6 +681,10 @@ async def startup():
     await db.likes.create_index("recipe_id")
     await db.comments.create_index("recipe_id")
     await db.notes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
+    await db.friendships.create_index("users")
+    await db.friend_requests.create_index([("to_user_id", 1), ("status", 1)])
+    await db.friend_requests.create_index([("from_user_id", 1), ("status", 1)])
+    await db.messages.create_index([("pair", 1), ("created_at", 1)])
 
     # Seed recipes if empty
     count = await db.recipes.count_documents({})

@@ -29,6 +29,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Accueil', tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} /> }} />
       <Tabs.Screen name="recipes" options={{ title: 'Recettes', tabBarIcon: ({ color }) => <Feather name="book-open" size={20} color={color} /> }} />
       <Tabs.Screen name="assistant" options={{ title: 'Assistant', tabBarIcon: ({ color }) => <Feather name="message-circle" size={20} color={color} /> }} />
+      <Tabs.Screen name="friends" options={{ title: 'Amis', tabBarIcon: ({ color }) => <Feather name="users" size={20} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} /> }} />
     </Tabs>
   );

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { ensureNotifPermissions, scheduleTimerNotification, cancelTimerNotification, timerFinishedFeedback } from './notifications';
 
 type QueueItem = { label: string; seconds: number };
 type TimerState = {
@@ -33,6 +34,20 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const intervalRef = useRef<any>(null);
   const advancingRef = useRef(false);
+  const notifIdRef = useRef<string | null>(null);
+  const finishFiredRef = useRef(false);
+
+  const scheduleNotif = (label: string, seconds: number) => {
+    const prev = notifIdRef.current;
+    notifIdRef.current = null;
+    cancelTimerNotification(prev);
+    scheduleTimerNotification(label, seconds).then((id) => { notifIdRef.current = id; });
+  };
+  const cancelNotif = () => {
+    const prev = notifIdRef.current;
+    notifIdRef.current = null;
+    cancelTimerNotification(prev);
+  };
 
   const clearTick = () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
 
@@ -53,6 +68,18 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     return clearTick;
   }, [running]);
 
+  // Sound + vibration when a timer reaches zero
+  useEffect(() => {
+    if (timer.active && timer.remaining === 0 && timer.total > 0) {
+      if (!finishFiredRef.current) {
+        finishFiredRef.current = true;
+        timerFinishedFeedback();
+      }
+    } else {
+      finishFiredRef.current = false;
+    }
+  }, [timer.active, timer.remaining, timer.total]);
+
   // Auto-advance the sequence when the current timer finishes
   useEffect(() => {
     if (timer.active && timer.remaining === 0 && queue.length > 0 && !advancingRef.current) {
@@ -63,6 +90,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         setQueue(rest);
         setCurrentIndex((i) => i + 1);
         setPaused(false);
+        scheduleNotif(next.label, next.seconds);
         setTimer({ active: true, label: next.label, remaining: next.seconds, total: next.seconds });
         advancingRef.current = false;
       }, 1500);
@@ -71,20 +99,24 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   }, [timer.active, timer.remaining, queue]);
 
   const start = (label: string, seconds: number) => {
+    ensureNotifPermissions();
     setQueue([]);
     setTotalSteps(1);
     setCurrentIndex(1);
     setPaused(false);
+    scheduleNotif(label, seconds);
     setTimer({ active: true, label, remaining: seconds, total: seconds });
   };
 
   const startSequence = (items: QueueItem[]) => {
     if (items.length === 0) return;
+    ensureNotifPermissions();
     const [first, ...rest] = items;
     setQueue(rest);
     setTotalSteps(items.length);
     setCurrentIndex(1);
     setPaused(false);
+    scheduleNotif(first.label, first.seconds);
     setTimer({ active: true, label: first.label, remaining: first.seconds, total: first.seconds });
   };
 
@@ -94,16 +126,24 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
       setQueue(queue.slice(1));
       setCurrentIndex((i) => i + 1);
       setPaused(false);
+      scheduleNotif(next.label, next.seconds);
       setTimer({ active: true, label: next.label, remaining: next.seconds, total: next.seconds });
     } else {
       stop();
     }
   };
 
-  const pause = () => setPaused(true);
-  const resume = () => setPaused(false);
+  const pause = () => {
+    setPaused(true);
+    cancelNotif();
+  };
+  const resume = () => {
+    setPaused(false);
+    if (timer.active && timer.remaining > 0) scheduleNotif(timer.label, timer.remaining);
+  };
   const stop = () => {
     clearTick();
+    cancelNotif();
     setPaused(false);
     setQueue([]);
     setTotalSteps(0);

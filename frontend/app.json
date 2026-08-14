@@ -23,7 +23,11 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.bakerrecipes.uok90u",
-      "permissions": ["READ_MEDIA_IMAGES"]
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -32,6 +36,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -40,7 +45,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
