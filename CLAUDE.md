@@ -60,9 +60,18 @@ Everything (models, auth, all routes, startup seeding) lives in this one ~600-li
 - **Auth**: hand-rolled JWT (HMAC-SHA256 over base64url header/payload, `sign_jwt`/`verify_jwt`), not a third-party library. `get_current_user` is the single dependency every protected route uses. Passwords are bcrypt-hashed. There is no token revocation — logout is client-side only (stateless JWT).
 - **Storage**: `put_object`/`get_object` in the "Storage Helpers" section write/read files under `backend/uploads/`, keyed by an app-generated path (`bakers-app/uploads/{user_id}/{uuid}.{ext}`). `_resolve_upload_path` guards against path traversal on the `/api/files/{path:path}` download route — keep that guard if you touch storage.
 - **AI chat**: `/api/chat` calls the Anthropic API directly (`anthropic.AsyncAnthropic`, model `claude-sonnet-5`). It's stateless per-request — conversation history is reconstructed on every call by reading recent `db.chat_messages` for the `(user_id, session_id)` pair and replaying them as the `messages` array. Returns 503 if `ANTHROPIC_API_KEY` isn't set.
-- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
+- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`, `productions`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
 - Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
 - Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
+
+### Production planning — `backend/production.py`, `backend/plans.py`
+
+A production is a planned baking day: recipes + quantities, back-planned from a target time. Two modules sit outside `server.py`:
+
+- `production.py` — **pure functions, no DB or network**, so they can be unit-tested directly (the rest of the suite is HTTP-only). `parse_duration` ("1 h 30" → 90), `parse_ingredient`, `scale_ingredients`, `aggregate_ingredients`, `compute_batches`, `build_steps`, `compute_schedule`, `summarize`. Two rules that look like bugs but aren't: **nothing is ever guessed** — a step with no stated duration stays undated and everything *upstream* of it stays undated too (reported in `missing_durations`); and ingredients are grouped on the exact normalized name, so `farine T65` and `farine T45` are deliberately **not** merged.
+- `plans.py` — the Free/Pro limits (`PLAN_LIMITS`) and `resolve_plan`. Free = 3 productions/month. There is **no billing provider**: Pro is granted by the `PRO_EMAILS` env var (comma-separated). Enforcement is server-side in `_enforce_production_quota`, which raises a 403 carrying a structured `{"error": "plan_limit_reached", ...}` body so the app can open the Pro screen instead of showing an error.
+- Productions **snapshot** the recipe's ingredients, steps and `yield_pieces` at creation, so editing a recipe never rewrites a planning already in use. `_carry_over_step_state` re-matches steps by `(recipe_id, order)` on update, preserving tick status and manually-entered durations.
+- Recipes have an optional `yield_pieces` (pieces per batch). When it's absent, quantities fall back to "fournées" — never to an invented piece count.
 
 ### Frontend — `frontend/`
 

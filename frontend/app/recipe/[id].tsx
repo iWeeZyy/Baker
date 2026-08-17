@@ -12,16 +12,30 @@ import { theme } from '@/src/theme';
 type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
 
 // Parse a duration mentioned in a step text -> seconds (first match)
+// Longest alternative first: "heures" must win over "h" so that "2 heures 30"
+// is not read as 2 hours followed by the stray letters "eures".
+const H_AND_M = /(\d+)\s*(?:heures?|h)\s*(\d+)\s*(?:min\w*)?/i;
+const H_ONLY = /(\d+)\s*(?:heures?|h)\b/i;
+const M_ONLY = /(\d+)\s*(?:min\w*)\b/i;
+
+/**
+ * Seconds found in a free-text step, or null. Mirrors `parse_duration` in
+ * backend/production.py so a step is timed identically here and in a planning.
+ *
+ * The previous version read "1 h 30" as 60 minutes: it only added minutes when
+ * the text spelled out "min", so every "1 h 30" timer ran half an hour short.
+ */
 function parseDuration(text: string): number | null {
-  // hours
-  const h = text.match(/(\d+)\s*(h|heure)/i);
-  const min = text.match(/(\d+)\s*(min|minute)/i);
-  if (h) {
-    let sec = parseInt(h[1]) * 3600;
-    if (min) sec += parseInt(min[1]) * 60;
-    return sec;
+  if (!text) return null;
+  const hm = text.match(H_AND_M);
+  // A "minutes" part of 60+ means we latched onto an unrelated number.
+  if (hm && parseInt(hm[2], 10) < 60) {
+    return parseInt(hm[1], 10) * 3600 + parseInt(hm[2], 10) * 60;
   }
-  if (min) return parseInt(min[1]) * 60;
+  const h = text.match(H_ONLY);
+  if (h) return parseInt(h[1], 10) * 3600;
+  const m = text.match(M_ONLY);
+  if (m) return parseInt(m[1], 10) * 60;
   return null;
 }
 
