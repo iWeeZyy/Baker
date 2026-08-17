@@ -643,21 +643,26 @@ async def startup():
     await db.friend_requests.create_index([("from_user_id", 1), ("status", 1)])
     await db.messages.create_index([("pair", 1), ("created_at", 1)])
 
-    # Seed recipes if empty
-    count = await db.recipes.count_documents({})
-    if count == 0:
-        docs = []
-        for r in RECIPES_SEED:
-            docs.append({
-                "id": str(uuid.uuid4()),
-                **r,
-                "author_id": None,
-                "author_name": "Chef Bakers",
-                "is_user_submitted": False,
-                "created_at": datetime.now(timezone.utc),
-            })
-        await db.recipes.insert_many(docs)
-        logger.info(f"Seeded {len(docs)} recipes")
+    # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
+    # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on
+    # the next deploy without needing a manual reseed. Community-submitted
+    # recipes (is_user_submitted=True) are never touched here.
+    for r in RECIPES_SEED:
+        await db.recipes.update_one(
+            {"title": r["title"], "is_user_submitted": False},
+            {
+                "$set": r,
+                "$setOnInsert": {
+                    "id": str(uuid.uuid4()),
+                    "author_id": None,
+                    "author_name": "Chef Bakers",
+                    "is_user_submitted": False,
+                    "created_at": datetime.now(timezone.utc),
+                },
+            },
+            upsert=True,
+        )
+    logger.info(f"Synced {len(RECIPES_SEED)} built-in recipes")
 
     tip_count = await db.tips.count_documents({})
     if tip_count == 0:
