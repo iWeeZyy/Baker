@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useTimer } from '@/src/TimerContext';
 import { theme } from '@/src/theme';
 
 type Line = {
@@ -88,6 +89,7 @@ const NEXT_STATUS: Record<Step['status'], Step['status']> = {
 export default function ProductionDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { start } = useTimer();
 
   const [data, setData] = useState<Detail | null>(null);
   const [tab, setTab] = useState<Tab>('summary');
@@ -124,6 +126,16 @@ export default function ProductionDetail() {
     } finally {
       setBusyStep(null);
     }
+  };
+
+  /**
+   * Arming the timer *is* the act of starting the step, so the status follows
+   * rather than asking the baker to declare it a second time.
+   */
+  const startTimer = (step: Step) => {
+    if (step.duration_minutes == null) return;
+    start(`${step.recipe_title} — étape ${step.order + 1}`, step.duration_minutes * 60);
+    if (step.status === 'todo') patchStep(step.step_id, { status: 'doing' });
   };
 
   const submitDuration = (stepId: string) => {
@@ -381,6 +393,21 @@ export default function ProductionDetail() {
                       )}
                     </View>
 
+                    {/* A hand-entered duration arms a timer just like one read
+                        from the recipe: only the label distinguishes them. */}
+                    {step.duration_minutes != null && step.status !== 'done' && (
+                      <Pressable
+                        testID={`timer-${step.step_id}`}
+                        onPress={() => startTimer(step)}
+                        style={styles.timerChip}
+                      >
+                        <Feather name="clock" size={13} color={theme.color.onBrandTertiary} />
+                        <Text style={styles.timerChipText}>
+                          Lancer le minuteur ({formatMinutes(step.duration_minutes)})
+                        </Text>
+                      </Pressable>
+                    )}
+
                     {needsDuration && (
                       <View style={styles.durationBox}>
                         <Text style={styles.durationHint}>
@@ -456,6 +483,8 @@ const styles = StyleSheet.create({
   timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
   timePillText: { fontSize: 11, color: theme.color.onBrandTertiary, fontWeight: '700' },
   stepDuration: { fontSize: 11, color: theme.color.muted },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999 },
+  timerChipText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '600' },
   durationBox: { marginTop: 12, marginLeft: 56 },
   durationHint: { fontSize: 11, color: theme.color.muted, lineHeight: 16 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

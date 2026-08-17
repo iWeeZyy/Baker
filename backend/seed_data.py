@@ -7,6 +7,8 @@ RECIPES_SEED = [
         "difficulty": "Intermédiaire",
         "time_minutes": 240,
         "hydration": 68,
+        # "Diviser en 3 pâtons" — écrit dans les étapes ci-dessous.
+        "yield_pieces": 3,
         "image_url": "https://images.unsplash.com/photo-1599819055803-717bba43890f?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85",
         "description": "La baguette parisienne classique, à la mie alvéolée et croûte dorée.",
         "ingredients": [
@@ -57,6 +59,8 @@ RECIPES_SEED = [
         "difficulty": "Avancé",
         "time_minutes": 720,
         "hydration": 50,
+        # 24 barres de chocolat, 2 par rectangle : 12 pièces.
+        "yield_pieces": 12,
         "image_url": "https://images.unsplash.com/photo-1631129023315-7ef0e76faaed?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85",
         "description": "Deux barres de chocolat enveloppées dans une pâte feuilletée levée.",
         "ingredients": [
@@ -155,6 +159,8 @@ RECIPES_SEED = [
         "difficulty": "Facile",
         "time_minutes": 180,
         "hydration": 60,
+        # Un seul moule à cake par fournée.
+        "yield_pieces": 1,
         "image_url": "https://images.unsplash.com/photo-1608198093002-ad4e005484ec?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85",
         "description": "Pain moelleux à la mie serrée, parfait pour toasts et sandwiches.",
         "ingredients": [
@@ -402,6 +408,8 @@ RECIPES_SEED = [
         "difficulty": "Intermédiaire",
         "time_minutes": 300,
         "hydration": 80,
+        # "découper 2 pâtons" — écrit dans les étapes ci-dessous.
+        "yield_pieces": 2,
         "image_url": "https://images.unsplash.com/photo-1586444248902-2f64eddc13df?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85",
         "description": "Pain italien à mie très alvéolée et croûte fine.",
         "ingredients": [
