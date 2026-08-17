@@ -50,6 +50,22 @@ npx expo start
 
 Sur un appareil physique, `localhost` ne fonctionne pas : mets l'IP locale de ta machine (`http://192.168.x.x:8000`) dans `EXPO_PUBLIC_BACKEND_URL`.
 
+## Utiliser l'app depuis ton iPhone sans PC (gratuit)
+
+TestFlight nécessite un compte Apple Developer payant (99 $/an) — impossible à contourner. En attendant, cette option déploie le backend et une version web de l'app dans le cloud (gratuit, ton PC n'a plus besoin de tourner ensuite) : tu ouvres simplement l'URL dans Safari sur ton iPhone et tu l'ajoutes à l'écran d'accueil pour une icône façon app native. `render.yaml` à la racine du dépôt décrit déjà tout ça.
+
+Limite à connaître : les notifications du minuteur en arrière-plan ne fonctionnent pas dans cette version web (comme dans Expo Go) — il faudra la vraie app native (TestFlight) pour ça plus tard.
+
+1. **Base de données** — crée un cluster gratuit sur [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) (pas de carte bancaire requise pour le tier M0). Dans *Network Access*, autorise `0.0.0.0/0` (accès depuis n'importe où — suffisant pour un projet perso). Récupère la chaîne de connexion (*Connect → Drivers*), du genre `mongodb+srv://user:pass@cluster.mongodb.net/`.
+2. **Déploiement** — crée un compte gratuit sur [render.com](https://render.com) (connexion via GitHub), puis **New → Blueprint**, sélectionne le dépôt `iWeeZyy/Baker`. Render détecte `render.yaml` et propose de créer deux services : `bakers-backend` et `bakers-frontend`.
+3. Avant de valider, renseigne les variables demandées :
+   - `bakers-backend` → `MONGO_URL` (l'URL Atlas de l'étape 1) et `ANTHROPIC_API_KEY` (ta clé console.anthropic.com).
+   - `bakers-frontend` → `EXPO_PUBLIC_BACKEND_URL` : laisse vide pour l'instant, tu la renseigneras à l'étape suivante.
+4. Lance le déploiement. Une fois `bakers-backend` en ligne (statut *Live*), copie son URL (`https://bakers-backend-xxxx.onrender.com`), colle-la dans la variable `EXPO_PUBLIC_BACKEND_URL` du service `bakers-frontend` (onglet *Environment*), puis relance son déploiement (*Manual Deploy*).
+5. Ouvre l'URL de `bakers-frontend` dans Safari sur ton iPhone. *Partager* → *Sur l'écran d'accueil* pour une icône dédiée.
+
+Le tier gratuit de Render met le backend en veille après 15 min d'inactivité — la première requête après une pause prend quelques dizaines de secondes le temps qu'il se réveille, c'est normal.
+
 ## Build iOS / TestFlight (EAS)
 
 1. Crée un compte gratuit sur [expo.dev](https://expo.dev) et un compte [Apple Developer Program](https://developer.apple.com/programs/) (99 $/an, obligatoire pour distribuer sur TestFlight).
