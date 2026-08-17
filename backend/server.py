@@ -4,6 +4,7 @@ from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import anthropic
 import os
 import uuid
@@ -376,7 +377,7 @@ def _pair_key(a: str, b: str) -> str:
     return "|".join(sorted([a, b]))
 
 async def _are_friends(a: str, b: str) -> bool:
-    return bool(await db.friendships.find_one({"users": _pair(a, b)}))
+    return bool(await db.friendships.find_one({"pair_key": _pair_key(a, b)}))
 
 async def _friend_status(me: str, other: str) -> str:
     if me == other:
@@ -440,7 +441,14 @@ async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_
     rev = await db.friend_requests.find_one({"from_user_id": target, "to_user_id": me, "status": "pending"})
     if rev:
         await db.friend_requests.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
-        await db.friendships.insert_one({"users": _pair(me, target), "created_at": datetime.now(timezone.utc)})
+        try:
+            await db.friendships.insert_one({
+                "users": _pair(me, target),
+                "pair_key": _pair_key(me, target),
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            pass
         return {"status": "friends"}
     existing = await db.friend_requests.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
     if existing:
@@ -473,7 +481,14 @@ async def respond_request(request_id: str, inp: RespondInput, user: dict = Depen
     await db.friend_requests.update_one({"id": request_id}, {"$set": {"status": new_status}})
     if inp.accept:
         if not await _are_friends(user["user_id"], req["from_user_id"]):
-            await db.friendships.insert_one({"users": _pair(user["user_id"], req["from_user_id"]), "created_at": datetime.now(timezone.utc)})
+            try:
+                await db.friendships.insert_one({
+                    "users": _pair(user["user_id"], req["from_user_id"]),
+                    "pair_key": _pair_key(user["user_id"], req["from_user_id"]),
+                    "created_at": datetime.now(timezone.utc),
+                })
+            except DuplicateKeyError:
+                pass
         return {"status": "friends"}
     return {"status": "declined"}
 
@@ -638,7 +653,17 @@ async def startup():
     await db.likes.create_index("recipe_id")
     await db.comments.create_index("recipe_id")
     await db.notes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
+
+    # Backfill pair_key on any friendship docs predating this field, so the
+    # unique index below never fails at startup on an existing database.
+    async for f in db.friendships.find({"pair_key": {"$exists": False}}, {"users": 1}):
+        await db.friendships.update_one(
+            {"_id": f["_id"]}, {"$set": {"pair_key": _pair_key(*f["users"])}}
+        )
     await db.friendships.create_index("users")
+    # Prevents a race between two concurrent accept flows from creating two
+    # friendship docs for the same pair (which would show the friend twice).
+    await db.friendships.create_index("pair_key", unique=True)
     await db.friend_requests.create_index([("to_user_id", 1), ("status", 1)])
     await db.friend_requests.create_index([("from_user_id", 1), ("status", 1)])
     await db.messages.create_index([("pair", 1), ("created_at", 1)])
