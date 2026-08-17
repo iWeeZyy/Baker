@@ -5,7 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { subscribeRealtime } from '@/src/realtime';
 import { theme } from '@/src/theme';
+
+// Fallback poll in case the realtime socket is down; the socket refreshes
+// this list near-instantly when a message arrives while connected.
+const POLL_FALLBACK_MS = 20000;
 
 type UserRow = { user_id: string; name: string; picture?: string; friend_status?: string };
 type FriendRow = UserRow & { last_message?: { content: string; from_me: boolean; created_at: string } | null; unread: number };
@@ -43,8 +48,11 @@ export default function Friends() {
 
   useFocusEffect(useCallback(() => {
     load();
-    const iv = setInterval(load, 8000);
-    return () => clearInterval(iv);
+    const iv = setInterval(load, POLL_FALLBACK_MS);
+    const unsubscribe = subscribeRealtime((evt) => {
+      if (evt.type === 'new_message') load();
+    });
+    return () => { clearInterval(iv); unsubscribe(); };
   }, [load]));
 
   useEffect(() => {

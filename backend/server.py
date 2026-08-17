@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
@@ -15,6 +16,7 @@ import base64
 import json
 import time
 import re
+from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
@@ -514,16 +516,44 @@ async def list_friends(user: dict = Depends(get_current_user)):
     out.sort(key=lambda x: (x["last_message"]["created_at"] if x["last_message"] else datetime.min), reverse=True)
     return out
 
+@api_router.delete("/friends/{friend_id}")
+async def remove_friend(friend_id: str, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    await db.friendships.delete_one({"pair_key": _pair_key(me, friend_id)})
+    # Also clear any leftover request records so a future re-request starts clean.
+    await db.friend_requests.delete_many({
+        "$or": [
+            {"from_user_id": me, "to_user_id": friend_id},
+            {"from_user_id": friend_id, "to_user_id": me},
+        ]
+    })
+    return {"status": "removed"}
+
 # ---------- Messages ----------
+MESSAGES_PAGE_SIZE = 50
+
 @api_router.get("/messages/{friend_id}")
-async def get_messages(friend_id: str, user: dict = Depends(get_current_user)):
+async def get_messages(friend_id: str, before: Optional[str] = None, user: dict = Depends(get_current_user)):
     me = user["user_id"]
     if not await _are_friends(me, friend_id):
         raise HTTPException(403, "Vous devez être amis pour discuter")
     pk = _pair_key(me, friend_id)
-    msgs = await db.messages.find({"pair": pk}, {"_id": 0}).sort("created_at", 1).to_list(1000)
-    await db.messages.update_many({"pair": pk, "to_user_id": me, "read": False}, {"$set": {"read": True}})
-    return msgs
+    q = {"pair": pk}
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+        q["created_at"] = {"$lt": cursor_dt}
+    # Fetch the most recent page (newest-first), then reverse to chronological
+    # order for display. This guarantees the latest messages are always
+    # reachable regardless of how long the conversation history is.
+    msgs = await db.messages.find(q, {"_id": 0}).sort("created_at", -1).limit(MESSAGES_PAGE_SIZE).to_list(MESSAGES_PAGE_SIZE)
+    msgs.reverse()
+    has_more = len(msgs) == MESSAGES_PAGE_SIZE
+    if not before:
+        await db.messages.update_many({"pair": pk, "to_user_id": me, "read": False}, {"$set": {"read": True}})
+    return {"messages": msgs, "has_more": has_more}
 
 @api_router.post("/messages/{friend_id}")
 async def send_message(friend_id: str, inp: MessageInput, user: dict = Depends(get_current_user)):
@@ -544,7 +574,52 @@ async def send_message(friend_id: str, inp: MessageInput, user: dict = Depends(g
     }
     await db.messages.insert_one(doc)
     doc.pop("_id", None)
+    await _push_to_user(friend_id, {"type": "new_message", "message": doc})
     return doc
+
+# ---------- Realtime (WebSocket) ----------
+ws_connections: dict = defaultdict(set)
+
+async def _push_to_user(user_id: str, payload: dict):
+    if user_id not in ws_connections:
+        return
+    # WebSocket.send_json uses plain json.dumps, unlike HTTP responses which
+    # go through FastAPI's encoder — datetimes etc. must be pre-encoded here.
+    safe_payload = jsonable_encoder(payload)
+    dead = []
+    for ws in ws_connections.get(user_id, ()):
+        try:
+            await ws.send_json(safe_payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        ws_connections[user_id].discard(ws)
+
+@api_router.websocket("/ws")
+async def ws_endpoint(websocket: WebSocket, token: str = ""):
+    payload = verify_jwt(token)
+    if not payload:
+        await websocket.close(code=4401)
+        return
+    user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0})
+    if not user:
+        await websocket.close(code=4401)
+        return
+    user_id = user["user_id"]
+    await websocket.accept()
+    ws_connections[user_id].add(websocket)
+    try:
+        while True:
+            # We don't expect meaningful client->server messages on this
+            # socket (it's push-only); receiving just keeps the connection
+            # alive and lets us detect disconnects promptly.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        ws_connections[user_id].discard(websocket)
+        if not ws_connections[user_id]:
+            del ws_connections[user_id]
 
 # ---------- Tips ----------
 @api_router.get("/tips")

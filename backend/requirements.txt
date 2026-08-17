@@ -1,5 +1,6 @@
 fastapi==0.110.1
 uvicorn==0.25.0
+websockets>=12.0
 python-dotenv>=1.0.1
 pymongo==4.6.3
 pydantic>=2.6.4
@@ -10,6 +11,7 @@ python-multipart>=0.0.9
 anthropic>=0.40.0
 pytest>=8.0.0
 pytest-xdist>=3.6.0
+pytest-asyncio>=0.24.0
 requests>=2.31.0
 black>=24.1.1
 isort>=5.13.2

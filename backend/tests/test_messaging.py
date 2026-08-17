@@ -4,12 +4,16 @@ Uses three fixed accounts: FRIEND_A and FRIEND_B (kept friends with each
 other across test runs) and STRANGER (never friends with either), so the
 suite is idempotent and safe to re-run against a persistent database.
 """
+import asyncio
+import json
 import os
 import pytest
 import requests
+import websockets
 
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'http://localhost:8000').rstrip('/')
 API = f"{BASE_URL}/api"
+WS_BASE = BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
 
 ACCOUNTS = {
     "a": ("test.friend.a@bakers.app", "TestFriendA2026!", "Amie A"),
@@ -141,6 +145,39 @@ class TestFriendship:
             requests.post(f"{API}/friends/requests/{pending['id']}/respond", json={"accept": False}, headers=h_a, timeout=30)
 
 
+# --- Removing a friend ---
+class TestUnfriend:
+    def test_remove_requires_auth(self, users):
+        r = requests.delete(f"{API}/friends/{users['a']['user_id']}", timeout=30)
+        assert r.status_code == 401
+
+    def test_remove_breaks_friendship_and_blocks_messaging(self, users):
+        h_stranger = auth_headers(users["stranger"]["token"])
+        h_a = auth_headers(users["a"]["token"])
+
+        # Ensure stranger and A are friends first (independent of the a<->b pair).
+        send = requests.post(f"{API}/friends/request", json={"user_id": users["a"]["user_id"]}, headers=h_stranger, timeout=30)
+        if send.json()["status"] != "friends":
+            reqs = requests.get(f"{API}/friends/requests", headers=h_a, timeout=30).json()
+            pending = next(x for x in reqs if x["from_user"]["user_id"] == users["stranger"]["user_id"])
+            requests.post(f"{API}/friends/requests/{pending['id']}/respond", json={"accept": True}, headers=h_a, timeout=30)
+        assert requests.get(f"{API}/users/{users['a']['user_id']}/profile", headers=h_stranger, timeout=30).json()["friend_status"] == "friends"
+
+        rm = requests.delete(f"{API}/friends/{users['a']['user_id']}", headers=h_stranger, timeout=30)
+        assert rm.status_code == 200
+        assert rm.json()["status"] == "removed"
+
+        prof = requests.get(f"{API}/users/{users['a']['user_id']}/profile", headers=h_stranger, timeout=30)
+        assert prof.json()["friend_status"] != "friends"
+
+        blocked = requests.post(f"{API}/messages/{users['a']['user_id']}", json={"content": "hi"}, headers=h_stranger, timeout=30)
+        assert blocked.status_code == 403
+
+        # Removing again is a harmless no-op, not an error.
+        rm2 = requests.delete(f"{API}/friends/{users['a']['user_id']}", headers=h_stranger, timeout=30)
+        assert rm2.status_code == 200
+
+
 # --- Messaging ---
 class TestMessaging:
     def test_send_requires_auth(self, users):
@@ -176,13 +213,13 @@ class TestMessaging:
         # B can read the conversation and sees the same message
         got = requests.get(f"{API}/messages/{friends_ab['a']['user_id']}", headers=h_b, timeout=30)
         assert got.status_code == 200
-        assert any(m["id"] == doc["id"] and m["content"] == content for m in got.json())
+        assert any(m["id"] == doc["id"] and m["content"] == content for m in got.json()["messages"])
 
     def test_messages_ordered_chronologically(self, friends_ab):
         h_a = auth_headers(friends_ab["a"]["token"])
         for text in ["Premier message", "Deuxième message", "Troisième message"]:
             requests.post(f"{API}/messages/{friends_ab['b']['user_id']}", json={"content": text}, headers=h_a, timeout=30)
-        msgs = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", headers=h_a, timeout=30).json()
+        msgs = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", headers=h_a, timeout=30).json()["messages"]
         timestamps = [m["created_at"] for m in msgs]
         assert timestamps == sorted(timestamps), "messages must be returned in chronological order"
 
@@ -210,3 +247,63 @@ class TestMessaging:
         entry = next(f for f in friends if f["user_id"] == friends_ab["b"]["user_id"])
         assert entry["last_message"]["content"] == content
         assert entry["last_message"]["from_me"] is True
+
+
+# --- Pagination ---
+class TestPagination:
+    def test_pagination_walks_full_history_without_gaps_or_duplicates(self, friends_ab):
+        h_a = auth_headers(friends_ab["a"]["token"])
+        # Guarantee more than one page of history regardless of what earlier tests left behind.
+        for i in range(55):
+            requests.post(f"{API}/messages/{friends_ab['b']['user_id']}", json={"content": f"Pagination test {i}"}, headers=h_a, timeout=30)
+
+        first_page = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", headers=h_a, timeout=30).json()
+        assert first_page["has_more"] is True, "expected more than one page of history"
+
+        all_ids = [m["id"] for m in first_page["messages"]]
+        cursor = first_page["messages"][0]["created_at"]
+        has_more = first_page["has_more"]
+        pages = 1
+        while has_more and pages < 20:  # safety cap against an infinite loop on a real bug
+            page = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", params={"before": cursor}, headers=h_a, timeout=30).json()
+            if not page["messages"]:
+                break
+            all_ids = [m["id"] for m in page["messages"]] + all_ids
+            cursor = page["messages"][0]["created_at"]
+            has_more = page["has_more"]
+            pages += 1
+
+        assert len(all_ids) == len(set(all_ids)), "pagination must not return duplicate messages across pages"
+        assert pages > 1, "expected to walk through more than one page"
+
+    def test_pagination_invalid_cursor_rejected(self, friends_ab):
+        h_a = auth_headers(friends_ab["a"]["token"])
+        r = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", params={"before": "not-a-date"}, headers=h_a, timeout=30)
+        assert r.status_code == 400
+
+
+# --- Realtime (WebSocket) ---
+class TestRealtime:
+    @pytest.mark.asyncio
+    async def test_invalid_token_rejected(self):
+        uri = f"{WS_BASE}/api/ws?token=invalid"
+        with pytest.raises(Exception):
+            async with websockets.connect(uri, open_timeout=5) as ws:
+                await ws.recv()
+
+    @pytest.mark.asyncio
+    async def test_message_pushed_to_recipient_in_realtime(self, friends_ab):
+        uri = f"{WS_BASE}/api/ws?token={friends_ab['b']['token']}"
+        async with websockets.connect(uri, open_timeout=5) as ws:
+            h_a = auth_headers(friends_ab["a"]["token"])
+            content = "Message temps réel"
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: requests.post(f"{API}/messages/{friends_ab['b']['user_id']}", json={"content": content}, headers=h_a, timeout=30),
+            )
+            raw = await asyncio.wait_for(ws.recv(), timeout=10)
+            evt = json.loads(raw)
+            assert evt["type"] == "new_message"
+            assert evt["message"]["content"] == content
+            assert evt["message"]["from_user_id"] == friends_ab["a"]["user_id"]
+            assert evt["message"]["to_user_id"] == friends_ab["b"]["user_id"]
