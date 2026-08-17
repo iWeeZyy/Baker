@@ -5,9 +5,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { subscribeRealtime } from '@/src/realtime';
 import { theme } from '@/src/theme';
 
 type Message = { id: string; from_user_id: string; to_user_id: string; content: string; created_at: string };
+
+// Fallback poll in case the realtime socket is down; the socket delivers
+// new messages near-instantly when connected.
+const POLL_FALLBACK_MS = 15000;
 
 function fmtTime(s: string) {
   const d = new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z');
@@ -19,17 +24,21 @@ export default function Chat() {
   const router = useRouter();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFriends, setNotFriends] = useState(false);
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const didInitialScroll = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const m = await api(`/messages/${id}`);
-      setMessages(m);
+      const res = await api(`/messages/${id}`);
+      setMessages(res.messages);
+      setHasMore(res.has_more);
       setError(null);
       setNotFriends(false);
     } catch (e: any) {
@@ -38,11 +47,46 @@ export default function Chat() {
     }
   }, [id]);
 
+  const loadOlder = async () => {
+    if (loadingMore || messages.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const res = await api(`/messages/${id}?before=${encodeURIComponent(messages[0].created_at)}`);
+      setMessages(prev => [...res.messages, ...prev]);
+      setHasMore(res.has_more);
+    } catch (e: any) {
+      setError(e.message || 'Erreur');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
     load().finally(() => setLoading(false));
-    const iv = setInterval(load, 3000);
+    const iv = setInterval(load, POLL_FALLBACK_MS);
     return () => clearInterval(iv);
   }, [load]);
+
+  // Instant delivery when the realtime socket is connected; falls back to
+  // the poll above (POLL_FALLBACK_MS) if the socket drops.
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((evt) => {
+      if (evt.type !== 'new_message') return;
+      const m: Message = evt.message;
+      if (m.from_user_id !== id && m.to_user_id !== id) return;
+      setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
+      setNotFriends(false);
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    });
+    return unsubscribe;
+  }, [id]);
+
+  useEffect(() => {
+    if (!loading && !didInitialScroll.current && messages.length > 0) {
+      didInitialScroll.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+    }
+  }, [loading, messages.length]);
 
   const send = async () => {
     const content = text.trim();
@@ -51,7 +95,8 @@ export default function Chat() {
     setSending(true);
     try {
       const m = await api(`/messages/${id}`, { method: 'POST', body: JSON.stringify({ content }) });
-      setMessages(prev => [...prev, m]);
+      setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     } catch (e: any) {
       if (e.status === 403) setNotFriends(true);
       else setError(e.message || 'Erreur envoi');
@@ -80,7 +125,12 @@ export default function Chat() {
             data={messages}
             keyExtractor={m => m.id}
             contentContainerStyle={{ padding: 16, gap: 8, flexGrow: 1 }}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            ListHeaderComponent={hasMore ? (
+              <Pressable testID="chat-load-older" onPress={loadOlder} disabled={loadingMore} style={styles.loadMoreBtn}>
+                {loadingMore ? <ActivityIndicator size="small" color={theme.color.brand} /> : <Text style={styles.loadMoreText}>Charger les messages précédents</Text>}
+              </Pressable>
+            ) : null}
             renderItem={({ item }) => {
               const mine = item.from_user_id === user?.user_id;
               return (
@@ -150,4 +200,6 @@ const styles = StyleSheet.create({
   error: { color: theme.color.error, fontSize: 12, paddingHorizontal: 16, paddingBottom: 4 },
   notFriendsBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: theme.color.border, backgroundColor: theme.color.surfaceSecondary },
   notFriendsText: { flex: 1, fontSize: 13, color: theme.color.muted, lineHeight: 18 },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 8 },
+  loadMoreText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
 });

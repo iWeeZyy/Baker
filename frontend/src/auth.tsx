@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { api, saveToken, getToken, clearToken, setInMemoryToken } from './api';
+import { disconnectRealtime } from './realtime';
 
 export type User = {
   user_id: string;
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try { await api('/auth/logout', { method: 'POST' }); } catch {}
+    disconnectRealtime();
     await clearToken();
     setInMemoryToken(null);
     setUser(null);

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -33,6 +33,26 @@ export default function BakerProfile() {
     finally { setActionLoading(false); }
   };
 
+  const doRemoveFriend = async () => {
+    setActionLoading(true);
+    try {
+      await api(`/friends/${id}`, { method: 'DELETE' });
+      setData((d: any) => ({ ...d, friend_status: 'none' }));
+    } catch (e) { console.warn(e); }
+    finally { setActionLoading(false); }
+  };
+
+  const removeFriend = () => {
+    Alert.alert(
+      'Retirer cet ami',
+      `Vous ne pourrez plus échanger de messages avec ${data?.user?.name || 'cette personne'}.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Retirer', style: 'destructive', onPress: doRemoveFriend },
+      ],
+    );
+  };
+
   if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
   if (!data) return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -51,10 +71,15 @@ export default function BakerProfile() {
     if (friend_status === 'me') return null;
     if (friend_status === 'friends') {
       return (
-        <Pressable testID="message-btn" onPress={() => router.push({ pathname: `/chat/${user.user_id}` as any, params: { name: user.name } })} style={styles.actionBtn}>
-          <Feather name="message-circle" size={16} color="#fff" />
-          <Text style={styles.actionText}>Envoyer un message</Text>
-        </Pressable>
+        <View style={{ alignItems: 'center' }}>
+          <Pressable testID="message-btn" onPress={() => router.push({ pathname: `/chat/${user.user_id}` as any, params: { name: user.name } })} style={styles.actionBtn}>
+            <Feather name="message-circle" size={16} color="#fff" />
+            <Text style={styles.actionText}>Envoyer un message</Text>
+          </Pressable>
+          <Pressable testID="remove-friend-btn" onPress={removeFriend} disabled={actionLoading} style={styles.removeFriendBtn}>
+            <Text style={styles.removeFriendText}>Retirer cet ami</Text>
+          </Pressable>
+        </View>
       );
     }
     if (friend_status === 'pending_sent') {
@@ -147,6 +172,8 @@ const styles = StyleSheet.create({
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.color.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, marginTop: 20 },
   actionBtnMuted: { backgroundColor: theme.color.surfaceSecondary },
   actionText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  removeFriendBtn: { marginTop: 10, paddingVertical: 6, paddingHorizontal: 12 },
+  removeFriendText: { color: theme.color.error, fontSize: 12, fontWeight: '500' },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, alignSelf: 'flex-start', marginTop: 32, marginBottom: 8 },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
