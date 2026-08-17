@@ -1,0 +1,88 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project overview
+
+Bakers is a French bakery companion app: a recipe library, technical tips, an AI baking assistant, and community features (likes, comments, friends, messaging). It's a two-part monorepo:
+
+- `backend/` — FastAPI + MongoDB (Motor), a single-file API server
+- `frontend/` — Expo Router (React Native + TypeScript), targets iOS/Android/Web
+
+The project previously ran on "Emergent" (an AI app-builder platform) for auth, file storage, and the AI provider. That coupling has been removed: auth is email/password only, file storage is local disk, and the AI assistant calls the Anthropic API directly. A few harmless traces of the old scaffold remain (see Gotchas below) — don't be alarmed by them.
+
+## Commands
+
+### Backend (`backend/`)
+
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # then fill in JWT_SECRET / ANTHROPIC_API_KEY / MONGO_URL
+uvicorn server:app --reload --port 8000
+```
+
+Needs a running MongoDB (`docker run -d -p 27017:27017 mongo:7`, or Atlas).
+
+Tests are **HTTP integration tests**, not unit tests — they hit a live server over the network (default `http://localhost:8000`, override via `EXPO_PUBLIC_BACKEND_URL`). Start `uvicorn` first, then:
+
+```bash
+cd backend && pytest                        # runs the full suite (all files in tests/)
+pytest tests/test_bakers_api.py             # single file
+pytest tests/test_bakers_api.py::TestPublic::test_categories   # single test
+```
+
+`pytest.ini` pins `-n 2 --dist loadscope` (xdist) — tests within a class/module share sequential state (e.g. register-then-login on the same seeded account), so don't run with a different `-n` value or `-p no:xdist`; use `-n 0` for serial instead.
+
+### Frontend (`frontend/`)
+
+```bash
+yarn install
+cp .env.example .env        # EXPO_PUBLIC_BACKEND_URL -> your backend's URL
+npx expo start               # then press i / a / w, or scan the QR code
+```
+
+```bash
+npx tsc --noEmit             # typecheck (no dedicated script in package.json)
+yarn lint                    # expo lint (eslint-config-expo)
+```
+
+No frontend test runner is configured.
+
+EAS build profiles (`development` / `preview` / `production`) live in `eas.json`; `preview`/`production` need their `EXPO_PUBLIC_BACKEND_URL` placeholder replaced with a real deployed backend URL before building.
+
+## Architecture
+
+### Backend — `backend/server.py`
+
+Everything (models, auth, all routes, startup seeding) lives in this one ~600-line file behind an `/api` prefix router. Key pieces:
+
+- **Auth**: hand-rolled JWT (HMAC-SHA256 over base64url header/payload, `sign_jwt`/`verify_jwt`), not a third-party library. `get_current_user` is the single dependency every protected route uses. Passwords are bcrypt-hashed. There is no token revocation — logout is client-side only (stateless JWT).
+- **Storage**: `put_object`/`get_object` in the "Storage Helpers" section write/read files under `backend/uploads/`, keyed by an app-generated path (`bakers-app/uploads/{user_id}/{uuid}.{ext}`). `_resolve_upload_path` guards against path traversal on the `/api/files/{path:path}` download route — keep that guard if you touch storage.
+- **AI chat**: `/api/chat` calls the Anthropic API directly (`anthropic.AsyncAnthropic`, model `claude-sonnet-5`). It's stateless per-request — conversation history is reconstructed on every call by reading recent `db.chat_messages` for the `(user_id, session_id)` pair and replaying them as the `messages` array. Returns 503 if `ANTHROPIC_API_KEY` isn't set.
+- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
+- Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
+- Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
+
+### Frontend — `frontend/`
+
+Expo Router (file-based routing) under `app/`:
+
+- `app/_layout.tsx` — root: wraps everything in `AuthProvider` (`src/auth.tsx`) and `TimerProvider` (`src/TimerContext.tsx`), renders the global floating `TimerBar`.
+- `app/(tabs)/_layout.tsx` — the tab group (`Accueil`, `Recettes`, `Assistant`, `Amis`, `Profil`); redirects to `/auth` if `useAuth().user` is null. This is the entire route-protection mechanism — there's no per-screen guard.
+- `app/auth.tsx`, `app/recipe/[id].tsx`, `app/baker/[id].tsx`, `app/chat/[id].tsx`, `app/calculator.tsx`, `app/share.tsx` — stack screens outside the tab group.
+
+Cross-cutting modules in `src/`:
+
+- `src/api.ts` — the only place that talks to the backend. `api(path, opts)` wraps `fetch`, injects the bearer token from `expo-secure-store` (web falls back to `localStorage`), and throws on non-2xx. All screens call through this rather than `fetch` directly.
+- `src/auth.tsx` — `AuthProvider`/`useAuth()`; on mount, checks for a stored token and validates it against `/api/auth/me`.
+- `src/TimerContext.tsx` — global baking timer state (single timer or a chained multi-step sequence), independent of whichever screen started it, backed by `expo-notifications` for background alerts. `recipe/[id].tsx` parses step text for durations (`parseDuration`) to auto-offer timers.
+- `src/theme.ts` — the single source of design tokens (colors, spacing, radius, font sizes) consumed by every screen's `StyleSheet`. `design_guidelines.json` at the repo root is the original aspirational design brief and doesn't fully match the shipped theme (e.g. it specifies Cormorant Garamond/Geist; `theme.ts` actually uses Georgia/system-serif) — treat `theme.ts` as ground truth.
+
+There's no data-fetching library (no React Query/SWR): each screen does its own `useEffect` + `useState` + manual loading/error state, calling `api()` directly.
+
+## Gotchas
+
+- `.emergent/`, `design_guidelines.json`, and `frontend/constants/testIds/` are leftovers from the app's original AI-scaffolded build (the "Emergent" platform) and from an unused automated-QA pipeline (`testIds/auth.js` is never imported anywhere). Harmless, safe to ignore or remove — just don't mistake them for live infrastructure.
+- `frontend/scripts/cmd-guard.js` runs on `yarn`'s `preinstall` hook and blocks a handful of deprecated Expo packages (`expo-av`, `expo-barcode-scanner`, `expo-background-fetch`, `expo-file-system/legacy`). It no-ops for everything else outside its original sandbox (falls back to a small baked-in rule list) — if `yarn add`/`yarn install` ever fails with a "cmd-guard: Blocked" message, it's this script, not a real dependency conflict.
+- Root `.gitignore` has `.env.*` (blocks committing local secrets) with an explicit `!.env.example` exception — keep that pairing if you add new env-var scaffolding.
