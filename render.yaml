@@ -21,7 +21,6 @@ services:
   - type: web
     name: bakers-frontend
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: yarn install && npx expo export --platform web --output-dir dist
     staticPublishPath: dist
