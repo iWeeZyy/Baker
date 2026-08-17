@@ -22,6 +22,7 @@ export default function Chat() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFriends, setNotFriends] = useState(false);
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList>(null);
 
@@ -30,8 +31,10 @@ export default function Chat() {
       const m = await api(`/messages/${id}`);
       setMessages(m);
       setError(null);
+      setNotFriends(false);
     } catch (e: any) {
-      setError(e.message || 'Erreur');
+      if (e.status === 403) setNotFriends(true);
+      else setError(e.message || 'Erreur');
     }
   }, [id]);
 
@@ -50,7 +53,8 @@ export default function Chat() {
       const m = await api(`/messages/${id}`, { method: 'POST', body: JSON.stringify({ content }) });
       setMessages(prev => [...prev, m]);
     } catch (e: any) {
-      setError(e.message || 'Erreur envoi');
+      if (e.status === 403) setNotFriends(true);
+      else setError(e.message || 'Erreur envoi');
       setText(content);
     } finally { setSending(false); }
   };
@@ -97,22 +101,29 @@ export default function Chat() {
           />
         )}
 
-        {error && <Text style={styles.error} testID="chat-error">{error}</Text>}
+        {error && !notFriends && <Text style={styles.error} testID="chat-error">{error}</Text>}
 
-        <View style={styles.inputRow}>
-          <TextInput
-            testID="chat-input"
-            value={text}
-            onChangeText={setText}
-            placeholder="Votre message…"
-            placeholderTextColor={theme.color.muted}
-            style={styles.input}
-            multiline
-          />
-          <Pressable testID="chat-send" onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}>
-            <Feather name="send" size={18} color="#fff" />
-          </Pressable>
-        </View>
+        {notFriends ? (
+          <View style={styles.notFriendsBox} testID="chat-not-friends">
+            <Feather name="user-x" size={16} color={theme.color.muted} />
+            <Text style={styles.notFriendsText}>Vous n'êtes plus amis avec cette personne — impossible d'échanger des messages.</Text>
+          </View>
+        ) : (
+          <View style={styles.inputRow}>
+            <TextInput
+              testID="chat-input"
+              value={text}
+              onChangeText={setText}
+              placeholder="Votre message…"
+              placeholderTextColor={theme.color.muted}
+              style={styles.input}
+              multiline
+            />
+            <Pressable testID="chat-send" onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}>
+              <Feather name="send" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -137,4 +148,6 @@ const styles = StyleSheet.create({
   emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20 },
   error: { color: theme.color.error, fontSize: 12, paddingHorizontal: 16, paddingBottom: 4 },
+  notFriendsBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: theme.color.border, backgroundColor: theme.color.surfaceSecondary },
+  notFriendsText: { flex: 1, fontSize: 13, color: theme.color.muted, lineHeight: 18 },
 });

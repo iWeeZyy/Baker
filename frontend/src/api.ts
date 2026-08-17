@@ -42,7 +42,9 @@ export async function api(path: string, opts: RequestInit = {}) {
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
-    throw new Error(msg);
+    const err: any = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
