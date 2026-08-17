@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/src/auth';
 import { theme } from '@/src/theme';
 
 export default function AuthScreen() {
-  const { user, login, register, loginWithGoogle } = useAuth();
+  const { user, login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,12 +26,6 @@ export default function AuthScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const google = async () => {
-    setError(null); setLoading(true);
-    try { await loginWithGoogle(); } catch (e: any) { setError(e.message || 'Erreur Google'); }
-    finally { setLoading(false); }
   };
 
   if (user) return <Redirect href="/(tabs)" />;
@@ -79,17 +72,6 @@ export default function AuthScreen() {
           <Pressable testID="submit-auth" onPress={submit} disabled={loading} style={[styles.primaryBtn, loading && { opacity: 0.6 }]}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
           </Pressable>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OU</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable testID="google-btn" onPress={google} disabled={loading} style={styles.googleBtn}>
-            <Feather name="chrome" size={18} color={theme.color.onSurface} />
-            <Text style={styles.googleText}>Continuer avec Google</Text>
-          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -113,10 +95,5 @@ const styles = StyleSheet.create({
   input: { fontSize: 16, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 10 },
   primaryBtn: { backgroundColor: theme.color.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
   primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: theme.color.border },
-  dividerText: { marginHorizontal: 12, color: theme.color.muted, fontSize: 12, letterSpacing: 1 },
-  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 4, borderWidth: 1, borderColor: theme.color.borderStrong, gap: 10 },
-  googleText: { fontSize: 15, color: theme.color.onSurface, fontWeight: '500' },
   error: { color: theme.color.error, fontSize: 13, marginBottom: 8 },
 });
