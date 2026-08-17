@@ -4,6 +4,7 @@ from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import anthropic
 import os
 import uuid
 import logging
@@ -13,12 +14,10 @@ import base64
 import json
 import time
 import re
-import requests
-import httpx
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -32,12 +31,15 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ['JWT_SECRET']
-EMERGENT_LLM_KEY = os.environ['EMERGENT_LLM_KEY']
 APP_NAME = "bakers-app"
 
-STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
-STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
-_storage_key: Optional[str] = None
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+
+UPLOADS_DIR = ROOT_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -77,50 +79,35 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization[7:]
-    # Try JWT (email/password auth)
     payload = verify_jwt(token)
-    if payload:
-        user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    # Try session_token (Google auth)
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
+    if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
-    exp = session.get("expires_at")
-    if exp and exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp and exp < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Session expired")
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
+    user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
-# ---------- Storage Helpers ----------
-def init_storage():
-    global _storage_key
-    if _storage_key:
-        return _storage_key
-    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_LLM_KEY}, timeout=30)
-    resp.raise_for_status()
-    _storage_key = resp.json()["storage_key"]
-    return _storage_key
+# ---------- Storage Helpers (local disk) ----------
+def _resolve_upload_path(path: str) -> Path:
+    resolved = (UPLOADS_DIR / path).resolve()
+    if resolved != UPLOADS_DIR.resolve() and UPLOADS_DIR.resolve() not in resolved.parents:
+        raise HTTPException(400, "Invalid path")
+    return resolved
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    resp = requests.put(f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
-    resp.raise_for_status()
-    return resp.json()
+    dest = _resolve_upload_path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    dest.with_suffix(dest.suffix + ".meta").write_text(content_type)
+    return {"path": path}
 
 def get_object(path: str):
-    key = init_storage()
-    resp = requests.get(f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key}, timeout=60)
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    src = _resolve_upload_path(path)
+    if not src.is_file():
+        raise FileNotFoundError(path)
+    meta_file = src.with_suffix(src.suffix + ".meta")
+    content_type = meta_file.read_text().strip() if meta_file.is_file() else "application/octet-stream"
+    return src.read_bytes(), content_type
 
 # ---------- Models ----------
 class RegisterInput(BaseModel):
@@ -131,9 +118,6 @@ class RegisterInput(BaseModel):
 class LoginInput(BaseModel):
     email: EmailStr
     password: str
-
-class GoogleSessionInput(BaseModel):
-    session_id: str
 
 class AuthResponse(BaseModel):
     token: str
@@ -222,52 +206,13 @@ async def login(inp: LoginInput):
     token = sign_jwt(user["user_id"])
     return {"token": token, "user": {"user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture")}}
 
-@api_router.post("/auth/session", response_model=AuthResponse)
-async def google_session(inp: GoogleSessionInput):
-    async with httpx.AsyncClient(timeout=30) as h:
-        resp = await h.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": inp.session_id},
-        )
-        if resp.status_code != 200:
-            raise HTTPException(401, "Invalid session")
-        data = resp.json()
-    email = data["email"].lower()
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
-    if existing:
-        user_id = existing["user_id"]
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": data.get("name"), "picture": data.get("picture")}},
-        )
-    else:
-        user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
-            "user_id": user_id,
-            "email": email,
-            "name": data.get("name"),
-            "picture": data.get("picture"),
-            "provider": "google",
-            "created_at": datetime.now(timezone.utc),
-        })
-    session_token = data["session_token"]
-    await db.user_sessions.insert_one({
-        "session_token": session_token,
-        "user_id": user_id,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
-    })
-    return {"token": session_token, "user": {"user_id": user_id, "email": email, "name": data.get("name"), "picture": data.get("picture")}}
-
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return {"user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture")}
 
 @api_router.post("/auth/logout")
-async def logout(authorization: Optional[str] = Header(None)):
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-        await db.user_sessions.delete_one({"session_token": token})
+async def logout():
+    # JWT is stateless: the client discards the token. Nothing to invalidate server-side.
     return {"ok": True}
 
 # ---------- Recipes ----------
@@ -624,23 +569,25 @@ async def download_file(path: str):
     return Response(content=content, media_type=ctype)
 
 # ---------- AI Chat ----------
+CHAT_SYSTEM_PROMPT = (
+    "Tu es un assistant expert boulanger français, chaleureux et précis. "
+    "Tu réponds aux questions techniques sur la boulangerie, la viennoiserie et la pâtisserie : "
+    "fermentation, hydratation, façonnage, cuisson, dépannage. Réponds en français, "
+    "avec des conseils concrets, des températures, des temps précis. Sois concis (max 200 mots)."
+)
+
 @api_router.post("/chat")
 async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
     session_id = inp.session_id or f"{user['user_id']}_default"
-    system = (
-        "Tu es un assistant expert boulanger français, chaleureux et précis. "
-        "Tu réponds aux questions techniques sur la boulangerie, la viennoiserie et la pâtisserie : "
-        "fermentation, hydratation, façonnage, cuisson, dépannage. Réponds en français, "
-        "avec des conseils concrets, des températures, des temps précis. Sois concis (max 200 mots)."
-    )
-    chat_client = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=session_id,
-        system_message=system,
-    ).with_model("anthropic", "claude-sonnet-5")
 
-    # Save user message
+    history = await db.chat_messages.find(
+        {"user_id": user["user_id"], "session_id": session_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    messages.append({"role": "user", "content": inp.message})
+
     await db.chat_messages.insert_one({
         "user_id": user["user_id"],
         "session_id": session_id,
@@ -649,7 +596,18 @@ async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc),
     })
 
-    resp_text = await chat_client.send_message(UserMessage(text=inp.message))
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=800,
+            system=CHAT_SYSTEM_PROMPT,
+            messages=messages,
+        )
+    except anthropic.APIError as e:
+        logger.error(f"Anthropic API error: {e}")
+        raise HTTPException(502, "L'assistant IA est momentanément indisponible, réessaie dans un instant")
+
+    resp_text = "".join(b.text for b in response.content if b.type == "text")
 
     await db.chat_messages.insert_one({
         "user_id": user["user_id"],
@@ -673,7 +631,6 @@ async def startup():
     # Indexes
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
-    await db.user_sessions.create_index("session_token", unique=True)
     await db.recipes.create_index("id", unique=True)
     await db.recipes.create_index("category")
     await db.favorites.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
@@ -695,7 +652,7 @@ async def startup():
                 "id": str(uuid.uuid4()),
                 **r,
                 "author_id": None,
-                "author_name": "Chef Emergent",
+                "author_name": "Chef Bakers",
                 "is_user_submitted": False,
                 "created_at": datetime.now(timezone.utc),
             })
@@ -708,18 +665,11 @@ async def startup():
         await db.tips.insert_many(tips)
         logger.info(f"Seeded {len(tips)} tips")
 
-    # Init storage
-    try:
-        await run_in_threadpool(init_storage)
-        logger.info("Storage initialized")
-    except Exception as e:
-        logger.warning(f"Storage init failed: {e}")
-
 app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
+    allow_credentials=False,
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

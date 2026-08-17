@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Bakers",
+    "slug": "bakers",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "bakers",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.bakerrecipes.uok90u",
+      "bundleIdentifier": "com.lucasmorey.bakers",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choisir une photo pour votre recette",
         "NSCameraUsageDescription": "Prendre une photo de votre recette"
@@ -22,7 +22,7 @@
         "backgroundColor": "#FAF8F5"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.bakerrecipes.uok90u",
+      "package": "com.lucasmorey.bakers",
       "permissions": [
         "READ_MEDIA_IMAGES",
         "VIBRATE",

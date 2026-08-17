@@ -8,7 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { theme } from '@/src/theme';
 
-type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string };
+type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
 type Tip = { id: string; title: string; category: string; content: string; icon: string };
 
 export default function Home() {
