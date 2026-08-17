@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
@@ -26,7 +26,7 @@ import bcrypt
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from seed_data import RECIPES_SEED, TIPS_SEED
+from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 
 # ---------- Config ----------
 mongo_url = os.environ['MONGO_URL']
@@ -381,6 +381,17 @@ def _pair_key(a: str, b: str) -> str:
 async def _are_friends(a: str, b: str) -> bool:
     return bool(await db.friendships.find_one({"pair_key": _pair_key(a, b)}))
 
+async def _create_friendship(a: str, b: str) -> None:
+    """Idempotent: the unique pair_key index makes concurrent calls safe."""
+    try:
+        await db.friendships.insert_one({
+            "users": _pair(a, b),
+            "pair_key": _pair_key(a, b),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except DuplicateKeyError:
+        pass
+
 async def _friend_status(me: str, other: str) -> str:
     if me == other:
         return "me"
@@ -435,22 +446,21 @@ async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_
     target = inp.user_id
     if target == me:
         raise HTTPException(400, "Impossible de s'ajouter soi-même")
-    if not await db.users.find_one({"user_id": target}):
+    target_user = await db.users.find_one({"user_id": target}, {"_id": 0})
+    if not target_user:
         raise HTTPException(404, "Utilisateur introuvable")
     if await _are_friends(me, target):
+        return {"status": "friends"}
+    # Demo bots accept instantly — nobody is on the other side to tap "accept",
+    # and their whole purpose is to make the app testable with a single account.
+    if target_user.get("is_bot"):
+        await _create_friendship(me, target)
         return {"status": "friends"}
     # If the other user already sent a pending request, accept it directly
     rev = await db.friend_requests.find_one({"from_user_id": target, "to_user_id": me, "status": "pending"})
     if rev:
         await db.friend_requests.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
-        try:
-            await db.friendships.insert_one({
-                "users": _pair(me, target),
-                "pair_key": _pair_key(me, target),
-                "created_at": datetime.now(timezone.utc),
-            })
-        except DuplicateKeyError:
-            pass
+        await _create_friendship(me, target)
         return {"status": "friends"}
     existing = await db.friend_requests.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
     if existing:
@@ -482,15 +492,7 @@ async def respond_request(request_id: str, inp: RespondInput, user: dict = Depen
     new_status = "accepted" if inp.accept else "declined"
     await db.friend_requests.update_one({"id": request_id}, {"$set": {"status": new_status}})
     if inp.accept:
-        if not await _are_friends(user["user_id"], req["from_user_id"]):
-            try:
-                await db.friendships.insert_one({
-                    "users": _pair(user["user_id"], req["from_user_id"]),
-                    "pair_key": _pair_key(user["user_id"], req["from_user_id"]),
-                    "created_at": datetime.now(timezone.utc),
-                })
-            except DuplicateKeyError:
-                pass
+        await _create_friendship(user["user_id"], req["from_user_id"])
         return {"status": "friends"}
     return {"status": "declined"}
 
@@ -555,26 +557,41 @@ async def get_messages(friend_id: str, before: Optional[str] = None, user: dict 
         await db.messages.update_many({"pair": pk, "to_user_id": me, "read": False}, {"$set": {"read": True}})
     return {"messages": msgs, "has_more": has_more}
 
-@api_router.post("/messages/{friend_id}")
-async def send_message(friend_id: str, inp: MessageInput, user: dict = Depends(get_current_user)):
-    me = user["user_id"]
-    if not await _are_friends(me, friend_id):
-        raise HTTPException(403, "Vous devez être amis pour discuter")
-    content = inp.content.strip()
-    if not content:
-        raise HTTPException(400, "Message vide")
+async def _deliver_message(from_id: str, to_id: str, content: str) -> dict:
+    """Persist a message and push it to the recipient's live sockets."""
     doc = {
         "id": str(uuid.uuid4()),
-        "pair": _pair_key(me, friend_id),
-        "from_user_id": me,
-        "to_user_id": friend_id,
+        "pair": _pair_key(from_id, to_id),
+        "from_user_id": from_id,
+        "to_user_id": to_id,
         "content": content,
         "read": False,
         "created_at": datetime.now(timezone.utc),
     }
     await db.messages.insert_one(doc)
     doc.pop("_id", None)
-    await _push_to_user(friend_id, {"type": "new_message", "message": doc})
+    await _push_to_user(to_id, {"type": "new_message", "message": doc})
+    return doc
+
+@api_router.post("/messages/{friend_id}")
+async def send_message(
+    friend_id: str,
+    inp: MessageInput,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    me = user["user_id"]
+    if not await _are_friends(me, friend_id):
+        raise HTTPException(403, "Vous devez être amis pour discuter")
+    content = inp.content.strip()
+    if not content:
+        raise HTTPException(400, "Message vide")
+    doc = await _deliver_message(me, friend_id, content)
+    recipient = await db.users.find_one({"user_id": friend_id}, {"_id": 0, "password_hash": 0})
+    if recipient and recipient.get("is_bot"):
+        # Answered in the background so the sender's request returns immediately;
+        # the reply reaches them over the WebSocket a moment later.
+        background_tasks.add_task(_bot_reply, recipient, me, content)
     return doc
 
 # ---------- Realtime (WebSocket) ----------
@@ -620,6 +637,94 @@ async def ws_endpoint(websocket: WebSocket, token: str = ""):
         ws_connections[user_id].discard(websocket)
         if not ws_connections[user_id]:
             del ws_connections[user_id]
+
+# ---------- Demo bots ----------
+BOT_HISTORY_LIMIT = 20
+
+async def _generate_bot_reply(bot: dict, human_id: str, incoming: str) -> str:
+    """Ask the AI for an in-character reply, with a plain fallback.
+
+    The fallback matters: the bot exists to prove a message got through, so it
+    must answer even when the AI is unavailable (no key, no credit, API down).
+    """
+    fallback = (
+        f"Bien reçu ton message : « {incoming[:120]} ». "
+        "Je ne peux pas te répondre en détail pour le moment, mais c'est bien arrivé !"
+    )
+    if not anthropic_client:
+        return fallback
+    pk = _pair_key(bot["user_id"], human_id)
+    history = await db.messages.find({"pair": pk}, {"_id": 0}).sort("created_at", -1).limit(BOT_HISTORY_LIMIT).to_list(BOT_HISTORY_LIMIT)
+    history.reverse()
+    messages = [
+        {
+            "role": "assistant" if m["from_user_id"] == bot["user_id"] else "user",
+            "content": m["content"],
+        }
+        for m in history
+    ]
+    if not messages or messages[-1]["role"] != "user":
+        messages.append({"role": "user", "content": incoming})
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=300,
+            system=(
+                f"{bot['persona']}\n\n"
+                "Tu discutes par messages privés dans une application de boulangers. "
+                "Réponds en français, sur un ton naturel de conversation, en 2 phrases maximum."
+            ),
+            messages=messages,
+        )
+    except anthropic.APIError as e:
+        logger.warning(f"Bot reply failed for {bot['user_id']}: {e}")
+        return fallback
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or fallback
+
+async def _bot_reply(bot: dict, human_id: str, incoming: str) -> None:
+    try:
+        reply = await _generate_bot_reply(bot, human_id, incoming)
+        await _deliver_message(bot["user_id"], human_id, reply)
+    except Exception as e:
+        logger.error(f"Bot reply delivery failed for {bot['user_id']}: {e}")
+
+async def _seed_demo_bots() -> None:
+    for bot in DEMO_BOTS:
+        await db.users.update_one(
+            {"user_id": bot["user_id"]},
+            {
+                "$set": {
+                    "email": bot["email"],
+                    "name": bot["name"],
+                    "persona": bot["persona"],
+                    "is_bot": True,
+                },
+                "$setOnInsert": {
+                    "user_id": bot["user_id"],
+                    # No password_hash at all: /auth/login rejects accounts
+                    # without one, so these can never be logged into.
+                    "provider": "bot",
+                    "picture": None,
+                    "created_at": datetime.now(timezone.utc),
+                },
+            },
+            upsert=True,
+        )
+    logger.info(f"Synced {len(DEMO_BOTS)} demo bots")
+
+    # Optionally pre-friend the bots with one real account, so they show up in
+    # "Mes amis" without any manual step. Set DEMO_FRIENDS_EMAIL to enable.
+    owner_email = os.environ.get("DEMO_FRIENDS_EMAIL", "").strip().lower()
+    if not owner_email:
+        return
+    owner = await db.users.find_one({"email": owner_email}, {"_id": 0, "password_hash": 0})
+    if not owner:
+        logger.info(f"DEMO_FRIENDS_EMAIL={owner_email} not registered yet; skipping auto-friending")
+        return
+    for bot in DEMO_BOTS:
+        await _create_friendship(owner["user_id"], bot["user_id"])
+    logger.info(f"Auto-friended {len(DEMO_BOTS)} demo bots with {owner_email}")
 
 # ---------- Tips ----------
 @api_router.get("/tips")
@@ -769,6 +874,8 @@ async def startup():
         tips = [{"id": str(uuid.uuid4()), **t} for t in TIPS_SEED]
         await db.tips.insert_many(tips)
         logger.info(f"Seeded {len(tips)} tips")
+
+    await _seed_demo_bots()
 
 app.include_router(api_router)
 app.add_middleware(

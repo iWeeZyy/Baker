@@ -7,6 +7,7 @@ suite is idempotent and safe to re-run against a persistent database.
 import asyncio
 import json
 import os
+import time
 import pytest
 import requests
 import websockets
@@ -307,3 +308,52 @@ class TestRealtime:
             assert evt["message"]["content"] == content
             assert evt["message"]["from_user_id"] == friends_ab["a"]["user_id"]
             assert evt["message"]["to_user_id"] == friends_ab["b"]["user_id"]
+
+
+# --- Demo bots ---
+class TestDemoBots:
+    BOT_NAME = "Camille Levain"
+
+    def _find_bot(self, token):
+        r = requests.get(f"{API}/users/search", params={"q": "Camille"}, headers=auth_headers(token), timeout=30)
+        assert r.status_code == 200
+        return next((u for u in r.json() if u["name"] == self.BOT_NAME), None)
+
+    def test_bot_is_discoverable_in_search(self, users):
+        bot = self._find_bot(users["b"]["token"])
+        assert bot is not None, f"expected demo bot '{self.BOT_NAME}' to be seeded and searchable"
+
+    def test_bot_accepts_friend_request_instantly(self, users):
+        h_b = auth_headers(users["b"]["token"])
+        bot = self._find_bot(users["b"]["token"])
+        r = requests.post(f"{API}/friends/request", json={"user_id": bot["user_id"]}, headers=h_b, timeout=30)
+        assert r.status_code == 200, r.text
+        # No human is there to tap "accept" — the bot must befriend immediately.
+        assert r.json()["status"] == "friends"
+        friends = requests.get(f"{API}/friends", headers=h_b, timeout=30).json()
+        assert any(f["user_id"] == bot["user_id"] for f in friends)
+
+    def test_bot_replies_to_a_message(self, users):
+        h_b = auth_headers(users["b"]["token"])
+        bot = self._find_bot(users["b"]["token"])
+        requests.post(f"{API}/friends/request", json={"user_id": bot["user_id"]}, headers=h_b, timeout=30)
+
+        sent = requests.post(
+            f"{API}/messages/{bot['user_id']}",
+            json={"content": "Bonjour Camille, comment rater un levain ?"},
+            headers=h_b,
+            timeout=30,
+        )
+        assert sent.status_code == 200, sent.text
+
+        # The reply is produced in a background task, so poll briefly for it.
+        reply = None
+        for _ in range(20):
+            msgs = requests.get(f"{API}/messages/{bot['user_id']}", headers=h_b, timeout=30).json()["messages"]
+            reply = next((m for m in msgs if m["from_user_id"] == bot["user_id"]), None)
+            if reply:
+                break
+            time.sleep(0.5)
+        assert reply is not None, "the bot must answer, proving the message was received"
+        assert reply["to_user_id"] == users["b"]["user_id"]
+        assert reply["content"].strip(), "the bot's reply must not be empty"

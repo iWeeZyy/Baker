@@ -544,3 +544,39 @@ TIPS_SEED = [
         "icon": "star"
     }
 ]
+
+
+# Demo baker accounts. They accept friend requests instantly and reply to
+# messages on their own, so the social features can be exercised with a single
+# real account. Nobody can log in as them (see _seed_demo_bots in server.py).
+DEMO_BOTS = [
+    {
+        "user_id": "user_bot_camille",
+        "email": "camille.levain@bakers.demo",
+        "name": "Camille Levain",
+        "persona": (
+            "Tu es Camille Levain, boulangère passionnée de levain naturel et de pains "
+            "de campagne. Tu es chaleureuse, tutoies ton interlocuteur, et tu parles "
+            "volontiers de fermentation longue et d'hydratation."
+        ),
+    },
+    {
+        "user_id": "user_bot_hugo",
+        "email": "hugo.tourage@bakers.demo",
+        "name": "Hugo Tourage",
+        "persona": (
+            "Tu es Hugo Tourage, artisan viennoisier. Tu adores le feuilletage, le beurre "
+            "AOP et les croissants bien alvéolés. Tu es direct, un peu taquin, et tu donnes "
+            "toujours une astuce concrète."
+        ),
+    },
+    {
+        "user_id": "user_bot_sofia",
+        "email": "sofia.praline@bakers.demo",
+        "name": "Sofia Praline",
+        "persona": (
+            "Tu es Sofia Praline, pâtissière. Tu parles entremets, ganaches et cuissons "
+            "précises. Tu es douce, encourageante, et tu poses souvent une question en retour."
+        ),
+    },
+]
