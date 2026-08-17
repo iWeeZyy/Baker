@@ -19,6 +19,7 @@ export default function ShareRecipe() {
   const [difficulty, setDifficulty] = useState('Facile');
   const [time, setTime] = useState('');
   const [hydration, setHydration] = useState(params.prefillHydration || '');
+  const [yieldPieces, setYieldPieces] = useState('');
   const [description, setDescription] = useState(params.prefillDescription || '');
   const [ingredients, setIngredients] = useState(params.prefillIngredients || '');
   const [steps, setSteps] = useState('');
@@ -81,6 +82,9 @@ export default function ShareRecipe() {
           difficulty,
           time_minutes: parseInt(time) || 0,
           hydration: parseInt(hydration) || 0,
+          // Left null rather than defaulted: an invented yield would produce
+          // wrong quantities in every planning built on this recipe.
+          yield_pieces: parseInt(yieldPieces) > 0 ? parseInt(yieldPieces) : null,
           description: description.trim(),
           ingredients: ingredients.split('\n').map(s => s.trim()).filter(Boolean),
           steps: steps.split('\n').map(s => s.trim()).filter(Boolean),
@@ -156,6 +160,13 @@ export default function ShareRecipe() {
             </View>
           </View>
 
+          <Field label="Nombre de pièces obtenues">
+            <TextInput testID="input-yield" value={yieldPieces} onChangeText={setYieldPieces} placeholder="Ex : 3 baguettes" placeholderTextColor={theme.color.muted} style={styles.input} keyboardType="numeric" />
+            <Text style={styles.fieldHint}>
+              Facultatif. Renseigné, il permet de planifier en pièces (« 40 baguettes ») plutôt qu'en fournées.
+            </Text>
+          </Field>
+
           <Field label="Description *">
             <TextInput testID="input-description" value={description} onChangeText={setDescription} placeholder="Une belle recette de..." placeholderTextColor={theme.color.muted} style={[styles.input, { minHeight: 60 }]} multiline />
           </Field>
@@ -200,6 +211,7 @@ const styles = StyleSheet.create({
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, marginBottom: 8, fontWeight: '600' },
   input: { fontSize: 15, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 10 },
+  fieldHint: { fontSize: 11, color: theme.color.muted, marginTop: 7, lineHeight: 16 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong },
   chipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },

@@ -41,9 +41,18 @@ export async function api(path: string, opts: RequestInit = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
     let msg = `${res.status}`;
-    try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    let detail: any = null;
+    try {
+      const j = await res.json();
+      detail = j.detail ?? null;
+      // `detail` is a plain string for most errors, but a structured object for
+      // ones the UI must react to (e.g. plan_limit_reached -> show Baker Pro).
+      if (typeof detail === 'string') msg = detail;
+      else if (detail?.message) msg = detail.message;
+    } catch {}
     const err: any = new Error(msg);
     err.status = res.status;
+    err.detail = detail;
     throw err;
   }
   return res.json();
