@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { AdSlot } from '@/src/ads';
 import { theme } from '@/src/theme';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
@@ -109,6 +110,10 @@ export default function Home() {
             ))}
           </ScrollView>
         </View>
+
+        {/* Between two sections, in the flow of the scroll: nothing to dismiss,
+            nothing covered. Renders nothing at all for a Pro user. */}
+        <AdSlot placement="home" />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

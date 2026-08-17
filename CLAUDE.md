@@ -73,11 +73,21 @@ A production is a planned baking day: recipes + quantities, back-planned from a 
 - Productions **snapshot** the recipe's ingredients, steps and `yield_pieces` at creation, so editing a recipe never rewrites a planning already in use. `_carry_over_step_state` re-matches steps by `(recipe_id, order)` on update, preserving tick status and manually-entered durations.
 - Recipes have an optional `yield_pieces` (pieces per batch). When it's absent, quantities fall back to "fournées" — never to an invented piece count.
 
+### Advertising — `backend/plans.py` (`ads_config`), `frontend/src/ads/`
+
+Ads are **built but switched off**. The architecture is complete; no ad SDK is installed and nothing renders.
+
+- **The server decides.** `ads_config(plan)` in `plans.py` is the only authority: `ADS_ENABLED` (a master switch, default off) AND `plan == "free"`. `/api/me/plan` returns it under `ads`. A client bug therefore cannot show an ad to a Pro account. `available` reports the global switch regardless of plan, so the Pro screen only promises "no ads" when ads actually exist.
+- **`frontend/src/ads/`** is the whole client side. `provider.ts` holds the `AdProvider` contract and the current `noopProvider` — swapping in AdMob means writing one object and changing one export, with no screen changes (the file carries the step-by-step instructions). `AdsContext.tsx` fetches the plan once at the root and exposes `canShowAds`. `AdSlot.tsx` is the only component screens use; it renders `null` (never an empty box) when ads aren't allowed, behind an error boundary so a misbehaving ad can't take a screen down. `layout.ts` decides where slots fall in a list.
+- **Fails closed.** `canShowAds` requires the plan to be *loaded*, the server to allow it, and consent to be `granted`. Any failure — offline, server error, no consent flow — lands on "no ads".
+- Placements: one slot on the home screen between sections, and inline in the recipe list (after the 6th card, then every 10 — tunable via `ADS_LIST_FIRST_SLOT`/`ADS_LIST_INTERVAL` without an app release). Deliberately **none** on recipe detail, planning, chat, calculator or the share form, and **no interstitials at all**.
+- Do not turn `ADS_ENABLED` on until (a) Baker Pro is actually purchasable and (b) `provider.ts` implements the Google UMP consent flow plus iOS ATT — users are in the EEA and AdMob suspends accounts that request ads before a certified consent form has run.
+
 ### Frontend — `frontend/`
 
 Expo Router (file-based routing) under `app/`:
 
-- `app/_layout.tsx` — root: wraps everything in `AuthProvider` (`src/auth.tsx`) and `TimerProvider` (`src/TimerContext.tsx`), renders the global floating `TimerBar`.
+- `app/_layout.tsx` — root: wraps everything in `AuthProvider` (`src/auth.tsx`), `AdsProvider` (`src/ads/`) and `TimerProvider` (`src/TimerContext.tsx`), renders the global floating `TimerBar`.
 - `app/(tabs)/_layout.tsx` — the tab group (`Accueil`, `Recettes`, `Assistant`, `Amis`, `Profil`); redirects to `/auth` if `useAuth().user` is null. This is the entire route-protection mechanism — there's no per-screen guard.
 - `app/auth.tsx`, `app/recipe/[id].tsx`, `app/baker/[id].tsx`, `app/chat/[id].tsx`, `app/calculator.tsx`, `app/share.tsx` — stack screens outside the tab group.
 

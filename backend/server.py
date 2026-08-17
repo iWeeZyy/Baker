@@ -28,7 +28,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
-from plans import resolve_plan, limits_for, production_quota
+from plans import resolve_plan, limits_for, production_quota, ads_config
 
 # ---------- Config ----------
 mongo_url = os.environ['MONGO_URL']
@@ -834,6 +834,9 @@ async def _plan_state(user: dict) -> dict:
         "productions_used": used,
         "productions_limit": quota,
         "productions_remaining": None if quota is None else max(0, quota - used),
+        # Whether this user may be shown ads at all. Decided here rather than in
+        # the app so a Pro account can never be served one by a client bug.
+        "ads": ads_config(plan),
     }
 
 async def _enforce_production_quota(user: dict) -> None:

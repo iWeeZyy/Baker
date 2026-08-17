@@ -2,10 +2,11 @@ import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useAds } from '@/src/ads';
 import { usePlan } from '@/src/plan';
 import { theme } from '@/src/theme';
 
-type FeatureKey = 'productions' | 'multi_day' | 'recurring' | 'sharing' | 'full_history';
+type FeatureKey = 'productions' | 'no_ads' | 'multi_day' | 'recurring' | 'sharing' | 'full_history';
 
 const FEATURES: { key: FeatureKey; icon: any; title: string; body: string; available: boolean }[] = [
   {
@@ -13,6 +14,13 @@ const FEATURES: { key: FeatureKey; icon: any; title: string; body: string; avail
     icon: 'calendar',
     title: 'Productions illimitées',
     body: "Planifiez autant de journées que nécessaire. L'offre gratuite en autorise 3 par mois.",
+    available: true,
+  },
+  {
+    key: 'no_ads',
+    icon: 'eye-off',
+    title: 'Aucune publicité',
+    body: "Baker Pro n'affiche aucune publicité, nulle part dans l'application.",
     available: true,
   },
   {
@@ -48,7 +56,12 @@ const FEATURES: { key: FeatureKey; icon: any; title: string; body: string; avail
 export default function Pro() {
   const router = useRouter();
   const { plan, loading } = usePlan();
+  const { config: ads } = useAds();
   const isPro = plan?.plan === 'pro';
+
+  // "No ads" is only worth promising while ads actually exist. Advertising the
+  // absence of something the app never shows would be an empty claim.
+  const features = FEATURES.filter(f => f.key !== 'no_ads' || ads.available);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -86,7 +99,7 @@ export default function Pro() {
           suivre le déroulé. Baker Pro lève la limite mensuelle et prépare le travail en équipe.
         </Text>
 
-        {FEATURES.map(f => (
+        {features.map(f => (
           <View key={f.key} style={styles.feature} testID={`feature-${f.key}`}>
             <View style={styles.featureIcon}>
               <Feather name={f.icon} size={17} color={theme.color.brand} />

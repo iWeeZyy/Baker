@@ -17,6 +17,12 @@ services:
         sync: false
       - key: CORS_ORIGINS
         value: "*"
+      # Emails granted Baker Pro (no billing provider yet); set in the dashboard.
+      - key: PRO_EMAILS
+        sync: false
+      # Ads stay off until Baker Pro is purchasable and a consent flow exists.
+      - key: ADS_ENABLED
+        value: "false"
 
   - type: web
     name: bakers-frontend

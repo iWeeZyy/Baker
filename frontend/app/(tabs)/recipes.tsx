@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { AdSlot, buildListRows, useAds } from '@/src/ads';
 import { theme } from '@/src/theme';
 
 const CATEGORIES = ['Tous', 'Pains', 'Viennoiseries', 'Pâtisseries'];
@@ -14,12 +15,21 @@ export default function Recipes() {
   const [category, setCategory] = useState('Tous');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { canShowAds, config } = useAds();
 
   useEffect(() => {
     setLoading(true);
     const q = category === 'Tous' ? '' : `?category=${encodeURIComponent(category)}`;
     api(`/recipes${q}`).then(setRecipes).catch(console.warn).finally(() => setLoading(false));
   }, [category]);
+
+  const rows = useMemo(
+    () => buildListRows(
+      recipes,
+      canShowAds ? { first: config.list_first_slot, interval: config.list_interval } : null,
+    ),
+    [recipes, canShowAds, config.list_first_slot, config.list_interval],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -55,25 +65,37 @@ export default function Recipes() {
         <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
       ) : (
         <FlatList
-          data={recipes}
-          keyExtractor={(r) => r.id}
-          numColumns={2}
-          columnWrapperStyle={{ gap: 16, paddingHorizontal: 24 }}
+          data={rows}
+          keyExtractor={(row) => row.key}
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
-          renderItem={({ item }) => (
-            <Pressable
-              testID={`recipe-card-${item.id}`}
-              onPress={() => router.push(`/recipe/${item.id}`)}
-              style={styles.card}
-            >
-              <View>
-                <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
-                {item.coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={12} color="#fff" /></View>}
+          renderItem={({ item: row }) => {
+            if (row.type === 'ad') {
+              return (
+                <View style={styles.adRow}>
+                  <AdSlot placement="recipe_list" />
+                </View>
+              );
+            }
+            return (
+              <View style={styles.gridRow}>
+                {row.items.map(item => (
+                  <Pressable
+                    key={item.id}
+                    testID={`recipe-card-${item.id}`}
+                    onPress={() => router.push(`/recipe/${item.id}`)}
+                    style={styles.card}
+                  >
+                    <View>
+                      <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
+                      {item.coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={12} color="#fff" /></View>}
+                    </View>
+                    <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.cardMeta}>{item.difficulty} · {item.time_minutes} min</Text>
+                  </Pressable>
+                ))}
               </View>
-              <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.cardMeta}>{item.difficulty} · {item.time_minutes} min</Text>
-            </Pressable>
-          )}
+            );
+          }}
           ListEmptyComponent={<Text style={styles.empty}>Aucune recette dans cette catégorie.</Text>}
         />
       )}
@@ -94,6 +116,8 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
   chipText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   chipTextActive: { color: theme.color.onSurfaceInverse },
+  gridRow: { flexDirection: 'row', gap: 16, paddingHorizontal: 24 },
+  adRow: { paddingHorizontal: 24 },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4 },
