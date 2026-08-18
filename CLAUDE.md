@@ -24,7 +24,7 @@ uvicorn server:app --reload --port 8000
 
 Needs a running MongoDB (`docker run -d -p 27017:27017 mongo:7`, or Atlas).
 
-Tests are **HTTP integration tests**, not unit tests — they hit a live server over the network (default `http://localhost:8000`, override via `EXPO_PUBLIC_BACKEND_URL`). Start `uvicorn` first, then:
+Most tests are **HTTP integration tests**, not unit tests — they hit a live server over the network (default `http://localhost:8000`, override via `EXPO_PUBLIC_BACKEND_URL`). The exceptions are `test_production_calc.py`, `test_staff_calc.py` and `test_seed_quality.py`, which are pure and need no server. Start `uvicorn` first, then:
 
 ```bash
 cd backend && pytest                        # runs the full suite (all files in tests/)
@@ -60,9 +60,18 @@ Everything (models, auth, all routes, startup seeding) lives in this one ~600-li
 - **Auth**: hand-rolled JWT (HMAC-SHA256 over base64url header/payload, `sign_jwt`/`verify_jwt`), not a third-party library. `get_current_user` is the single dependency every protected route uses. Passwords are bcrypt-hashed. There is no token revocation — logout is client-side only (stateless JWT).
 - **Storage**: `put_object`/`get_object` in the "Storage Helpers" section write/read files under `backend/uploads/`, keyed by an app-generated path (`bakers-app/uploads/{user_id}/{uuid}.{ext}`). `_resolve_upload_path` guards against path traversal on the `/api/files/{path:path}` download route — keep that guard if you touch storage.
 - **AI chat**: `/api/chat` calls the Anthropic API directly (`anthropic.AsyncAnthropic`, model `claude-sonnet-5`). It's stateless per-request — conversation history is reconstructed on every call by reading recent `db.chat_messages` for the `(user_id, session_id)` pair and replaying them as the `messages` array. Returns 503 if `ANTHROPIC_API_KEY` isn't set.
-- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`, `productions`, `schedules`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
+- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`, `productions`, `schedules`. Indexes are created in the `startup` handler, which also **syncs** recipes and tips from `seed_data.py` on every boot (upsert keyed on the title, so a fix reaches the DB on the next deploy). Community-submitted recipes are never touched.
 - Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
 - Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
+
+### Recipe content — `backend/seed_data.py`, `backend/seed_books.py`
+
+`seed_data.py` joins two lists at the bottom of the file: `BAKER_RECIPES` (the app's own demonstration recipes) and `BOOK_RECIPES` from `seed_books.py` (sheets imported from professional works). Same for tips. **A book sheet with the same title replaces the demonstration one** — the startup sync upserts on the title, so the recipe keeps its id, and with it its likes, comments and favourites.
+
+- `seed_books.py` is **generated then reviewed**, not hand-maintained line by line. Quantities, temperatures, durations and yields are copied from the cited work; descriptions and step lists are written for Baker. Method paragraphs are deliberately **not** reproduced — the data is taken, the prose is not. That distinction is what makes the import legitimate in a distributed app, so keep it if you add a source.
+- Two optional fields carry the import: `technical` (a dict — the keys the recipe screen knows how to render are listed in `TECHNICAL_ROWS` in `app/recipe/[id].tsx`; an unknown key is silently invisible) and `source` (the work and page). Absent means "not stated in the source", never an estimate.
+- `hydration` is filled only when the water-and-milk over flour ratio is directly computable; it stays 0 otherwise rather than being guessed.
+- `tests/test_seed_quality.py` is the guardrail: it runs without a server and checks the whole catalogue for the faults a PDF extraction actually produces — sentence fragments in ingredient lists, unbalanced parentheses, leftover imperial measures, book cross-references ("photo B"), implausible temperatures, a `yield_pieces` that contradicts its own label. Run it before touching seed content.
 
 ### Production planning — `backend/production.py`, `backend/plans.py`
 

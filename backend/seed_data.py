@@ -1,6 +1,14 @@
-"""Seed data for the Bakers app: classic French bakery recipes and tips."""
+"""Seed data for the Bakers app: classic French bakery recipes and tips.
 
-RECIPES_SEED = [
+Two sources are joined at the bottom of this file: the demonstration recipes
+written for the app, and the sheets imported from professional works
+(`seed_books.py`). A book sheet that carries the same title as a demonstration
+one **replaces** it: the startup sync upserts on the title, so the recipe keeps
+its id — and with it its likes, comments and favourites.
+"""
+from seed_books import BOOK_RECIPES, BOOK_TIPS
+
+BAKER_RECIPES = [
     {
         "title": "Baguette Tradition",
         "category": "Pains",
@@ -502,7 +510,7 @@ RECIPES_SEED = [
     }
 ]
 
-TIPS_SEED = [
+BAKER_TIPS = [
     {
         "title": "L'hydratation, clé de la mie alvéolée",
         "category": "Hydratation",
@@ -552,6 +560,16 @@ TIPS_SEED = [
         "icon": "star"
     }
 ]
+
+
+# The book's version wins on a title collision, and its sheet is the richer of
+# the two: quantities, temperatures, timings and a source. Nothing is lost —
+# the id is what carries the community data, and the id follows the title.
+_FROM_BOOKS = {r["title"] for r in BOOK_RECIPES}
+RECIPES_SEED = [r for r in BAKER_RECIPES if r["title"] not in _FROM_BOOKS] + BOOK_RECIPES
+
+_BOOK_TIP_TITLES = {t["title"] for t in BOOK_TIPS}
+TIPS_SEED = [t for t in BAKER_TIPS if t["title"] not in _BOOK_TIP_TITLES] + BOOK_TIPS
 
 
 # Demo baker accounts. They accept friend requests instantly and reply to

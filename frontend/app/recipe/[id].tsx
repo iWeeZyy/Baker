@@ -39,6 +39,66 @@ function parseDuration(text: string): number | null {
   return null;
 }
 
+/**
+ * The professional sheet, in the order a baker reads it: what is done first at
+ * the top, what comes out of the oven at the bottom.
+ *
+ * Only the lines the source actually states are rendered — an absent field is
+ * absent, never shown empty and never guessed. A recipe with no sheet at all
+ * shows nothing rather than an empty frame.
+ */
+const TECHNICAL_ROWS: [string, string][] = [
+  ['yield_label', 'Rendement'],
+  ['prep', 'Préparation'],
+  ['petrissage', 'Pétrissage et repos'],
+  ['tourage', 'Tourage'],
+  ['pointage', 'Pointage'],
+  ['detente', 'Détente'],
+  ['appret', 'Apprêt'],
+  ['repos', 'Repos'],
+  ['refrigeration', 'Réfrigération'],
+  ['congelation', 'Congélation'],
+  ['maceration', 'Macération'],
+  ['cuisson', 'Cuisson'],
+  ['oven', 'Four'],
+  ['dough_temp', 'Températures'],
+  ['conservation', 'Conservation'],
+  ['accompagnement', 'Accompagnement'],
+];
+
+/** Keeps "205 °C" and "1 h 30" on one line rather than wrapping on the space. */
+function unbreakable(text: string) {
+  return text.replace(/(\d)\s+(°C|h\b|min\b|g\b|ml\b|cm\b)/g, '$1\u00a0$2');
+}
+
+function TechnicalSheet({ technical, source }: { technical?: Record<string, any> | null; source?: string | null }) {
+  const rows = TECHNICAL_ROWS
+    .map(([key, label]) => [label, technical?.[key]] as const)
+    .filter(([, value]) => typeof value === 'string' && value.trim().length > 0);
+  const equipment: string[] = Array.isArray(technical?.equipment) ? technical!.equipment : [];
+
+  if (rows.length === 0 && equipment.length === 0 && !source) return null;
+
+  return (
+    <View style={styles.sheet} testID="technical-sheet">
+      <Text style={styles.sheetTitle}>FICHE TECHNIQUE</Text>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.sheetRow}>
+          <Text style={styles.sheetLabel}>{label}</Text>
+          <Text style={styles.sheetValue}>{unbreakable(value as string)}</Text>
+        </View>
+      ))}
+      {equipment.length > 0 && (
+        <View style={styles.sheetRow}>
+          <Text style={styles.sheetLabel}>Matériel</Text>
+          <Text style={styles.sheetValue}>{unbreakable(equipment.join(' · '))}</Text>
+        </View>
+      )}
+      {!!source && <Text style={styles.sheetSource}>D'après {source}</Text>}
+    </View>
+  );
+}
+
 export default function RecipeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -152,6 +212,8 @@ export default function RecipeDetail() {
         </View>
 
         <Text style={styles.description}>{recipe.description}</Text>
+
+        <TechnicalSheet technical={recipe.technical} source={recipe.source} />
 
         <View style={styles.segment}>
           <Pressable testID="segment-ingredients" onPress={() => setTab('ingredients')} style={[styles.segBtn, tab === 'ingredients' && styles.segActive]}>
@@ -319,6 +381,18 @@ const styles = StyleSheet.create({
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
+  sheet: {
+    marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+  },
+  sheetTitle: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: theme.spacing.md },
+  // Label and value side by side, the value taking the width it needs: a
+  // conservation note runs several lines, a duration one word.
+  sheetRow: { flexDirection: 'row', paddingVertical: theme.spacing.sm, gap: theme.spacing.md },
+  sheetLabel: { width: 116, fontSize: theme.fontSize.sm, color: theme.color.muted },
+  sheetValue: { flex: 1, fontSize: theme.fontSize.base, color: theme.color.onSurface, lineHeight: 20 },
+  sheetSource: { marginTop: theme.spacing.md, fontSize: 11, color: theme.color.muted, fontStyle: 'italic' },
   segment: { flexDirection: 'row', marginTop: 24, marginHorizontal: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 20 },
   segBtn: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   segActive: { borderBottomColor: theme.color.brand },
