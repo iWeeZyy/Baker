@@ -42,7 +42,7 @@ class TestPublic:
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
-        assert len(data) >= 20, f"Expected >=20 recipes, got {len(data)}"
+        assert len(data) >= 100, f"Expected >=100 recipes, got {len(data)}"
         assert "title" in data[0]
 
     def test_tips_seeded(self):
@@ -52,10 +52,12 @@ class TestPublic:
         assert len(data) >= 8
 
     def test_recipes_filter_category(self):
-        r = requests.get(f"{API}/recipes", params={"category": "Pains"}, timeout=30)
+        r = requests.get(f"{API}/recipes", params={"category": "Viennoiseries"}, timeout=30)
         assert r.status_code == 200
-        for x in r.json():
-            assert x["category"] == "Pains"
+        data = r.json()
+        assert data, "le catalogue devrait contenir des viennoiseries"
+        for x in data:
+            assert x["category"] == "Viennoiseries"
 
     def test_families_listed(self):
         r = requests.get(f"{API}/families", timeout=30)
@@ -63,7 +65,7 @@ class TestPublic:
         data = r.json()
         assert len(data) >= 10
         keys = {f["key"] for f in data}
-        assert {"pains", "tartes", "biscuits"} <= keys
+        assert {"tartes", "biscuits", "brioches"} <= keys
         for f in data:
             # Une famille renvoyée ouvre sur quelque chose : c'est tout
             # l'intérêt de ne pas renvoyer les vides.

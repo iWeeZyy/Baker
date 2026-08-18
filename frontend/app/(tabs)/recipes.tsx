@@ -8,7 +8,10 @@ import { api } from '@/src/api';
 import { familyTile, type Family } from '@/src/families';
 import { theme } from '@/src/theme';
 
-const CATEGORIES = ['Tous', 'Pains', 'Viennoiseries', 'Pâtisseries'];
+// Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
+// une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
+// revient de lui-même au premier ajout — mieux qu'une puce qui n'ouvre sur rien.
+const CATEGORY_ORDER = ['Pains', 'Viennoiseries', 'Pâtisseries'];
 
 /**
  * L'entrée du catalogue : les familles, pas les 117 fiches.
@@ -27,6 +30,11 @@ export default function Recipes() {
   useEffect(() => {
     api('/families').then(setFamilies).catch(console.warn).finally(() => setLoading(false));
   }, []);
+
+  const categories = useMemo(() => {
+    const present = new Set(families.map(f => f.category));
+    return ['Tous', ...CATEGORY_ORDER.filter(c => present.has(c))];
+  }, [families]);
 
   // Le filtre se fait ici : la liste tient en une quinzaine d'entrées, un
   // aller-retour au serveur par puce ne servirait à rien.
@@ -61,7 +69,7 @@ export default function Recipes() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipsRow}
         >
-          {CATEGORIES.map(c => (
+          {categories.map(c => (
             <Pressable
               key={c}
               testID={`chip-${c}`}

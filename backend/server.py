@@ -1271,6 +1271,34 @@ async def chat_history(user: dict = Depends(get_current_user), session_id: Optio
     return await cursor.to_list(500)
 
 # ---------- Startup ----------
+async def retire_built_ins(recipes, dependents, keep_titles) -> list:
+    """Delete built-in recipes that the seed no longer carries.
+
+    The startup sync only ever upserts, so a sheet dropped from `seed_data.py`
+    would otherwise live on in every database that already holds it. Retiring
+    content has to be a deploy, not a manual cleanup.
+
+    Two rules make this safe to run on every boot:
+      - only `is_user_submitted: False` documents are considered, so a deploy
+        can never remove a recipe a member of the community wrote;
+      - the likes, comments, notes and favourites of a deleted recipe go with
+        it, since rows pointing at nothing would still be counted.
+
+    Returns the titles removed, for the log.
+    """
+    doomed = await recipes.find(
+        {"is_user_submitted": False, "title": {"$nin": list(keep_titles)}},
+        {"_id": 0, "id": 1, "title": 1},
+    ).to_list(1000)
+    if not doomed:
+        return []
+    ids = [d["id"] for d in doomed]
+    await recipes.delete_many({"id": {"$in": ids}})
+    for collection in dependents:
+        await collection.delete_many({"recipe_id": {"$in": ids}})
+    return [d["title"] for d in doomed]
+
+
 @app.on_event("startup")
 async def startup():
     # Indexes
@@ -1322,6 +1350,14 @@ async def startup():
             upsert=True,
         )
     logger.info(f"Synced {len(RECIPES_SEED)} built-in recipes")
+
+    retired = await retire_built_ins(
+        db.recipes,
+        [db.likes, db.comments, db.notes, db.favorites],
+        {r["title"] for r in RECIPES_SEED},
+    )
+    if retired:
+        logger.info(f"Retired {len(retired)} built-in recipes: {', '.join(retired)}")
 
     # Tips are synced the same way as recipes rather than seeded once: a tip
     # added to TIPS_SEED would otherwise never reach a database that already

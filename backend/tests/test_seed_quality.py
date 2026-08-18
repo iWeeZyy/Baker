@@ -170,12 +170,11 @@ class TestTechnicalSheet:
 
     @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
     def test_source_citee_avec_la_page(self, r):
-        # Une fiche importée porte son ouvrage et sa page : c'est ce qui rend
-        # la donnée vérifiable, et ce qui sépare une reprise d'une copie.
-        source = r.get("source")
-        if source is None:
-            return
-        assert re.search(r",\s*p\.\s*\d+$", source), source
+        # Toute fiche embarquée porte son ouvrage et sa page : c'est ce qui rend
+        # la donnée vérifiable, et ce qui sépare une reprise d'une copie. Les
+        # recettes de démonstration écrites par un modèle, elles, ne pouvaient
+        # rien citer — c'est pourquoi elles ne sont plus là.
+        assert re.search(r",\s*p\.\s*\d+$", r.get("source") or ""), r.get("source")
 
 
 class TestFamilies:
@@ -199,12 +198,13 @@ class TestFamilies:
         family = next(f for f in FAMILIES if f["key"] == r["family"])
         assert not family.get("catch_all"), r["family"]
 
-    def test_aucune_famille_vide(self):
-        # Une vignette qui ouvre sur une liste vide vaut moins que pas de
-        # vignette du tout ; les fourre-tout, eux, sont vides par construction.
+    def test_toute_famille_utilisee_est_declaree(self):
+        # L'inverse — une famille déclarée sans recette — est permis : « Pains »
+        # attend son premier pain, et l'API n'affiche pas les familles vides,
+        # donc aucune vignette n'ouvre sur rien.
         used = {r["family"] for r in RECIPES_SEED}
-        declared = {f["key"] for f in FAMILIES if not f.get("catch_all")}
-        assert declared == used, declared ^ used
+        declared = {f["key"] for f in FAMILIES}
+        assert used <= declared, used - declared
 
     def test_chaque_famille_a_sa_vignette(self):
         # Le seul défaut que ni pytest ni tsc ne verraient chacun de son côté :

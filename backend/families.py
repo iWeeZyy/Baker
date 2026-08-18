@@ -49,17 +49,10 @@ CATCH_ALL = {
 }
 
 _ASSIGNMENTS = {
-    "pains": [
-        "Baguette Tradition",
-        "Ciabatta",
-        "Fougasse aux olives",
-        "Pain aux céréales",
-        "Pain de campagne au levain",
-        "Pain de mie",
-        "Pain suédois",
-        "Pain viennois",
-        "Pretzel",
-    ],
+    # Vide pour l'instant : l'ouvrage importé est un livre de pâtisserie et de
+    # viennoiserie. La famille reste déclarée — l'API n'affiche pas les
+    # familles vides, et le premier pain la fera réapparaître.
+    "pains": [],
     "feuilletees": [
         "Chausson aux pommes",
         "Croffin",
@@ -67,17 +60,14 @@ _ASSIGNMENTS = {
         "Croissant aux amandes",
         "Danoise fraises-fromage",
         "Danoise torsadée aux fruits",
-        "Kouign-amann",
         "Nœud choco-noisettes",
         "Pain au chocolat",
-        "Palmier",
         "Strudel aux pommes",
         "Torsade feuilletée",
         "Trottoir aux framboises",
     ],
     "brioches": [
         "Babka aux pistaches",
-        "Brioche Nanterre",
         "Brioche au chocolat",
         "Brioche canneberges et crumble",
         "Brioche fleur aux fraises",
@@ -101,7 +91,6 @@ _ASSIGNMENTS = {
         "Tarte au sirop d'érable",
         "Tarte au sucre",
         "Tarte aux abricots",
-        "Tarte aux fraises",
         "Tarte aux pacanes",
         "Tarte aux pommes",
         "Tarte aux pommes et sa compote",
@@ -163,13 +152,11 @@ _ASSIGNMENTS = {
         "Carré croustillant aux fraises",
     ],
     "petites-patisseries": [
-        "Cannelé bordelais",
         "Financier aux amandes",
         "Macaron rustique choco-noisettes",
         "Macaron à la noix de coco",
         "Madeleine à la vanille",
         "Meringue",
-        "Éclair au chocolat",
     ],
     "muffins-scones": [
         "Muffin",
