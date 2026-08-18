@@ -64,6 +64,15 @@ Everything (models, auth, all routes, startup seeding) lives in this one ~600-li
 - Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
 - Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
 
+### Recipe families — `backend/families.py`, `frontend/src/families.ts`
+
+The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), a rank between the three categories and the sheet: eighty recipes under "Pâtisseries" could not be read as one list. `backend/families.py` is the single source — an ordered `FAMILIES` list and a `FAMILY_BY_TITLE` table covering every seeded recipe. `seed_data.py` stamps `family` on each recipe at join time and **refuses to import** if a title is missing from the table, since a recipe no tile opens is a recipe nobody finds.
+
+- A family belongs to exactly one category, which is why base doughs are split into `pates-tourees` (Viennoiseries) and `pates-a-tarte` (Pâtisseries) instead of one straddling family.
+- Three `catch_all` families (`autres-*`) exist only for community recipes submitted without one. `GET /api/families` omits empty families, so they stay out of the grid until something lands in them; `?include_empty=1` is for the share form, which has to offer a family before anything is in it.
+- Tiles are **drawn, not photographed**: `frontend/assets/images/families/*.svg` rendered to PNG by `frontend/scripts/build-family-tiles.mjs` (Chromium via Playwright, run by hand, not part of the build). Only `src/theme.ts` colours are used. `FAMILY_TILES` in `src/families.ts` is a `Record<FamilyKey, …>`, so a family without a tile fails `tsc` rather than showing an empty box.
+- Recipe cards inside a family carry **no image** on purpose: the imported sheets have no photo, and one generic picture repeated over nineteen tarts would read as a photo of each.
+
 ### Recipe content — `backend/seed_data.py`, `backend/seed_books.py`
 
 `seed_data.py` joins two lists at the bottom of the file: `BAKER_RECIPES` (the app's own demonstration recipes) and `BOOK_RECIPES` from `seed_books.py` (sheets imported from professional works). Same for tips. **A book sheet with the same title replaces the demonstration one** — the startup sync upserts on the title, so the recipe keeps its id, and with it its likes, comments and favourites.

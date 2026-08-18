@@ -57,6 +57,32 @@ class TestPublic:
         for x in r.json():
             assert x["category"] == "Pains"
 
+    def test_families_listed(self):
+        r = requests.get(f"{API}/families", timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 10
+        keys = {f["key"] for f in data}
+        assert {"pains", "tartes", "biscuits"} <= keys
+        for f in data:
+            # Une famille renvoyée ouvre sur quelque chose : c'est tout
+            # l'intérêt de ne pas renvoyer les vides.
+            assert f["count"] > 0
+            assert f["label"] and f["category"]
+
+    def test_families_include_empty(self):
+        r = requests.get(f"{API}/families", params={"include_empty": "1"}, timeout=30)
+        assert r.status_code == 200
+        assert len(r.json()) >= len(requests.get(f"{API}/families", timeout=30).json())
+
+    def test_recipes_filter_family(self):
+        r = requests.get(f"{API}/recipes", params={"family": "biscuits"}, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert data, "la famille des biscuits ne devrait pas être vide"
+        for x in data:
+            assert x["family"] == "biscuits"
+
 
 # --- Auth ---
 class TestAuth:

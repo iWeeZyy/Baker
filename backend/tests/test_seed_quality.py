@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from seed_data import RECIPES_SEED, TIPS_SEED  # noqa: E402
 from production import parse_ingredient  # noqa: E402
+from families import FAMILIES, FAMILY_KEYS  # noqa: E402
 
 CATEGORIES = {"Pains", "Viennoiseries", "Pâtisseries"}
 DIFFICULTIES = {"Facile", "Intermédiaire", "Avancé"}
@@ -175,6 +176,43 @@ class TestTechnicalSheet:
         if source is None:
             return
         assert re.search(r",\s*p\.\s*\d+$", source), source
+
+
+class TestFamilies:
+    """La famille est ce qui rend une recette atteignable : sans elle, aucune
+    vignette ne l'ouvre. Les contrôles portent donc sur l'atteignabilité, pas
+    sur le classement lui-même."""
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_famille_connue(self, r):
+        assert r.get("family") in FAMILY_KEYS, r.get("family")
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_famille_dans_sa_categorie(self, r):
+        family = next(f for f in FAMILIES if f["key"] == r["family"])
+        assert family["category"] == r["category"], f"{family['key']} vs {r['category']}"
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_pas_de_fourre_tout_dans_le_catalogue(self, r):
+        # Le fourre-tout n'existe que pour les recettes de la communauté. Une
+        # fiche du catalogue qui y tombe est une affectation oubliée.
+        family = next(f for f in FAMILIES if f["key"] == r["family"])
+        assert not family.get("catch_all"), r["family"]
+
+    def test_aucune_famille_vide(self):
+        # Une vignette qui ouvre sur une liste vide vaut moins que pas de
+        # vignette du tout ; les fourre-tout, eux, sont vides par construction.
+        used = {r["family"] for r in RECIPES_SEED}
+        declared = {f["key"] for f in FAMILIES if not f.get("catch_all")}
+        assert declared == used, declared ^ used
+
+    def test_chaque_famille_a_sa_vignette(self):
+        # Le seul défaut que ni pytest ni tsc ne verraient chacun de son côté :
+        # une clé déclarée ici sans image en face.
+        tiles = (Path(__file__).resolve().parents[2]
+                 / "frontend" / "src" / "families.ts").read_text(encoding="utf-8")
+        for f in FAMILIES:
+            assert f"'{f['key']}':" in tiles, f["key"]
 
 
 class TestTips:

@@ -6,6 +6,7 @@ written for the app, and the sheets imported from professional works
 one **replaces** it: the startup sync upserts on the title, so the recipe keeps
 its id — and with it its likes, comments and favourites.
 """
+from families import FAMILY_BY_TITLE, family_of
 from seed_books import BOOK_RECIPES, BOOK_TIPS
 
 BAKER_RECIPES = [
@@ -566,7 +567,19 @@ BAKER_TIPS = [
 # the two: quantities, temperatures, timings and a source. Nothing is lost —
 # the id is what carries the community data, and the id follows the title.
 _FROM_BOOKS = {r["title"] for r in BOOK_RECIPES}
-RECIPES_SEED = [r for r in BAKER_RECIPES if r["title"] not in _FROM_BOOKS] + BOOK_RECIPES
+_JOINED = [r for r in BAKER_RECIPES if r["title"] not in _FROM_BOOKS] + BOOK_RECIPES
+
+# La famille est apposée ici plutôt que recopiée dans chaque fiche : elle vient
+# d'une table unique (`families.py`), et une recette du catalogue qui n'y
+# figurerait pas retomberait dans un fourre-tout sans qu'on s'en aperçoive. On
+# préfère refuser de démarrer.
+_UNASSIGNED = sorted({r["title"] for r in _JOINED} - set(FAMILY_BY_TITLE))
+if _UNASSIGNED:
+    raise RuntimeError(
+        "recettes sans famille dans families.py : " + ", ".join(_UNASSIGNED)
+    )
+
+RECIPES_SEED = [{**r, "family": family_of(r["title"], r["category"])} for r in _JOINED]
 
 _BOOK_TIP_TITLES = {t["title"] for t in BOOK_TIPS}
 TIPS_SEED = [t for t in BAKER_TIPS if t["title"] not in _BOOK_TIP_TITLES] + BOOK_TIPS

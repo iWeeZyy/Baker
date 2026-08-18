@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { AdSlot } from '@/src/ads';
+import { formatDuration } from '@/src/format';
 import { theme } from '@/src/theme';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
@@ -67,7 +68,7 @@ export default function Home() {
             <View style={styles.heroContent}>
               <Text style={styles.heroBadge}>À LA UNE</Text>
               <Text style={styles.heroTitle}>{featured.title}</Text>
-              <Text style={styles.heroMeta}>{featured.difficulty} · {featured.time_minutes} min</Text>
+              <Text style={styles.heroMeta}>{featured.difficulty} · {formatDuration(featured.time_minutes)}</Text>
             </View>
           </Pressable>
         )}
