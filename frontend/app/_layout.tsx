@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
+import { AdsProvider } from "@/src/ads";
 import { TimerProvider } from "@/src/TimerContext";
 import TimerBar from "@/src/TimerBar";
 
@@ -26,10 +27,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <TimerProvider>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAF8F5' } }} />
-            <TimerBar />
-          </TimerProvider>
+          {/* Inside AuthProvider: the ad layer reads the signed-in user's plan. */}
+          <AdsProvider>
+            <TimerProvider>
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAF8F5' } }} />
+              <TimerBar />
+            </TimerProvider>
+          </AdsProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
