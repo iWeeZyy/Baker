@@ -78,6 +78,9 @@ export function scheduleHtml(schedule: Schedule): string {
   return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8" /><title>${escapeHtml(weekTitle(schedule.week_start))}</title>
 <style>
+  /* A4 landscape, which is what opens the print sheet on Paysage rather than
+     Portrait. Note that mixing explicit millimetres with the landscape keyword
+     is invalid CSS and makes the whole declaration be dropped. */
   @page { size: A4 landscape; margin: 8mm; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #000; }
