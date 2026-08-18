@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Print from 'expo-print';
 import * as MediaLibrary from 'expo-media-library';
-import { scheduleHtml } from './printHtml';
+import { scheduleBody, scheduleCss, scheduleHtml } from './printHtml';
 import { weekTitle, type Schedule } from './model';
 
 /**
@@ -18,6 +18,9 @@ export type ExportResult =
 const GENERIC_IMAGE_ERROR = "L'image n'a pas pu être générée. Réessayez dans un instant.";
 
 const isWeb = Platform.OS === 'web';
+const PRINT_ROOT_ID = 'baker-print-root';
+/** Fallback width if the node has not been measured yet. */
+const EXPORT_CAPTURE_WIDTH = 2245;
 
 function fileName(schedule: Schedule) {
   return `emploi-du-temps-${schedule.week_start}.png`;
@@ -37,9 +40,19 @@ async function captureImage(ref: any): Promise<string> {
 
   if (isWeb) {
     const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(ref.current as unknown as HTMLElement, {
+    const node = ref.current as unknown as HTMLElement;
+
+    // iOS caps a canvas at roughly 4096 px a side; past that Safari hands back
+    // a blank or truncated bitmap. The scale is therefore capped so the page
+    // stays comfortably inside that limit whatever its declared width.
+    const MAX_CANVAS_PX = 3800;
+    const width = node.offsetWidth || EXPORT_CAPTURE_WIDTH;
+    const height = node.offsetHeight || width;
+    const scale = Math.min(2, MAX_CANVAS_PX / Math.max(width, height));
+
+    const canvas = await html2canvas(node, {
       backgroundColor: '#ffffff',
-      scale: 2,
+      scale: Math.max(1, scale),
       logging: false,
     });
     return canvas.toDataURL('image/png');
@@ -152,43 +165,67 @@ export async function saveToPhotos(ref: any, schedule: Schedule): Promise<Export
  * whatever the app is displaying — buttons included. The web path therefore
  * writes the layout into a hidden iframe and prints that instead.
  */
+/**
+ * Print the grid, never the screen.
+ *
+ * `expo-print` on web ignores the HTML and calls `window.print()`, which prints
+ * whatever the app is displaying — buttons included. The web path therefore
+ * prints the main document with the app hidden and the grid put in its place:
+ * iOS Safari only ever prints the top-level page, and lays a hidden iframe out
+ * at zero width, which produced a blank sheet.
+ */
 export async function printSchedule(schedule: Schedule): Promise<ExportResult> {
-  const html = scheduleHtml(schedule);
-
   if (isWeb) {
     return await new Promise<ExportResult>((resolve) => {
+      const added: HTMLElement[] = [];
+      const cleanup = () => {
+        window.removeEventListener('afterprint', cleanup);
+        added.splice(0).forEach(n => n.remove());
+      };
+
       try {
-        const frame = document.createElement('iframe');
-        frame.setAttribute('aria-hidden', 'true');
-        frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-        document.body.appendChild(frame);
+        const holder = document.createElement('div');
+        holder.id = PRINT_ROOT_ID;
+        holder.innerHTML = scheduleBody(schedule);
+        // Parked off-screen while on screen; the print stylesheet below puts it
+        // back in the flow so the page is laid out at full paper width.
+        holder.setAttribute('style', 'position:absolute;left:-100000px;top:0;width:1120px;');
 
-        const cleanup = () => setTimeout(() => frame.remove(), 1000);
-        frame.onload = () => {
-          try {
-            frame.contentWindow?.focus();
-            frame.contentWindow?.print();
-            resolve({ ok: true, message: '' });
-          } catch {
-            resolve({ ok: false, message: "L'impression n'a pas pu être lancée." });
-          } finally {
-            cleanup();
+        const style = document.createElement('style');
+        style.media = 'print';
+        style.textContent = `
+          /* Everything the app draws is hidden; only the grid is printed. */
+          body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
+          #${PRINT_ROOT_ID} {
+            display: block !important;
+            position: static !important;
+            left: auto !important;
+            width: auto !important;
           }
-        };
+          ${scheduleCss()}
+        `;
 
-        const doc = frame.contentWindow?.document;
-        if (!doc) { frame.remove(); resolve({ ok: false, message: "L'impression n'a pas pu être lancée." }); return; }
-        doc.open();
-        doc.write(html);
-        doc.close();
+        document.body.appendChild(holder);
+        document.head.appendChild(style);
+        added.push(holder, style);
+
+        window.addEventListener('afterprint', cleanup);
+        window.print();
+        // Safari does not reliably fire afterprint; clean up regardless.
+        setTimeout(cleanup, 60000);
+        resolve({ ok: true, message: '' });
       } catch {
+        cleanup();
         resolve({ ok: false, message: "L'impression n'a pas pu être lancée." });
       }
     });
   }
 
   try {
-    await Print.printAsync({ html, orientation: Print.Orientation.landscape });
+    await Print.printAsync({
+      html: scheduleHtml(schedule),
+      orientation: Print.Orientation.landscape,
+    });
     return { ok: true, message: '' };
   } catch (e: any) {
     // Dismissing the print sheet surfaces as an error on iOS; that is a normal
