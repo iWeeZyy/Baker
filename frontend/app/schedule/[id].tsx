@@ -432,7 +432,7 @@ export default function ScheduleScreen() {
               <View style={styles.exportRow}>
                 {([
                   ['photos', 'image', 'Photos', (s: Schedule) => saveToPhotos(exportRef, s)],
-                  ['print', 'printer', 'Imprimer', (s: Schedule) => printSchedule(s)],
+                  ['print', 'printer', 'Imprimer', (s: Schedule) => printSchedule(exportRef, s)],
                   ['share', 'share', 'Partager', (s: Schedule) => shareSchedule(exportRef, s)],
                 ] as const).map(([key, icon, label, action]) => (
                   <Pressable

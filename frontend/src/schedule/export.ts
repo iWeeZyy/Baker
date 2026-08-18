@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Print from 'expo-print';
 import * as MediaLibrary from 'expo-media-library';
-import { scheduleBody, scheduleCss, scheduleHtml } from './printHtml';
+import { scheduleHtml } from './printHtml';
 import { weekTitle, type Schedule } from './model';
 
 /**
@@ -18,9 +18,35 @@ export type ExportResult =
 const GENERIC_IMAGE_ERROR = "L'image n'a pas pu être générée. Réessayez dans un instant.";
 
 const isWeb = Platform.OS === 'web';
-const PRINT_ROOT_ID = 'baker-print-root';
 /** Fallback width if the node has not been measured yet. */
 const EXPORT_CAPTURE_WIDTH = 2245;
+
+/** A4 landscape in millimetres, the page every export targets. */
+const A4_LANDSCAPE = { w: 297, h: 210 };
+
+/**
+ * Build an A4-landscape PDF of the schedule, web only.
+ *
+ * The page geometry lives inside the file, so iOS cannot re-lay it out or fall
+ * back to portrait — which is exactly what CSS `@page` could not guarantee in
+ * Safari. The grid is embedded as the captured bitmap at roughly 325 dpi.
+ */
+async function buildPdf(ref: any, schedule: Schedule): Promise<Blob> {
+  const dataUri = await captureImage(ref, 'jpeg');
+  const { jsPDF } = await import('jspdf');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  // Fit the page while keeping the capture's proportions, then centre it.
+  const img = doc.getImageProperties(dataUri);
+  const ratio = Math.min(A4_LANDSCAPE.w / img.width, A4_LANDSCAPE.h / img.height);
+  const w = img.width * ratio;
+  const h = img.height * ratio;
+
+  doc.addImage(dataUri, 'JPEG', (A4_LANDSCAPE.w - w) / 2, (A4_LANDSCAPE.h - h) / 2, w, h);
+  doc.setProperties({ title: `Emploi du temps — ${schedule.week_start}` });
+  return doc.output('blob');
+}
 
 function fileName(schedule: Schedule) {
   return `emploi-du-temps-${schedule.week_start}.png`;
@@ -35,7 +61,7 @@ function fileName(schedule: Schedule) {
  * node, html2canvas is handed it directly — that is exactly what view-shot's own
  * web module does once the handle is resolved.
  */
-async function captureImage(ref: any): Promise<string> {
+async function captureImage(ref: any, format: 'png' | 'jpeg' = 'png'): Promise<string> {
   if (!ref?.current) throw new Error('layout indisponible');
 
   if (isWeb) {
@@ -55,7 +81,10 @@ async function captureImage(ref: any): Promise<string> {
       scale: Math.max(1, scale),
       logging: false,
     });
-    return canvas.toDataURL('image/png');
+    // JPEG for the PDF: the same bitmap stored as PNG makes a 40 MB file,
+    // which no one can send by message. At 0.92 on a white table the
+    // difference is invisible.
+    return format === 'jpeg' ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png');
   }
 
   return await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
@@ -174,51 +203,39 @@ export async function saveToPhotos(ref: any, schedule: Schedule): Promise<Export
  * iOS Safari only ever prints the top-level page, and lays a hidden iframe out
  * at zero width, which produced a blank sheet.
  */
-export async function printSchedule(schedule: Schedule): Promise<ExportResult> {
+export async function printSchedule(ref: any, schedule: Schedule): Promise<ExportResult> {
   if (isWeb) {
-    return await new Promise<ExportResult>((resolve) => {
-      const added: HTMLElement[] = [];
-      const cleanup = () => {
-        window.removeEventListener('afterprint', cleanup);
-        added.splice(0).forEach(n => n.remove());
-      };
+    // A PDF rather than window.print(): Safari ignores `@page { size }`, so a
+    // printed web page came out portrait however the CSS asked. Handing iOS a
+    // file that is already A4 landscape removes the question entirely.
+    let pdf: File;
+    try {
+      const blob = await buildPdf(ref, schedule);
+      pdf = new File([blob], `emploi-du-temps-${schedule.week_start}.pdf`, { type: 'application/pdf' });
+    } catch {
+      return { ok: false, message: "Le document n'a pas pu être préparé." };
+    }
 
+    const nav: any = typeof navigator === 'undefined' ? null : navigator;
+    if (nav?.canShare?.({ files: [pdf] })) {
       try {
-        const holder = document.createElement('div');
-        holder.id = PRINT_ROOT_ID;
-        holder.innerHTML = scheduleBody(schedule);
-        // Parked off-screen while on screen; the print stylesheet below puts it
-        // back in the flow so the page is laid out at full paper width.
-        holder.setAttribute('style', 'position:absolute;left:-100000px;top:0;width:1120px;');
-
-        const style = document.createElement('style');
-        style.media = 'print';
-        style.textContent = `
-          /* Everything the app draws is hidden; only the grid is printed. */
-          body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
-          #${PRINT_ROOT_ID} {
-            display: block !important;
-            position: static !important;
-            left: auto !important;
-            width: auto !important;
-          }
-          ${scheduleCss()}
-        `;
-
-        document.body.appendChild(holder);
-        document.head.appendChild(style);
-        added.push(holder, style);
-
-        window.addEventListener('afterprint', cleanup);
-        window.print();
-        // Safari does not reliably fire afterprint; clean up regardless.
-        setTimeout(cleanup, 60000);
-        resolve({ ok: true, message: '' });
-      } catch {
-        cleanup();
-        resolve({ ok: false, message: "L'impression n'a pas pu être lancée." });
+        await nav.share({ files: [pdf], title: weekTitle(schedule.week_start) });
+        return { ok: true, message: '' };
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return { ok: true, message: '' };
       }
-    });
+    }
+
+    // No share sheet (desktop browsers): open the PDF so it can be printed.
+    try {
+      const url = URL.createObjectURL(pdf);
+      const win = window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (!win) return { ok: true, message: 'Document PDF prêt : autorisez la fenêtre pour l\'imprimer.' };
+      return { ok: true, message: '' };
+    } catch {
+      return { ok: false, message: "L'impression n'a pas pu être lancée." };
+    }
   }
 
   try {
