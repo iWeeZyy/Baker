@@ -1,11 +1,19 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { DAY_LABELS_LONG, DAYS, dayNumbers, formatHours, weekTitle, type Schedule } from './model';
 
-/** Fixed pixel width: the capture must not depend on the phone's screen size. */
-export const EXPORT_WIDTH = 1800;
+/**
+ * A fixed A4-landscape page, not a strip.
+ *
+ * The capture must not depend on the phone's screen, and the result is looked
+ * at in Photos, WhatsApp or Mail — where a very wide, very short image shrinks
+ * to an unreadable band. Page proportions (√2 : 1, landscape) keep the grid
+ * legible in a thumbnail and print straight onto A4.
+ */
+export const EXPORT_WIDTH = 2245;
+export const EXPORT_HEIGHT = Math.round(EXPORT_WIDTH / Math.SQRT2); // 1587
 
-const NAME_W = 150;
-const TOTAL_W = 86;
+const NAME_W = 190;
+const TOTAL_W = 108;
 const BORDER = '#000';
 
 /**
@@ -20,7 +28,7 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
   const numbers = dayNumbers(schedule.week_start);
   const anyOvertime = schedule.employees.some(e => (e.overtime_minutes || 0) > 0);
 
-  const grid = EXPORT_WIDTH - 32 - NAME_W - TOTAL_W * (anyOvertime ? 2 : 1);
+  const grid = EXPORT_WIDTH - 52 - NAME_W - TOTAL_W * (anyOvertime ? 2 : 1);
   const dayW = grid / DAYS;
   const timeW = dayW * 0.36;
   const hoursW = dayW - timeW * 2;
@@ -33,7 +41,8 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
 
   return (
     <View style={styles.page}>
-      <Text style={styles.title}>{weekTitle(schedule.week_start)}</Text>
+      <View>
+        <Text style={styles.title}>{weekTitle(schedule.week_start)}</Text>
 
       {/* Header: day name and number, then the three sub-columns. */}
       <View style={styles.row}>
@@ -100,9 +109,15 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
         <Cell text={formatHours(schedule.grand_total_minutes)} w={TOTAL_W} />
       </View>
 
-      <View style={styles.noteHead}><Text style={[styles.cellText, styles.bold]}>NOTE</Text></View>
-      <View style={styles.noteBody}>
-        <Text style={styles.noteText}>{schedule.notes?.trim() || ''}</Text>
+      </View>
+
+      {/* The note box takes the space the grid leaves, so the page is always
+          filled edge to edge whether there are 2 employees or 15. */}
+      <View style={styles.noteWrap}>
+        <View style={styles.noteHead}><Text style={[styles.cellText, styles.bold]}>NOTE</Text></View>
+        <View style={styles.noteBody}>
+          <Text style={styles.noteText}>{schedule.notes?.trim() || ''}</Text>
+        </View>
       </View>
     </View>
   );
@@ -112,8 +127,10 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
 // shared, so it stays high-contrast black on white rather than following the
 // app's warm palette.
 const styles = StyleSheet.create({
-  page: { width: EXPORT_WIDTH, backgroundColor: '#FFFFFF', padding: 16 },
-  title: { fontSize: 26, fontWeight: '700', color: '#000', marginBottom: 12, textAlign: 'center' },
+  // minHeight, not height: the page always fills an A4 landscape sheet, and
+  // still grows rather than clipping if a fifteenth row would not fit.
+  page: { width: EXPORT_WIDTH, minHeight: EXPORT_HEIGHT, backgroundColor: '#FFFFFF', padding: 26 },
+  title: { fontSize: 34, fontWeight: '700', color: '#000', marginBottom: 16, textAlign: 'center' },
   row: { flexDirection: 'row' },
   cell: {
     height: 42, alignItems: 'center', justifyContent: 'center',
@@ -126,7 +143,8 @@ const styles = StyleSheet.create({
   cellText: { fontSize: 15, color: '#000' },
   bold: { fontWeight: '700' },
   dayNum: { fontSize: 12, color: '#000' },
-  noteHead: { borderWidth: 1, borderColor: BORDER, alignItems: 'center', paddingVertical: 6, marginTop: 14 },
-  noteBody: { borderWidth: 1, borderColor: BORDER, borderTopWidth: 0, minHeight: 90, padding: 12, alignItems: 'center' },
+  noteWrap: { marginTop: 20 },
+  noteHead: { borderWidth: 1, borderColor: BORDER, alignItems: 'center', paddingVertical: 8 },
+  noteBody: { borderWidth: 1, borderColor: BORDER, borderTopWidth: 0, minHeight: 150, padding: 16, alignItems: 'center' },
   noteText: { fontSize: 16, color: '#000', lineHeight: 22 },
 });
