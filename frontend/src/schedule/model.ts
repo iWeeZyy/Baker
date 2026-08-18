@@ -6,6 +6,9 @@ export const MAX_EMPLOYEES = 15;
 /** Sunday first, matching the printed grid. */
 export const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
+/** Spelled out for the printed sheet, where there is room for them. */
+export const DAY_LABELS_LONG = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
 export type ScheduleDay = {
   off: boolean;
   start: string;
@@ -87,4 +90,31 @@ export function cellText(day: ScheduleDay | null): string {
   if (day.off) return '0:00';
   if (!day.start && !day.end) return '';
   return `${day.start} ${day.end}`.trim();
+}
+
+/** Minutes → "01:30", the shape the overtime field always keeps. */
+export function formatHHMM(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes || 0));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Keep an overtime field in `HH:MM` while it is being typed.
+ *
+ * The colon is never lost and never doubled: digits are read right to left,
+ * the two rightmost being the minutes. Typing "130" gives "01:30", so the
+ * hours sit left of the colon and the minutes right of it, as the field shows.
+ */
+export function maskHHMM(raw: string): string {
+  const digits = (raw || '').replace(/\D/g, '').slice(-4).padStart(4, '0');
+  const hours = digits.slice(0, 2);
+  const minutes = Math.min(59, parseInt(digits.slice(2), 10) || 0);
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
+/** "01:30" → 90 minutes. */
+export function parseHHMM(value: string): number {
+  const m = (value || '').match(/^(\d{1,3}):(\d{1,2})$/);
+  if (!m) return 0;
+  return parseInt(m[1], 10) * 60 + Math.min(59, parseInt(m[2], 10));
 }
