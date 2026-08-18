@@ -80,8 +80,10 @@ The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), 
 
 Two works are imported so far, and `source` names which one each sheet came from:
 
-- **Josée Fiset, « Comme à la boulangerie », Pratico Édition** — 102 sheets, the pastry and viennoiserie catalogue. Read from a PDF with a text layer, so it went through an extraction pipeline whose faults `test_seed_quality.py` was written against.
-- **FERRANDI Paris, « Boulangerie Viennoiserie », Flammarion** — the breads, plus the preferments and the panification techniques. The PDF is a **scan with no text layer**, so its pages were read directly rather than OCR'd: an OCR turning an 8 into a 3 announces nothing, and a wrong quantity is the only really serious fault in a bakery tool.
+- **Josée Fiset, « Comme à la boulangerie », Pratico Édition** — 90 sheets, the home-baking pastry catalogue. Read from a PDF with a text layer, so it went through an extraction pipeline whose faults `test_seed_quality.py` was written against.
+- **FERRANDI Paris, « Boulangerie Viennoiserie », Flammarion** — 88 sheets: the breads, the preferments, the base doughs and the viennoiserie. The PDF is a **scan with no text layer**, so its pages were read directly rather than OCR'd: an OCR turning an 8 into a 3 announces nothing, and a wrong quantity is the only really serious fault in a bakery tool.
+
+**One sheet per product.** Where both books cover the same thing — croissant, pain au chocolat, babka, tarte au sucre, pâte à brioche… — the FERRANDI version replaces the Québec one, which leaves the seed and is deleted from the database by `retire_built_ins` on the next deploy. That is what keeps FERRANDI's chain of cross-references honest: its croissant leans on *its* pâte levée feuilletée, with its own quantities. The replaced titles are listed in the generator, not hidden in a diff.
 
 **The seed is authoritative in both directions.** The startup handler upserts every recipe in `RECIPES_SEED` *and* deletes built-in recipes that are no longer in it (`retire_built_ins` in `server.py`, covered by `tests/test_retire_seed.py`). Retiring content is therefore a deploy, not a manual database cleanup. Two rules keep that safe: only `is_user_submitted: False` documents are ever considered, and the likes/comments/notes/favourites of a deleted recipe go with it. A production already built on a deleted recipe keeps working — it snapshots ingredients and steps — but *editing* it will 404 on the missing recipe.
 
