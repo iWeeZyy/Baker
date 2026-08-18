@@ -17,7 +17,9 @@ from typing import Optional
 # de base sont séparées en pâtes tourées (viennoiseries) et pâtes à tarte
 # (pâtisseries) plutôt que réunies.
 FAMILIES = [
-    {"key": "pains", "label": "Pains", "category": "Pains"},
+    {"key": "pains-classiques", "label": "Pains classiques", "category": "Pains"},
+    {"key": "pains-speciaux", "label": "Pains spéciaux", "category": "Pains"},
+    {"key": "levains", "label": "Levains et préfermentations", "category": "Pains"},
     {"key": "feuilletees", "label": "Viennoiseries feuilletées", "category": "Viennoiseries"},
     {"key": "brioches", "label": "Brioches et babkas", "category": "Viennoiseries"},
     {"key": "pates-tourees", "label": "Pâtes tourées et levées", "category": "Viennoiseries"},
@@ -49,10 +51,54 @@ CATCH_ALL = {
 }
 
 _ASSIGNMENTS = {
-    # Vide pour l'instant : l'ouvrage importé est un livre de pâtisserie et de
-    # viennoiserie. La famille reste déclarée — l'API n'affiche pas les
-    # familles vides, et le premier pain la fera réapparaître.
-    "pains": [],
+    "pains-classiques": [
+        "Baguette aux graines",
+        "Baguette de tradition sur poolish",
+        "Baguette rustique au levain T80",
+        "Baguette viennoise",
+        "Pain blanc sur levain liquide",
+        "Pain de campagne",
+        "Pain de mie",
+        "Pain de seigle",
+    ],
+    "pains-speciaux": [
+        "Benoîton aux noisettes",
+        "Bretzel",
+        "Ciabatta",
+        "Crumpet",
+        "Fougasse",
+        "Gressins",
+        "Injera (sans gluten)",
+        "Naans",
+        "Pain au cacao",
+        "Pain au curcuma",
+        "Pain au grand épeautre",
+        "Pain au levain de riz et sarrasin (sans gluten)",
+        "Pain au petit épeautre",
+        "Pain au sarrasin",
+        "Pain aux figues",
+        "Pain aux lardons",
+        "Pain aux noix",
+        "Pain aux olives",
+        "Pain de mie au tangzhong",
+        "Pain de mie bicolore",
+        "Pain de méteil feuilleté",
+        "Pain noir",
+        "Pain nutrition au levain",
+        "Pain nutrition aux graines",
+        "Pain à la bière",
+        "Pain à la châtaigne (sans gluten)",
+        "Pavé aux fruits",
+        "Petits pains feuilletés",
+        "Tourte de meule",
+        "Étoile de pain d'épice",
+    ],
+    "levains": [
+        "Levain chef",
+        "Levain dur",
+        "Levain liquide",
+        "Poolish",
+    ],
     "feuilletees": [
         "Chausson aux pommes",
         "Croffin",

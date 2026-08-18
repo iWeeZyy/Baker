@@ -51,8 +51,11 @@ function parseDuration(text: string): number | null {
 const TECHNICAL_ROWS: [string, string][] = [
   ['yield_label', 'Rendement'],
   ['prep', 'Préparation'],
+  ['trempage', 'Trempage'],
   ['petrissage', 'Pétrissage et repos'],
+  ['autolyse', 'Autolyse'],
   ['tourage', 'Tourage'],
+  ['fermentation', 'Fermentation'],
   ['pointage', 'Pointage'],
   ['detente', 'Détente'],
   ['appret', 'Apprêt'],
