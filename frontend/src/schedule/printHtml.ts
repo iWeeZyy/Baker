@@ -45,7 +45,7 @@ function colgroup(withOvertime: boolean): string {
  * resolution is unreadable once printed. Nothing from the app's interface
  * appears here.
  */
-export function scheduleHtml(schedule: Schedule): string {
+export function scheduleBody(schedule: Schedule): string {
   const numbers = dayNumbers(schedule.week_start);
   const anyOvertime = schedule.employees.some(e => (e.overtime_minutes || 0) > 0);
 
@@ -94,10 +94,25 @@ export function scheduleHtml(schedule: Schedule): string {
 
   const people = schedule.employees.length;
 
-  return `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8" /><title>${escapeHtml(weekTitle(schedule.week_start))}</title>
-<style>
-  /* A4 landscape, which is what opens the print sheet on Paysage rather than
+  return `<div class="brand">BAKER · LE FOURNIL</div>
+  <h1>${escapeHtml(weekTitle(schedule.week_start))}</h1>
+  <div class="sub">${people} personne${people > 1 ? 's' : ''} &nbsp;·&nbsp; Total de la semaine ${formatHours(schedule.grand_total_minutes)}</div>
+  <table>${colgroup(anyOvertime)}<thead>${header}</thead><tbody>${rows}${totals}</tbody></table>
+  <div class="note">
+    <div class="note-label">NOTE</div>
+    <div class="note-text">${escapeHtml(schedule.notes?.trim() || '')}</div>
+  </div>`;
+}
+
+/**
+ * The stylesheet for the printed grid, kept apart from the markup.
+ *
+ * The web build injects it into the main document rather than an iframe: iOS
+ * Safari only prints the top-level page, and lays a hidden iframe out at zero
+ * width — which is why printing through one produced a blank sheet.
+ */
+export function scheduleCss(): string {
+  return `/* A4 landscape, which is what opens the print sheet on Paysage rather than
      Portrait. Mixing explicit millimetres with the landscape keyword is invalid
      CSS and would make the whole declaration be dropped. */
   @page { size: A4 landscape; margin: 9mm; }
@@ -139,16 +154,13 @@ export function scheduleHtml(schedule: Schedule): string {
   /* The note is plainly detached from the grid above it. */
   .note { margin-top: 4mm; border: 0.4pt solid #D8CEC2; border-radius: 2mm; padding: 3mm; min-height: 18mm; }
   .note-label { font-size: 6.5pt; letter-spacing: 1.6pt; color: #8B7D72; font-weight: 700; margin-bottom: 1.5mm; }
-  .note-text { font-size: 9pt; }
-</style></head>
-<body>
-  <div class="brand">BAKER · LE FOURNIL</div>
-  <h1>${escapeHtml(weekTitle(schedule.week_start))}</h1>
-  <div class="sub">${people} personne${people > 1 ? 's' : ''} &nbsp;·&nbsp; Total de la semaine ${formatHours(schedule.grand_total_minutes)}</div>
-  <table>${colgroup(anyOvertime)}<thead>${header}</thead><tbody>${rows}${totals}</tbody></table>
-  <div class="note">
-    <div class="note-label">NOTE</div>
-    <div class="note-text">${escapeHtml(schedule.notes?.trim() || '')}</div>
-  </div>
-</body></html>`;
+  .note-text { font-size: 9pt; }`;
+}
+
+/** A standalone document, used by expo-print on native. */
+export function scheduleHtml(schedule: Schedule): string {
+  return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8" /><title>Emploi du temps</title>
+<style>${scheduleCss()}</style></head>
+<body>${scheduleBody(schedule)}</body></html>`;
 }
