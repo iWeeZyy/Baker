@@ -42,7 +42,7 @@ class TestPublic:
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
-        assert len(data) >= 20, f"Expected >=20 recipes, got {len(data)}"
+        assert len(data) >= 100, f"Expected >=100 recipes, got {len(data)}"
         assert "title" in data[0]
 
     def test_tips_seeded(self):
@@ -52,10 +52,38 @@ class TestPublic:
         assert len(data) >= 8
 
     def test_recipes_filter_category(self):
-        r = requests.get(f"{API}/recipes", params={"category": "Pains"}, timeout=30)
+        r = requests.get(f"{API}/recipes", params={"category": "Viennoiseries"}, timeout=30)
         assert r.status_code == 200
-        for x in r.json():
-            assert x["category"] == "Pains"
+        data = r.json()
+        assert data, "le catalogue devrait contenir des viennoiseries"
+        for x in data:
+            assert x["category"] == "Viennoiseries"
+
+    def test_families_listed(self):
+        r = requests.get(f"{API}/families", timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 10
+        keys = {f["key"] for f in data}
+        assert {"tartes", "biscuits", "brioches"} <= keys
+        for f in data:
+            # Une famille renvoyée ouvre sur quelque chose : c'est tout
+            # l'intérêt de ne pas renvoyer les vides.
+            assert f["count"] > 0
+            assert f["label"] and f["category"]
+
+    def test_families_include_empty(self):
+        r = requests.get(f"{API}/families", params={"include_empty": "1"}, timeout=30)
+        assert r.status_code == 200
+        assert len(r.json()) >= len(requests.get(f"{API}/families", timeout=30).json())
+
+    def test_recipes_filter_family(self):
+        r = requests.get(f"{API}/recipes", params={"family": "biscuits"}, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert data, "la famille des biscuits ne devrait pas être vide"
+        for x in data:
+            assert x["family"] == "biscuits"
 
 
 # --- Auth ---

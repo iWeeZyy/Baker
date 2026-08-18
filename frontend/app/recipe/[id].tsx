@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
+import { formatDuration } from '@/src/format';
 import { theme } from '@/src/theme';
 
 type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
@@ -196,7 +197,7 @@ export default function RecipeDetail() {
 
         <View style={styles.metaRow}>
           <View style={styles.metaCol}><Text style={styles.metaLabel}>DIFFICULTÉ</Text><Text style={styles.metaVal}>{recipe.difficulty}</Text></View>
-          <View style={styles.metaCol}><Text style={styles.metaLabel}>TEMPS</Text><Text style={styles.metaVal}>{recipe.time_minutes} min</Text></View>
+          <View style={styles.metaCol}><Text style={styles.metaLabel}>TEMPS</Text><Text style={styles.metaVal}>{formatDuration(recipe.time_minutes)}</Text></View>
           {recipe.hydration > 0 && <View style={styles.metaCol}><Text style={styles.metaLabel}>HYDRATATION</Text><Text style={styles.metaVal}>{recipe.hydration}%</Text></View>}
         </View>
 

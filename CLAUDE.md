@@ -64,9 +64,21 @@ Everything (models, auth, all routes, startup seeding) lives in this one ~600-li
 - Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
 - Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
 
+### Recipe families — `backend/families.py`, `frontend/src/families.ts`
+
+The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), a rank between the three categories and the sheet: eighty recipes under "Pâtisseries" could not be read as one list. `backend/families.py` is the single source — an ordered `FAMILIES` list and a `FAMILY_BY_TITLE` table covering every seeded recipe. `seed_data.py` stamps `family` on each recipe at join time and **refuses to import** if a title is missing from the table, since a recipe no tile opens is a recipe nobody finds.
+
+- A family belongs to exactly one category, which is why base doughs are split into `pates-tourees` (Viennoiseries) and `pates-a-tarte` (Pâtisseries) instead of one straddling family.
+- `pains` is currently **declared but empty**: the imported work is a pastry and viennoiserie book. Empty families are not returned by the API and the browse chips are derived from the families actually present, so both the tile and the "Pains" chip reappear on their own with the first bread.
+- Three `catch_all` families (`autres-*`) exist only for community recipes submitted without one. `GET /api/families` omits empty families, so they stay out of the grid until something lands in them; `?include_empty=1` is for the share form, which has to offer a family before anything is in it.
+- Tiles are **drawn, not photographed**: `frontend/assets/images/families/*.svg` rendered to PNG by `frontend/scripts/build-family-tiles.mjs` (Chromium via Playwright, run by hand, not part of the build). Only `src/theme.ts` colours are used. `FAMILY_TILES` in `src/families.ts` is a `Record<FamilyKey, …>`, so a family without a tile fails `tsc` rather than showing an empty box.
+- Recipe cards inside a family carry **no image** on purpose: the imported sheets have no photo, and one generic picture repeated over nineteen tarts would read as a photo of each.
+
 ### Recipe content — `backend/seed_data.py`, `backend/seed_books.py`
 
-`seed_data.py` joins two lists at the bottom of the file: `BAKER_RECIPES` (the app's own demonstration recipes) and `BOOK_RECIPES` from `seed_books.py` (sheets imported from professional works). Same for tips. **A book sheet with the same title replaces the demonstration one** — the startup sync upserts on the title, so the recipe keeps its id, and with it its likes, comments and favourites.
+**Every recipe now comes from `seed_books.py`** — sheets taken from professional works, each carrying the page it was read from. The twenty demonstration recipes the app was scaffolded with have been removed: they were written by a language model, not a baker, and a recipe that cannot say where a quantity comes from has no place in a bakery tool. The eight original tips are the last of that batch and are still there, unsourced.
+
+**The seed is authoritative in both directions.** The startup handler upserts every recipe in `RECIPES_SEED` *and* deletes built-in recipes that are no longer in it (`retire_built_ins` in `server.py`, covered by `tests/test_retire_seed.py`). Retiring content is therefore a deploy, not a manual database cleanup. Two rules keep that safe: only `is_user_submitted: False` documents are ever considered, and the likes/comments/notes/favourites of a deleted recipe go with it. A production already built on a deleted recipe keeps working — it snapshots ingredients and steps — but *editing* it will 404 on the missing recipe.
 
 - `seed_books.py` is **generated then reviewed**, not hand-maintained line by line. Quantities, temperatures, durations and yields are copied from the cited work; descriptions and step lists are written for Baker. Method paragraphs are deliberately **not** reproduced — the data is taken, the prose is not. That distinction is what makes the import legitimate in a distributed app, so keep it if you add a source.
 - Two optional fields carry the import: `technical` (a dict — the keys the recipe screen knows how to render are listed in `TECHNICAL_ROWS` in `app/recipe/[id].tsx`; an unknown key is silently invisible) and `source` (the work and page). Absent means "not stated in the source", never an estimate.

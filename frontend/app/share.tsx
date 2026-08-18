@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
+import { type Family } from '@/src/families';
 import { theme } from '@/src/theme';
 
 const CATEGORIES = ['Pains', 'Viennoiseries', 'Pâtisseries'];
@@ -16,6 +17,8 @@ export default function ShareRecipe() {
   const params = useLocalSearchParams<{ prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string }>();
   const [title, setTitle] = useState(params.prefillTitle || '');
   const [category, setCategory] = useState('Pains');
+  const [families, setFamilies] = useState<Family[]>([]);
+  const [family, setFamily] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState('Facile');
   const [time, setTime] = useState('');
   const [hydration, setHydration] = useState(params.prefillHydration || '');
@@ -28,6 +31,25 @@ export default function ShareRecipe() {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // include_empty : une famille encore vide doit pouvoir être choisie, sans
+  // quoi la première recette d'une famille n'aurait nulle part où aller.
+  useEffect(() => {
+    api('/families?include_empty=1')
+      .then((all: Family[]) => setFamilies(all.filter(f => !f.catch_all)))
+      .catch(console.warn);
+  }, []);
+
+  // Changer de catégorie invalide la famille choisie : « Biscuits » n'a pas de
+  // sens sous « Pains ». Sans famille, le serveur retombe sur le fourre-tout de
+  // la catégorie, donc la recette reste atteignable.
+  const familyChoices = useMemo(
+    () => families.filter(f => f.category === category),
+    [families, category],
+  );
+  useEffect(() => {
+    if (family && !familyChoices.some(f => f.key === family)) setFamily(null);
+  }, [familyChoices, family]);
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -79,6 +101,7 @@ export default function ShareRecipe() {
         body: JSON.stringify({
           title: title.trim(),
           category,
+          family,
           difficulty,
           time_minutes: parseInt(time) || 0,
           hydration: parseInt(hydration) || 0,
@@ -132,6 +155,16 @@ export default function ShareRecipe() {
               {CATEGORIES.map(c => (
                 <Pressable key={c} testID={`cat-${c}`} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
                   <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Field>
+
+          <Field label="Famille">
+            <View style={styles.chipsRow}>
+              {familyChoices.map(f => (
+                <Pressable key={f.key} testID={`fam-${f.key}`} onPress={() => setFamily(f.key)} style={[styles.chip, family === f.key && styles.chipActive]}>
+                  <Text style={[styles.chipText, family === f.key && styles.chipTextActive]}>{f.label}</Text>
                 </Pressable>
               ))}
             </View>

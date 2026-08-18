@@ -30,6 +30,7 @@ from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
 import staff
 from plans import resolve_plan, limits_for, production_quota, ads_config
+from families import FAMILIES, FAMILY_KEYS, family_of
 
 # ---------- Config ----------
 mongo_url = os.environ['MONGO_URL']
@@ -146,6 +147,10 @@ class Recipe(BaseModel):
     technical: Optional[dict] = None
     # The work this recipe was taken from, credited on the recipe screen.
     source: Optional[str] = None
+    # Browsing rank between the category and the sheet ("biscuits", "tartes").
+    # Assigned from families.py for the catalogue; falls back to the category's
+    # catch-all for community recipes, so nothing is unreachable.
+    family: Optional[str] = None
     image_url: str = ""
     image_path: Optional[str] = None
     description: str
@@ -166,6 +171,7 @@ class RecipeCreateInput(BaseModel):
     yield_pieces: Optional[int] = None
     technical: Optional[dict] = None
     source: Optional[str] = None
+    family: Optional[str] = None
     description: str
     ingredients: List[str]
     steps: List[str]
@@ -302,10 +308,13 @@ async def enrich_recipes(docs):
     return docs
 
 @api_router.get("/recipes")
-async def list_recipes(category: Optional[str] = None, sort: Optional[str] = None):
+async def list_recipes(category: Optional[str] = None, family: Optional[str] = None,
+                       sort: Optional[str] = None):
     q = {}
     if category and category != "Tous":
         q["category"] = category
+    if family:
+        q["family"] = family
     cursor = db.recipes.find(q, {"_id": 0}).sort("created_at", -1)
     docs = await cursor.to_list(500)
     docs = await enrich_recipes(docs)
@@ -337,8 +346,13 @@ async def get_recipe(recipe_id: str):
 
 @api_router.post("/recipes")
 async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current_user)):
+    fields = inp.dict()
+    # A client that sends no family — or an unknown one — still gets a browsable
+    # recipe: the category's catch-all rather than nothing at all.
+    if fields.get("family") not in FAMILY_KEYS:
+        fields["family"] = family_of(fields["title"], fields["category"])
     r = Recipe(
-        **inp.dict(),
+        **fields,
         author_id=user["user_id"],
         author_name=user.get("name"),
         is_user_submitted=True,
@@ -1152,8 +1166,32 @@ async def list_tips(category: Optional[str] = None):
 async def categories():
     return {
         "recipes": ["Tous", "Pains", "Viennoiseries", "Pâtisseries"],
-        "tips": ["Tous", "Fermentation", "Hydratation", "Cuisson", "Façonnage", "Dépannage"],
+        "tips": ["Tous", "Fermentation", "Hydratation", "Cuisson", "Façonnage",
+                 "Dépannage", "Tourage", "Matériel"],
     }
+
+@api_router.get("/families")
+async def families(include_empty: bool = False):
+    """The families that actually hold something, in display order.
+
+    A family is only returned when it has recipes: a tile that opens on an
+    empty list is worse than no tile. That also keeps the three catch-alls out
+    of the grid until a community recipe lands in one.
+
+    `include_empty` is for the share form, which has to offer a family before
+    anything is in it.
+    """
+    counts = {
+        row["_id"]: row["n"]
+        async for row in db.recipes.aggregate([
+            {"$group": {"_id": "$family", "n": {"$sum": 1}}},
+        ])
+    }
+    return [
+        {**f, "count": counts.get(f["key"], 0)}
+        for f in FAMILIES
+        if include_empty or counts.get(f["key"])
+    ]
 
 # ---------- Image Upload ----------
 @api_router.post("/upload")
@@ -1233,6 +1271,34 @@ async def chat_history(user: dict = Depends(get_current_user), session_id: Optio
     return await cursor.to_list(500)
 
 # ---------- Startup ----------
+async def retire_built_ins(recipes, dependents, keep_titles) -> list:
+    """Delete built-in recipes that the seed no longer carries.
+
+    The startup sync only ever upserts, so a sheet dropped from `seed_data.py`
+    would otherwise live on in every database that already holds it. Retiring
+    content has to be a deploy, not a manual cleanup.
+
+    Two rules make this safe to run on every boot:
+      - only `is_user_submitted: False` documents are considered, so a deploy
+        can never remove a recipe a member of the community wrote;
+      - the likes, comments, notes and favourites of a deleted recipe go with
+        it, since rows pointing at nothing would still be counted.
+
+    Returns the titles removed, for the log.
+    """
+    doomed = await recipes.find(
+        {"is_user_submitted": False, "title": {"$nin": list(keep_titles)}},
+        {"_id": 0, "id": 1, "title": 1},
+    ).to_list(1000)
+    if not doomed:
+        return []
+    ids = [d["id"] for d in doomed]
+    await recipes.delete_many({"id": {"$in": ids}})
+    for collection in dependents:
+        await collection.delete_many({"recipe_id": {"$in": ids}})
+    return [d["title"] for d in doomed]
+
+
 @app.on_event("startup")
 async def startup():
     # Indexes
@@ -1284,6 +1350,14 @@ async def startup():
             upsert=True,
         )
     logger.info(f"Synced {len(RECIPES_SEED)} built-in recipes")
+
+    retired = await retire_built_ins(
+        db.recipes,
+        [db.likes, db.comments, db.notes, db.favorites],
+        {r["title"] for r in RECIPES_SEED},
+    )
+    if retired:
+        logger.info(f"Retired {len(retired)} built-in recipes: {', '.join(retired)}")
 
     # Tips are synced the same way as recipes rather than seeded once: a tip
     # added to TIPS_SEED would otherwise never reach a database that already

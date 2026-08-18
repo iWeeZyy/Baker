@@ -1,0 +1,63 @@
+/**
+ * Rend les vignettes de famille : assets/images/families/*.svg -> *.png
+ *
+ * Les écrans affichent des PNG et non les SVG : `react-native-svg` n'est pas
+ * installé, et un PNG s'affiche à l'identique sur iOS, Android et web via
+ * `expo-image`, déjà utilisé partout. Les sources SVG restent dans le dépôt
+ * pour que les vignettes soient modifiables — un binaire sans source ne se
+ * corrige pas.
+ *
+ * Ne tourne pas pendant le build : à relancer à la main après avoir touché
+ * un SVG.
+ *
+ *   npm i -D playwright && node scripts/build-family-tiles.mjs
+ *
+ * CHROMIUM_PATH permet de pointer un Chromium déjà installé.
+ */
+import { readdir, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Playwright n'est pas une dépendance du projet : il n'a rien à faire dans un
+// build d'application. On le résout depuis le répertoire courant, ce qui laisse
+// le choix de l'installer où l'on veut (`npm i -D playwright`, ou un
+// node_modules quelconque d'où l'on lance la commande).
+const require = createRequire(join(process.cwd(), 'noop.js'));
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch {
+  console.error("playwright est introuvable — `npm i -D playwright`, puis relancer depuis ce dossier.");
+  process.exit(1);
+}
+
+const DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../assets/images/families');
+// 4:3. Une vignette occupe une demi-largeur d'écran (~200 pt), donc 1200 px
+// couvre déjà le triple de la densité la plus élevée ; doubler encore
+// quadruplerait le poids du bundle pour un gain invisible.
+const WIDTH = 1200, HEIGHT = 900, SCALE = 1;
+
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_PATH || undefined,
+  args: ['--no-sandbox'],
+});
+const page = await browser.newPage({
+  viewport: { width: WIDTH, height: HEIGHT },
+  deviceScaleFactor: SCALE,
+});
+
+const files = (await readdir(DIR)).filter(f => f.endsWith('.svg')).sort();
+for (const file of files) {
+  const svg = await readFile(join(DIR, file), 'utf8');
+  await page.setContent(
+    `<!doctype html><style>html,body{margin:0;padding:0}svg{display:block}</style>${svg}`,
+    { waitUntil: 'load' },
+  );
+  const out = join(DIR, file.replace(/\.svg$/, '.png'));
+  await page.screenshot({ path: out, omitBackground: false });
+  console.log(`${file} -> ${out.split('/').pop()}`);
+}
+
+await browser.close();
+console.log(`${files.length} vignettes rendues`);
