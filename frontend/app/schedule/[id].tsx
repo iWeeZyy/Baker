@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { theme } from '@/src/theme';
 import { ExportLayout, EXPORT_WIDTH } from '@/src/schedule/ExportLayout';
+import { ScheduleTable } from '@/src/schedule/ScheduleTable';
 import { printSchedule, saveToPhotos, shareSchedule } from '@/src/schedule/export';
 import {
   DAYS, DAY_LABELS, MAX_EMPLOYEES, addDays, dayNumbers, emptyWeek, formatHHMM,
@@ -54,6 +55,7 @@ export default function ScheduleScreen() {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ row: number; day: number } | null>(null);
+  const [view, setView] = useState<'edit' | 'preview'>('edit');
 
   const exportRef = useRef<View>(null);
 
@@ -203,6 +205,52 @@ export default function ScheduleScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      <View style={styles.viewSwitch}>
+        {([['edit', 'Saisie'], ['preview', 'Aperçu']] as ['edit' | 'preview', string][]).map(([key, label]) => (
+          <Pressable
+            key={key}
+            testID={`view-${key}`}
+            onPress={() => setView(key)}
+            style={[styles.viewBtn, view === key && styles.viewBtnOn]}
+          >
+            <Text style={[styles.viewText, view === key && styles.viewTextOn]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {view === 'preview' ? (
+        <ScrollView contentContainerStyle={styles.previewBody}>
+          {computed ? (
+            <>
+              <Text style={styles.previewTitle}>{weekTitle(weekStart)}</Text>
+              <Text style={styles.previewSub}>
+                {computed.employees.length} personne{computed.employees.length > 1 ? 's' : ''}
+                {'   ·   '}Total {formatHours(computed.grand_total_minutes)}
+              </Text>
+              {/*
+                Horizontal scrolling rather than squeezed columns: a seven-day
+                grid cannot shrink to a phone's width without becoming unreadable.
+              */}
+              <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingRight: 20 }}>
+                <ScheduleTable schedule={computed} width={1180} scale={1} />
+              </ScrollView>
+              {computed.notes ? (
+                <View style={styles.previewNote}>
+                  <Text style={styles.previewNoteLabel}>NOTE</Text>
+                  <Text style={styles.previewNoteText}>{computed.notes}</Text>
+                </View>
+              ) : null}
+              {dirty && (
+                <Text style={styles.dirtyHint}>
+                  Modifications non enregistrées : l'aperçu montre la dernière version enregistrée.
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.hint}>Enregistrez l'emploi du temps pour voir l'aperçu.</Text>
+          )}
+        </ScrollView>
+      ) : (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>SEMAINE (DIMANCHE)</Text>
@@ -414,6 +462,7 @@ export default function ScheduleScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
 
       {/*
         The export layout, rendered off-screen at a fixed size. Positioned far
@@ -438,6 +487,17 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 16, color: theme.color.onSurface },
   body: { padding: 20, paddingBottom: 60 },
+  viewSwitch: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12 },
+  viewBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
+  viewBtnOn: { backgroundColor: theme.color.brand },
+  viewText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
+  viewTextOn: { color: '#fff' },
+  previewBody: { padding: 20, paddingBottom: 60 },
+  previewTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
+  previewSub: { fontSize: 12, color: theme.color.muted, marginTop: 4, marginBottom: 16 },
+  previewNote: { marginTop: 16, borderWidth: 1, borderColor: theme.color.border, borderRadius: 8, padding: 14 },
+  previewNoteLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '700', marginBottom: 6 },
+  previewNoteText: { fontSize: 14, color: theme.color.onSurface, lineHeight: 20 },
   label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: 8 },
   hint: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic' },
   weekRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
