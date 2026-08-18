@@ -11,8 +11,9 @@ import { theme } from '@/src/theme';
 import { ExportLayout, EXPORT_WIDTH } from '@/src/schedule/ExportLayout';
 import { printSchedule, saveToPhotos, shareSchedule } from '@/src/schedule/export';
 import {
-  DAYS, DAY_LABELS, MAX_EMPLOYEES, addDays, dayNumbers, emptyWeek, formatHours,
-  sundayOf, weekTitle, type Schedule, type ScheduleDay, type ScheduleEmployee,
+  DAYS, DAY_LABELS, MAX_EMPLOYEES, addDays, dayNumbers, emptyWeek, formatHHMM,
+  formatHours, maskHHMM, parseHHMM, sundayOf, weekTitle,
+  type Schedule, type ScheduleDay, type ScheduleEmployee,
 } from '@/src/schedule/model';
 
 /** Shifts a baker actually uses, offered as one tap each. */
@@ -32,18 +33,8 @@ function toDraft(e: ScheduleEmployee): Draft {
     employee_id: e.employee_id,
     name: e.name,
     days,
-    overtime: e.overtime_minutes ? formatHours(e.overtime_minutes) : '',
+    overtime: formatHHMM(e.overtime_minutes || 0),
   };
-}
-
-/** "2:30" or "150" → minutes. Blank means none. */
-function parseOvertime(text: string): number {
-  const t = (text || '').trim();
-  if (!t) return 0;
-  const m = t.match(/^(\d{1,3})\s*[:hH]\s*(\d{1,2})?$/);
-  if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2] || '0', 10);
-  const n = parseInt(t, 10);
-  return isNaN(n) || n < 0 ? 0 : n;
 }
 
 export default function ScheduleScreen() {
@@ -94,7 +85,7 @@ export default function ScheduleScreen() {
       employee_id: r.employee_id,
       name: r.name.trim(),
       days: r.days,
-      overtime_minutes: parseOvertime(r.overtime),
+      overtime_minutes: parseHHMM(r.overtime),
     })),
   });
 
@@ -118,7 +109,7 @@ export default function ScheduleScreen() {
 
   const addRow = () => {
     if (rows.length >= MAX_EMPLOYEES) return;
-    setRows(prev => [...prev, { name: '', days: emptyWeek(), overtime: '' }]);
+    setRows(prev => [...prev, { name: '', days: emptyWeek(), overtime: '00:00' }]);
   };
 
   const patchDay = (row: number, day: number, patch: Partial<ScheduleDay>) =>
@@ -317,12 +308,14 @@ export default function ScheduleScreen() {
 
                 <View style={styles.personFooter}>
                   <View style={styles.overtimeBox}>
-                    <Text style={styles.overtimeLabel}>Heures supp.</Text>
+                    <Text style={styles.overtimeLabel}>Heures supp.{'\n'}(h:min)</Text>
                     <TextInput
                       testID={`overtime-${ri}`}
                       value={row.overtime}
-                      onChangeText={v => setRows(prev => prev.map((r, i) => (i === ri ? { ...r, overtime: v } : r)))}
-                      placeholder="0:00" placeholderTextColor={theme.color.muted} style={styles.overtimeInput}
+                      onChangeText={v => setRows(prev => prev.map((r, i) => (i === ri ? { ...r, overtime: maskHHMM(v) } : r)))}
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                      style={styles.overtimeInput}
                     />
                   </View>
                   <Text style={styles.personTotal}>
@@ -390,7 +383,7 @@ export default function ScheduleScreen() {
               )}
               <View style={styles.exportRow}>
                 {([
-                  ['photos', 'image', 'Photos', () => saveToPhotos(exportRef)],
+                  ['photos', 'image', 'Photos', (s: Schedule) => saveToPhotos(exportRef, s)],
                   ['print', 'printer', 'Imprimer', (s: Schedule) => printSchedule(s)],
                   ['share', 'share', 'Partager', (s: Schedule) => shareSchedule(exportRef, s)],
                 ] as const).map(([key, icon, label, action]) => (
@@ -476,7 +469,7 @@ const styles = StyleSheet.create({
   personFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   overtimeBox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   overtimeLabel: { fontSize: 11, color: theme.color.muted },
-  overtimeInput: { width: 64, fontSize: 14, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 6, paddingVertical: 8, textAlign: 'center' },
+  overtimeInput: { width: 74, fontSize: 14, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 6, paddingVertical: 8, textAlign: 'center' },
   personTotal: { fontFamily: theme.serif, fontSize: 20, color: theme.color.brand },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: theme.color.borderStrong },
   addBtnText: { fontSize: 14, color: theme.color.brand, fontWeight: '600' },
@@ -500,5 +493,7 @@ const styles = StyleSheet.create({
   secondaryText: { fontSize: 14, color: theme.color.onSurface, fontWeight: '600' },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 4 },
   deleteText: { color: theme.color.error, fontSize: 13, fontWeight: '600' },
-  offscreen: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
+  // Off-screen rather than transparent: html2canvas honours opacity, so an
+  // opacity of 0 would capture a blank image.
+  offscreen: { position: 'absolute', left: -20000, top: 0 },
 });

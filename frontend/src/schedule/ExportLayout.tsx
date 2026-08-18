@@ -1,14 +1,16 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { DAY_LABELS, DAYS, cellText, dayNumbers, formatHours, weekTitle, type Schedule } from './model';
+import { DAY_LABELS_LONG, DAYS, dayNumbers, formatHours, weekTitle, type Schedule } from './model';
 
 /** Fixed pixel width: the capture must not depend on the phone's screen size. */
-export const EXPORT_WIDTH = 1400;
+export const EXPORT_WIDTH = 1800;
 
-const NAME_W = 210;
-const TOTAL_W = 120;
+const NAME_W = 150;
+const TOTAL_W = 86;
+const BORDER = '#000';
 
 /**
- * The schedule as a standalone image.
+ * The schedule as a standalone image, laid out like the printed sheet:
+ * three columns per day (start, end, hours) rather than a packed range.
  *
  * Rendered off-screen at a fixed width and captured with `react-native-view-shot`,
  * so what lands in Photos is the grid alone — no navigation, no buttons, no
@@ -17,10 +19,14 @@ const TOTAL_W = 120;
 export function ExportLayout({ schedule }: { schedule: Schedule }) {
   const numbers = dayNumbers(schedule.week_start);
   const anyOvertime = schedule.employees.some(e => (e.overtime_minutes || 0) > 0);
-  const dayW = (EXPORT_WIDTH - NAME_W - TOTAL_W * (anyOvertime ? 2 : 1) - 48) / DAYS;
 
-  const Cell = ({ text, w, off, bold, head }: { text: string; w: number; off?: boolean; bold?: boolean; head?: boolean }) => (
-    <View style={[styles.cell, { width: w }, head && styles.headCell, off && styles.offCell]}>
+  const grid = EXPORT_WIDTH - 32 - NAME_W - TOTAL_W * (anyOvertime ? 2 : 1);
+  const dayW = grid / DAYS;
+  const timeW = dayW * 0.36;
+  const hoursW = dayW - timeW * 2;
+
+  const Cell = ({ text, w, style, bold = true }: any) => (
+    <View style={[styles.cell, { width: w }, style]}>
       <Text style={[styles.cellText, bold && styles.bold]} numberOfLines={1}>{text}</Text>
     </View>
   );
@@ -28,23 +34,27 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
   return (
     <View style={styles.page}>
       <Text style={styles.title}>{weekTitle(schedule.week_start)}</Text>
-      <Text style={styles.subtitle}>
-        Emploi du temps du personnel — {schedule.employees.length} personne
-        {schedule.employees.length > 1 ? 's' : ''} · total {formatHours(schedule.grand_total_minutes)}
-      </Text>
 
+      {/* Header: day name and number, then the three sub-columns. */}
       <View style={styles.row}>
-        <View style={[styles.cell, styles.headCell, styles.nameCell, { width: NAME_W }]}>
+        <View style={[styles.cell, styles.nameCell, { width: NAME_W, height: 76 }]}>
           <Text style={[styles.cellText, styles.bold]}>Nom</Text>
         </View>
-        {DAY_LABELS.map((label, i) => (
-          <View key={label} style={[styles.cell, styles.headCell, { width: dayW }]}>
-            <Text style={[styles.cellText, styles.bold]}>{label}</Text>
-            <Text style={styles.dayNum}>{numbers[i]}</Text>
+        {DAY_LABELS_LONG.map((label, i) => (
+          <View key={label} style={{ width: dayW }}>
+            <View style={[styles.cell, { width: dayW, height: 46, marginBottom: 0 }]}>
+              <Text style={[styles.cellText, styles.bold]}>{label}</Text>
+              <Text style={styles.dayNum}>{numbers[i]}</Text>
+            </View>
+            <View style={styles.row}>
+              <Cell text="Début" w={timeW} style={{ height: 30 }} bold={false} />
+              <Cell text="Fin" w={timeW} style={{ height: 30 }} bold={false} />
+              <Cell text="Heures" w={hoursW} style={{ height: 30 }} bold={false} />
+            </View>
           </View>
         ))}
-        {anyOvertime && <Cell text="Supp." w={TOTAL_W} head bold />}
-        <Cell text="Total" w={TOTAL_W} head bold />
+        {anyOvertime && <Cell text="Supp." w={TOTAL_W} style={{ height: 76 }} />}
+        <Cell text="Total" w={TOTAL_W} style={{ height: 76 }} />
       </View>
 
       {schedule.employees.map((e) => (
@@ -54,29 +64,45 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
           </View>
           {Array.from({ length: DAYS }, (_, i) => {
             const day = e.days[i] || null;
-            return <Cell key={i} text={cellText(day)} w={dayW} off={!!day?.off} />;
+            if (day?.off) {
+              return (
+                <View key={i} style={styles.row}>
+                  <Cell text="" w={timeW * 2} style={styles.off} />
+                  <Cell text="0:00" w={hoursW} style={styles.offHours} />
+                </View>
+              );
+            }
+            const worked = day?.minutes || 0;
+            return (
+              <View key={i} style={styles.row}>
+                <Cell text={day?.start || ''} w={timeW} bold={false} />
+                <Cell text={day?.end || ''} w={timeW} bold={false} />
+                <Cell text={worked ? formatHours(worked) : ''} w={hoursW} />
+              </View>
+            );
           })}
-          {anyOvertime && (
-            <Cell text={e.overtime_minutes ? formatHours(e.overtime_minutes) : ''} w={TOTAL_W} bold />
-          )}
-          <Cell text={formatHours(e.total_minutes ?? 0)} w={TOTAL_W} bold />
+          {anyOvertime && <Cell text={e.overtime_minutes ? formatHours(e.overtime_minutes) : ''} w={TOTAL_W} />}
+          <Cell text={formatHours(e.total_minutes ?? 0)} w={TOTAL_W} />
         </View>
       ))}
 
-      <View style={[styles.row, styles.totalsRow]}>
+      <View style={styles.row}>
         <View style={[styles.cell, styles.nameCell, { width: NAME_W }]}>
           <Text style={[styles.cellText, styles.bold]}>Total / jour</Text>
         </View>
         {schedule.day_totals.map((m, i) => (
-          <Cell key={i} text={formatHours(m)} w={dayW} bold />
+          <View key={i} style={styles.row}>
+            <Cell text="" w={timeW * 2} bold={false} />
+            <Cell text={formatHours(m)} w={hoursW} />
+          </View>
         ))}
         {anyOvertime && <Cell text="" w={TOTAL_W} />}
-        <Cell text={formatHours(schedule.grand_total_minutes)} w={TOTAL_W} bold />
+        <Cell text={formatHours(schedule.grand_total_minutes)} w={TOTAL_W} />
       </View>
 
-      <View style={styles.note}>
-        <Text style={styles.noteLabel}>NOTE</Text>
-        <Text style={styles.noteText}>{schedule.notes?.trim() || '—'}</Text>
+      <View style={styles.noteHead}><Text style={[styles.cellText, styles.bold]}>NOTE</Text></View>
+      <View style={styles.noteBody}>
+        <Text style={styles.noteText}>{schedule.notes?.trim() || ''}</Text>
       </View>
     </View>
   );
@@ -86,23 +112,21 @@ export function ExportLayout({ schedule }: { schedule: Schedule }) {
 // shared, so it stays high-contrast black on white rather than following the
 // app's warm palette.
 const styles = StyleSheet.create({
-  page: { width: EXPORT_WIDTH, backgroundColor: '#FFFFFF', padding: 24 },
-  title: { fontSize: 30, fontWeight: '700', color: '#111', marginBottom: 4 },
-  subtitle: { fontSize: 15, color: '#666', marginBottom: 18 },
+  page: { width: EXPORT_WIDTH, backgroundColor: '#FFFFFF', padding: 16 },
+  title: { fontSize: 26, fontWeight: '700', color: '#000', marginBottom: 12, textAlign: 'center' },
   row: { flexDirection: 'row' },
   cell: {
-    minHeight: 46, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#999', marginRight: -1, marginBottom: -1,
-    paddingHorizontal: 4, backgroundColor: '#FFFFFF',
+    height: 42, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: BORDER, marginRight: -1, marginBottom: -1,
+    paddingHorizontal: 2, backgroundColor: '#FFFFFF',
   },
-  nameCell: { alignItems: 'flex-start', paddingLeft: 10 },
-  headCell: { backgroundColor: '#ECECEC' },
-  offCell: { backgroundColor: '#D6D6D6' },
-  totalsRow: { marginTop: 0 },
-  cellText: { fontSize: 16, color: '#111' },
+  nameCell: { alignItems: 'flex-start', paddingLeft: 8 },
+  off: { backgroundColor: '#B8B8B8' },
+  offHours: { backgroundColor: '#D8D8D8' },
+  cellText: { fontSize: 15, color: '#000' },
   bold: { fontWeight: '700' },
-  dayNum: { fontSize: 12, color: '#555' },
-  note: { marginTop: 20, borderWidth: 1, borderColor: '#999', padding: 12, minHeight: 70 },
-  noteLabel: { fontSize: 11, letterSpacing: 2, color: '#666', marginBottom: 6 },
-  noteText: { fontSize: 15, color: '#111', lineHeight: 21 },
+  dayNum: { fontSize: 12, color: '#000' },
+  noteHead: { borderWidth: 1, borderColor: BORDER, alignItems: 'center', paddingVertical: 6, marginTop: 14 },
+  noteBody: { borderWidth: 1, borderColor: BORDER, borderTopWidth: 0, minHeight: 90, padding: 12, alignItems: 'center' },
+  noteText: { fontSize: 16, color: '#000', lineHeight: 22 },
 });
