@@ -13,7 +13,8 @@
       "bundleIdentifier": "com.lucasmorey.bakers",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choisir une photo pour votre recette",
-        "NSCameraUsageDescription": "Prendre une photo de votre recette"
+        "NSCameraUsageDescription": "Prendre une photo de votre recette",
+        "NSPhotoLibraryAddUsageDescription": "Enregistrer l'emploi du temps de votre équipe dans vos photos"
       }
     },
     "android": {
@@ -46,7 +47,15 @@
           "backgroundColor": "#000000"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Choisir une photo pour votre recette",
+          "savePhotosPermission": "Enregistrer l'emploi du temps de votre équipe dans vos photos",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

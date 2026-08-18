@@ -28,6 +28,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
+import staff
 from plans import resolve_plan, limits_for, production_quota, ads_config
 
 # ---------- Config ----------
@@ -196,6 +197,22 @@ class ProductionInput(BaseModel):
 class StepPatchInput(BaseModel):
     status: Optional[str] = None
     duration_minutes: Optional[int] = None
+
+class ScheduleDayInput(BaseModel):
+    off: bool = False
+    start: str = ""
+    end: str = ""
+
+class ScheduleEmployeeInput(BaseModel):
+    employee_id: Optional[str] = None
+    name: str = ""
+    days: List[Optional[ScheduleDayInput]] = Field(default_factory=list)
+    overtime_minutes: int = 0
+
+class ScheduleInput(BaseModel):
+    week_start: str  # YYYY-MM-DD, the Sunday that opens the week
+    notes: str = ""
+    employees: List[ScheduleEmployeeInput] = Field(default_factory=list)
 
 # ---------- Auth Endpoints ----------
 @api_router.post("/auth/register", response_model=AuthResponse)
@@ -981,6 +998,137 @@ async def update_production_step(
     )
     return _production_detail(doc)
 
+# ---------- Staff schedules ----------
+def _validate_week_start(value: str) -> str:
+    """The week always opens on a Sunday, matching the printed grid."""
+    try:
+        d = datetime.strptime(value, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        raise HTTPException(422, "Date invalide (format attendu : AAAA-MM-JJ)")
+    # Monday is 0 in Python; Sunday is 6.
+    if d.weekday() != 6:
+        raise HTTPException(422, "La semaine doit commencer un dimanche")
+    return value
+
+def _build_schedule_employees(inp: ScheduleInput) -> list:
+    if len(inp.employees) > staff.MAX_EMPLOYEES:
+        raise HTTPException(422, f"{staff.MAX_EMPLOYEES} personnes au maximum")
+
+    employees = []
+    for item in inp.employees:
+        name = (item.name or "").strip()
+        if not name:
+            raise HTTPException(422, "Chaque personne doit avoir un nom")
+        if item.overtime_minutes < 0:
+            raise HTTPException(422, "Les heures supplémentaires ne peuvent pas être négatives")
+
+        days = [(d.model_dump() if d else None) for d in item.days][:staff.DAYS]
+        days += [None] * (staff.DAYS - len(days))
+        for day in days:
+            # Refuse unreadable times here rather than storing a cell that would
+            # silently count as zero hours in every total downstream.
+            if day and not day.get("off") and (day.get("start") or day.get("end")):
+                if staff.shift_minutes(day.get("start", ""), day.get("end", "")) is None:
+                    raise HTTPException(422, f"Horaire invalide pour {name} (format attendu : 8:00)")
+
+        employees.append({
+            "employee_id": item.employee_id or str(uuid.uuid4()),
+            "name": name,
+            "days": days,
+            "overtime_minutes": int(item.overtime_minutes),
+        })
+    return employees
+
+def _schedule_detail(doc: dict) -> dict:
+    doc.pop("_id", None)
+    return {**doc, **staff.summarize(doc.get("employees"))}
+
+def _schedule_summary(doc: dict) -> dict:
+    computed = staff.summarize(doc.get("employees"))
+    return {
+        "id": doc["id"],
+        "week_start": doc.get("week_start"),
+        "notes": doc.get("notes", ""),
+        "employee_count": len(doc.get("employees") or []),
+        "grand_total_minutes": computed["grand_total_minutes"],
+        "updated_at": doc.get("updated_at"),
+    }
+
+@api_router.get("/schedules")
+async def list_schedules(user: dict = Depends(get_current_user)):
+    docs = await db.schedules.find({"user_id": user["user_id"]}, {"_id": 0}).sort("week_start", -1).to_list(200)
+    return [_schedule_summary(d) for d in docs]
+
+@api_router.post("/schedules")
+async def create_schedule(inp: ScheduleInput, user: dict = Depends(get_current_user)):
+    week_start = _validate_week_start(inp.week_start)
+    employees = _build_schedule_employees(inp)
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "week_start": week_start,
+        "notes": (inp.notes or "").strip(),
+        "employees": employees,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.schedules.insert_one(doc)
+    return _schedule_detail(doc)
+
+@api_router.get("/schedules/{schedule_id}")
+async def get_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
+    doc = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Emploi du temps introuvable")
+    return _schedule_detail(doc)
+
+@api_router.put("/schedules/{schedule_id}")
+async def update_schedule(schedule_id: str, inp: ScheduleInput, user: dict = Depends(get_current_user)):
+    existing = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Emploi du temps introuvable")
+    update = {
+        "week_start": _validate_week_start(inp.week_start),
+        "notes": (inp.notes or "").strip(),
+        "employees": _build_schedule_employees(inp),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    await db.schedules.update_one({"id": schedule_id, "user_id": user["user_id"]}, {"$set": update})
+    return _schedule_detail({**existing, **update})
+
+@api_router.delete("/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
+    res = await db.schedules.delete_one({"id": schedule_id, "user_id": user["user_id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Emploi du temps introuvable")
+    return {"status": "deleted"}
+
+@api_router.post("/schedules/{schedule_id}/duplicate")
+async def duplicate_schedule(schedule_id: str, inp: dict = None, user: dict = Depends(get_current_user)):
+    """Copy a week onto another one, keeping names, shifts and days off."""
+    source = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not source:
+        raise HTTPException(404, "Emploi du temps introuvable")
+
+    week_start = _validate_week_start((inp or {}).get("week_start") or "")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["user_id"],
+        "week_start": week_start,
+        # The note belongs to its week ("Armand off jeudi"), so it is not copied.
+        "notes": "",
+        "employees": [
+            {**e, "employee_id": str(uuid.uuid4())}
+            for e in (source.get("employees") or [])
+        ],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.schedules.insert_one(doc)
+    return _schedule_detail(doc)
+
 # ---------- Tips ----------
 @api_router.get("/tips")
 async def list_tips(category: Optional[str] = None):
@@ -1105,6 +1253,7 @@ async def startup():
     await db.productions.create_index([("user_id", 1), ("date", -1)])
     # Backs the monthly Free-plan count.
     await db.productions.create_index([("user_id", 1), ("created_at", -1)])
+    await db.schedules.create_index([("user_id", 1), ("week_start", -1)])
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on

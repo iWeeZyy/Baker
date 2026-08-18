@@ -60,7 +60,7 @@ Everything (models, auth, all routes, startup seeding) lives in this one ~600-li
 - **Auth**: hand-rolled JWT (HMAC-SHA256 over base64url header/payload, `sign_jwt`/`verify_jwt`), not a third-party library. `get_current_user` is the single dependency every protected route uses. Passwords are bcrypt-hashed. There is no token revocation — logout is client-side only (stateless JWT).
 - **Storage**: `put_object`/`get_object` in the "Storage Helpers" section write/read files under `backend/uploads/`, keyed by an app-generated path (`bakers-app/uploads/{user_id}/{uuid}.{ext}`). `_resolve_upload_path` guards against path traversal on the `/api/files/{path:path}` download route — keep that guard if you touch storage.
 - **AI chat**: `/api/chat` calls the Anthropic API directly (`anthropic.AsyncAnthropic`, model `claude-sonnet-5`). It's stateless per-request — conversation history is reconstructed on every call by reading recent `db.chat_messages` for the `(user_id, session_id)` pair and replaying them as the `messages` array. Returns 503 if `ANTHROPIC_API_KEY` isn't set.
-- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`, `productions`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
+- **Data model**: MongoDB, no ORM, plain dicts. Collections: `users`, `recipes`, `favorites`, `likes`, `comments`, `notes`, `friendships`, `friend_requests`, `messages`, `chat_messages`, `tips`, `productions`, `schedules`. Indexes and demo-data seeding (20 recipes, 8 tips from `seed_data.py`) happen in the `startup` event handler, once, when `recipes` is empty.
 - Recipes carry a computed `like_count` / `coup_de_coeur` (top-5-liked badge) via `enrich_recipes`, applied after every recipe fetch.
 - Friends/messaging require an accepted friendship (`_are_friends`) before messages can be exchanged; friend pairs are stored as a sorted 2-element array so either ordering matches.
 
@@ -72,6 +72,17 @@ A production is a planned baking day: recipes + quantities, back-planned from a 
 - `plans.py` — the Free/Pro limits (`PLAN_LIMITS`) and `resolve_plan`. Free = 3 productions/month. There is **no billing provider**: Pro is granted by the `PRO_EMAILS` env var (comma-separated). Enforcement is server-side in `_enforce_production_quota`, which raises a 403 carrying a structured `{"error": "plan_limit_reached", ...}` body so the app can open the Pro screen instead of showing an error.
 - Productions **snapshot** the recipe's ingredients, steps and `yield_pieces` at creation, so editing a recipe never rewrites a planning already in use. `_carry_over_step_state` re-matches steps by `(recipe_id, order)` on update, preserving tick status and manually-entered durations.
 - Recipes have an optional `yield_pieces` (pieces per batch). When it's absent, quantities fall back to "fournées" — never to an invented piece count.
+
+### Staff schedules — `backend/staff.py`, `frontend/src/schedule/`
+
+A weekly grid of up to 15 people, Sunday to Saturday, with automatic hour totals. It lives under the **Planning** tab (a `Production` / `Personnel` segment), not a seventh tab.
+
+- `staff.py` — pure functions, like `production.py`. Everything is counted in **minutes** and only formatted at the edges, so totals stay exact. A shift whose end is before its start has crossed midnight (`22:00 → 6:00` is 8 h). An empty cell, a day off and an unreadable time are three distinct states and stay distinguishable — an invalid time is rejected at the API rather than silently counted as zero.
+- **Overtime is typed in by hand**, never derived: Baker is not told what a normal week is, and a guessed threshold would produce figures a manager could not justify. `total = worked + overtime`.
+- Weeks must start on a Sunday (`_validate_week_start`), which is what makes the printed grid line up. `POST /api/schedules/{id}/duplicate` copies a week onto another one; the note is deliberately *not* copied, since it describes its own week.
+- **Two export layouts, on purpose** (`frontend/src/schedule/`): `ExportLayout.tsx` is captured by `react-native-view-shot` into a PNG for Photos and sharing, at a fixed 1400 px so the result never depends on screen size; `printHtml.ts` builds A4-landscape HTML for `expo-print`, because a 15-row table rasterised at phone resolution is unreadable on paper. Both are black-on-white rather than themed, and carry no app chrome. User text is escaped in the HTML (`escapeHtml`).
+- `export.ts` holds all three actions and never throws into the render tree — each returns `{ok, message}`. Photos is native-only, so the web build says so plainly instead of failing silently; a permanently denied permission offers Settings rather than a pointless retry.
+- Exports always run against the **saved** schedule, so an image can never show figures the server has not computed. The buttons are disabled while there are unsaved edits.
 
 ### Advertising — `backend/plans.py` (`ads_config`), `frontend/src/ads/`
 

@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { usePlan } from '@/src/plan';
+import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { theme } from '@/src/theme';
 
 type ProductionRow = {
@@ -30,16 +31,22 @@ export function formatDate(iso: string) {
   return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+type Mode = 'production' | 'staff';
+
 export default function Planning() {
   const router = useRouter();
   const { plan, reload: reloadPlan } = usePlan();
+  const [mode, setMode] = useState<Mode>('production');
   const [productions, setProductions] = useState<ProductionRow[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setProductions(await api('/productions'));
+      const [prod, sched] = await Promise.all([api('/productions'), api('/schedules')]);
+      setProductions(prod);
+      setSchedules(sched);
       setError(null);
     } catch (e: any) {
       setError(e.message || 'Impossible de charger le planning');
@@ -105,7 +112,20 @@ export default function Planning() {
           <Text style={styles.title}>Planning</Text>
         </View>
 
-        {plan && plan.productions_limit != null && (
+        <View style={styles.segment}>
+          {([['production', 'Production'], ['staff', 'Personnel']] as [Mode, string][]).map(([key, label]) => (
+            <Pressable
+              key={key}
+              testID={`mode-${key}`}
+              onPress={() => setMode(key)}
+              style={[styles.segBtn, mode === key && styles.segBtnOn]}
+            >
+              <Text style={[styles.segText, mode === key && styles.segTextOn]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {mode === 'production' && plan && plan.productions_limit != null && (
           <Pressable
             testID="quota-banner"
             onPress={() => router.push('/pro' as any)}
@@ -131,6 +151,39 @@ export default function Planning() {
               <Text style={styles.retryText}>Réessayer</Text>
             </Pressable>
           </View>
+        ) : mode === 'staff' ? (
+          schedules.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Feather name="users" size={38} color={theme.color.muted} />
+              <Text style={styles.emptyTitle}>Aucun emploi du temps</Text>
+              <Text style={styles.emptyText}>
+                Planifiez la semaine de votre équipe :{'\n'}
+                Bakers calcule les heures de chacun et le total.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              {schedules.map(s => (
+                <Pressable
+                  key={s.id}
+                  testID={`schedule-${s.id}`}
+                  onPress={() => router.push(`/schedule/${s.id}` as any)}
+                  style={styles.card}
+                >
+                  <Text style={styles.cardDate}>{weekTitle(s.week_start)}</Text>
+                  <View style={styles.cardMetaRow}>
+                    <Text style={styles.cardMeta}>
+                      {s.employee_count} personne{s.employee_count > 1 ? 's' : ''}
+                    </Text>
+                    <Text style={styles.cardMeta}>{formatHours(s.grand_total_minutes)} au total</Text>
+                  </View>
+                  {s.notes ? (
+                    <Text style={styles.cardMeta} numberOfLines={1}>{s.notes}</Text>
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          )
         ) : productions.length === 0 ? (
           <View style={styles.emptyBox}>
             <Feather name="calendar" size={38} color={theme.color.muted} />
@@ -159,12 +212,12 @@ export default function Planning() {
       </ScrollView>
 
       <Pressable
-        testID="new-production"
-        onPress={() => router.push('/production/new' as any)}
+        testID={mode === 'staff' ? 'new-schedule' : 'new-production'}
+        onPress={() => router.push((mode === 'staff' ? '/schedule/new' : '/production/new') as any)}
         style={styles.fab}
       >
         <Feather name="plus" size={20} color="#fff" />
-        <Text style={styles.fabText}>Nouvelle production</Text>
+        <Text style={styles.fabText}>{mode === 'staff' ? 'Nouvel emploi du temps' : 'Nouvelle production'}</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -178,6 +231,11 @@ const styles = StyleSheet.create({
   quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8 },
   quotaText: { flex: 1, fontSize: 12, color: theme.color.onSurfaceSecondary },
   quotaLink: { fontSize: 12, color: theme.color.brand, fontWeight: '700' },
+  segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginTop: 12 },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
+  segBtnOn: { backgroundColor: theme.color.brand },
+  segText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
+  segTextOn: { color: '#fff' },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 12 },
   card: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
