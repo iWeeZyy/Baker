@@ -100,7 +100,9 @@ export default function Home() {
             <Text style={styles.sectionTitle}>Astuces du jour</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}>
-            {tips.slice(0, 6).map(t => (
+            {/* All of them, not the first six: the carousel already scrolls,
+                and a tip nobody can reach is a tip that was not added. */}
+            {tips.map(t => (
               <View key={t.id} style={styles.tipCard} testID={`tip-${t.id}`}>
                 <View style={styles.tipIcon}><Feather name={(t.icon as any) || 'star'} size={16} color={theme.color.brand} /></View>
                 <Text style={styles.tipCat}>{t.category.toUpperCase()}</Text>

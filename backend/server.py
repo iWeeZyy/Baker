@@ -139,6 +139,13 @@ class Recipe(BaseModel):
     # How many pieces one batch produces. Optional: when absent, production
     # planning falls back to counting batches rather than inventing a yield.
     yield_pieces: Optional[int] = None
+    # Professional sheet: yield_label, prep, pointage, detente, appret, cuisson,
+    # conservation, dough_temp, oven, equipment[]. Kept as one optional object
+    # rather than a dozen loose fields, and absent means "not stated" — the book
+    # is never guessed at.
+    technical: Optional[dict] = None
+    # The work this recipe was taken from, credited on the recipe screen.
+    source: Optional[str] = None
     image_url: str = ""
     image_path: Optional[str] = None
     description: str
@@ -157,6 +164,8 @@ class RecipeCreateInput(BaseModel):
     time_minutes: int
     hydration: int = 0
     yield_pieces: Optional[int] = None
+    technical: Optional[dict] = None
+    source: Optional[str] = None
     description: str
     ingredients: List[str]
     steps: List[str]
@@ -1276,11 +1285,16 @@ async def startup():
         )
     logger.info(f"Synced {len(RECIPES_SEED)} built-in recipes")
 
-    tip_count = await db.tips.count_documents({})
-    if tip_count == 0:
-        tips = [{"id": str(uuid.uuid4()), **t} for t in TIPS_SEED]
-        await db.tips.insert_many(tips)
-        logger.info(f"Seeded {len(tips)} tips")
+    # Tips are synced the same way as recipes rather than seeded once: a tip
+    # added to TIPS_SEED would otherwise never reach a database that already
+    # holds the first batch.
+    for t in TIPS_SEED:
+        await db.tips.update_one(
+            {"title": t["title"]},
+            {"$set": t, "$setOnInsert": {"id": str(uuid.uuid4())}},
+            upsert=True,
+        )
+    logger.info(f"Synced {len(TIPS_SEED)} tips")
 
     await _seed_demo_bots()
 
