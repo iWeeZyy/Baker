@@ -73,6 +73,14 @@ function dayLabel(iso: string, productionDate: string): string | null {
   return day < productionDate ? 'la veille' : 'le lendemain';
 }
 
+/** French decimals use a comma: 6.667 reads as "6,667". */
+const fr = (n: number) => String(n).replace('.', ',');
+
+/** A batch multiplier, at most two decimals: 13.3333 reads as "13,33". */
+function formatDecimal(n: number) {
+  return fr(Number(n.toFixed(2)));
+}
+
 function formatMinutes(m: number) {
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
@@ -188,14 +196,27 @@ export default function ProductionDetail() {
   const doneCount = data.steps.filter(s => s.status === 'done').length;
   const missing = new Set(data.missing_durations);
 
-  // When times exist, chronology is the only order that makes sense in a
-  // kitchen; without them, steps stay grouped recipe by recipe.
+  /**
+   * Chronological order, with undated steps kept where they belong.
+   *
+   * A step with no duration leaves everything before it in its recipe undated
+   * too. Sorting on the timestamp alone would dump that whole run at the
+   * bottom — putting the autolyse *after* the bake. Undated steps therefore
+   * borrow their recipe's earliest known time, and the recipe's own order
+   * breaks the tie, which is chronological by construction.
+   */
+  const anchors = new Map<string, string>();
+  for (const s of data.steps) {
+    const t = s.start_at || s.end_at;
+    if (!t) continue;
+    const current = anchors.get(s.line_id);
+    if (!current || t < current) anchors.set(s.line_id, t);
+  }
+
   const orderedSteps = [...data.steps].sort((a, b) => {
-    const ta = a.start_at || a.end_at;
-    const tb = b.start_at || b.end_at;
-    if (ta && tb && ta !== tb) return ta < tb ? -1 : 1;
-    if (ta && !tb) return -1;
-    if (!ta && tb) return 1;
+    const ta = a.start_at || a.end_at || anchors.get(a.line_id) || '';
+    const tb = b.start_at || b.end_at || anchors.get(b.line_id) || '';
+    if (ta !== tb) return ta < tb ? -1 : 1;
     if (a.line_id !== b.line_id) return a.line_id < b.line_id ? -1 : 1;
     return a.order - b.order;
   });
@@ -265,7 +286,7 @@ export default function ProductionDetail() {
                   <Text style={styles.lineTitle}>{l.recipe_title}</Text>
                   <Text style={styles.lineMeta}>
                     {l.mode === 'pieces'
-                      ? `${l.quantity} pièces · ${l.batches.toFixed(2).replace(/\.?0+$/, '')} fournée${l.batches > 1 ? 's' : ''}`
+                      ? `${l.quantity} pièces · ${formatDecimal(l.batches)} fournée${l.batches > 1 ? 's' : ''}`
                       : `${l.quantity} fournée${l.quantity > 1 ? 's' : ''}${l.yield_pieces ? ` · ${Math.round(l.batches * l.yield_pieces)} pièces` : ''}`}
                   </Text>
                 </View>
@@ -306,7 +327,7 @@ export default function ProductionDetail() {
                 {data.ingredients.items.map(item => (
                   <View key={`${item.name}-${item.unit}`} style={styles.ingRow} testID={`ing-${item.name}`}>
                     <Text style={styles.ingName}>{item.name}</Text>
-                    <Text style={styles.ingQty}>{item.quantity} {item.unit}</Text>
+                    <Text style={styles.ingQty}>{fr(item.quantity)} {item.unit}</Text>
                   </View>
                 ))}
 
