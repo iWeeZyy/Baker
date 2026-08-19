@@ -31,9 +31,10 @@ TIP_CATEGORIES = {
 # Les clés que la fiche technique sait afficher. Une clé inconnue serait
 # silencieusement invisible à l'écran, ce qui est pire qu'une donnée absente.
 TECHNICAL_KEYS = {
-    "yield_label", "prep", "petrissage", "tourage", "pointage", "detente",
-    "appret", "repos", "refrigeration", "congelation", "maceration", "cuisson",
-    "oven", "dough_temp", "conservation", "accompagnement", "equipment",
+    "yield_label", "prep", "trempage", "petrissage", "autolyse", "tourage",
+    "fermentation", "pointage", "detente", "appret", "repos", "refrigeration",
+    "congelation", "maceration", "cuisson", "oven", "dough_temp",
+    "conservation", "accompagnement", "equipment",
 }
 
 TEMPERATURE = re.compile(r"(\d+)\s*°\s*C")
@@ -77,14 +78,15 @@ class TestRecipesCoherent:
 
     @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
     def test_temperatures_plausibles(self, r):
-        # Un four de boulangerie va de la meringue séchée à 90 °C au pain à
-        # 250 °C ; une pâte se travaille au-dessus de 0. Hors de ces bornes,
-        # c'est une erreur de lecture, pas une recette.
+        # Un four de boulangerie va de la meringue séchée à 90 °C à la baguette
+        # enfournée à 270 °C ; une pâte se travaille au-dessus de 0. Au-delà de
+        # 300 °C, plus rien ne cuit dans un fournil : c'est une erreur de
+        # lecture, pas une recette.
         for text in r["steps"] + list((r.get("technical") or {}).values()):
             if not isinstance(text, str):
                 continue
             for value in TEMPERATURE.findall(text):
-                assert 0 < int(value) <= 260, f"{value} °C dans « {text[:60]} »"
+                assert 0 < int(value) <= 300, f"{value} °C dans « {text[:60]} »"
 
     @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
     def test_rendement_coherent(self, r):

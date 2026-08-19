@@ -14,7 +14,10 @@ import type { ImageSourcePropType } from 'react-native';
  * `scripts/build-family-tiles.mjs`.
  */
 export type FamilyKey =
-  | 'pains'
+  | 'pains-classiques'
+  | 'pains-speciaux'
+  | 'levains'
+  | 'snacking'
   | 'feuilletees'
   | 'brioches'
   | 'pates-tourees'
@@ -43,7 +46,10 @@ export type Family = {
 const AUTRES = require('../assets/images/families/autres.png');
 
 export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
-  'pains': require('../assets/images/families/pains.png'),
+  'pains-classiques': require('../assets/images/families/pains-classiques.png'),
+  'pains-speciaux': require('../assets/images/families/pains-speciaux.png'),
+  'levains': require('../assets/images/families/levains.png'),
+  'snacking': require('../assets/images/families/snacking.png'),
   'feuilletees': require('../assets/images/families/feuilletees.png'),
   'brioches': require('../assets/images/families/brioches.png'),
   'pates-tourees': require('../assets/images/families/pates-tourees.png'),
