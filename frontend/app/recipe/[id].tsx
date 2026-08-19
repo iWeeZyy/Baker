@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
+import { scaleIngredientLine } from '@/src/ingredientScale';
+import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
 type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
@@ -117,6 +119,7 @@ export default function RecipeDetail() {
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [costInfo, setCostInfo] = useState<{ available: boolean; cost_per_piece?: number } | null>(null);
 
   const loadCommunity = useCallback(async () => {
     try {
@@ -135,6 +138,9 @@ export default function RecipeDetail() {
         const r = await api(`/recipes/${id}`);
         setRecipe(r);
         try { const f = await api(`/recipes/${id}/favorite`); setFavorited(f.favorited); } catch {}
+        // Le badge de coût est un bonus d'affichage : son échec ne doit jamais
+        // bloquer le chargement de la fiche elle-même.
+        api(`/recipes/${id}/cost`).then(setCostInfo).catch(() => setCostInfo(null));
         await loadCommunity();
       } finally { setLoading(false); }
     })();
@@ -163,6 +169,16 @@ export default function RecipeDetail() {
   const saveNote = async () => {
     try { await api(`/recipes/${id}/note`, { method: 'PUT', body: JSON.stringify({ content: note }) }); setNoteSaved(true); } catch {}
   };
+
+  // Affichage et calculs uniquement : la recette d'origine (recipe.ingredients)
+  // n'est jamais réécrite, donc revenir à 1 rend exactement les quantités de
+  // départ, sans multiplication cumulative possible.
+  const [quantity, setQuantity] = useState(1);
+  useEffect(() => { setQuantity(1); }, [id]);
+  const scaledIngredients = useMemo(
+    () => ((recipe?.ingredients as string[] | undefined) ?? []).map((line) => scaleIngredientLine(line, quantity)),
+    [recipe, quantity],
+  );
 
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
@@ -217,6 +233,19 @@ export default function RecipeDetail() {
 
         <Text style={styles.description}>{recipe.description}</Text>
 
+        <QuantitySelector testID="quantity-selector" value={quantity} onChange={setQuantity} />
+
+        <Pressable testID="cost-btn" onPress={() => router.push(`/cost/${id}`)} style={styles.costBtn}>
+          <Text style={styles.costBtnEmoji}>💰</Text>
+          <Text style={styles.costBtnText}>Calculer le coût</Text>
+          {costInfo?.available && costInfo.cost_per_piece != null && (
+            <Text testID="cost-badge" style={styles.costBadge}>
+              {costInfo.cost_per_piece.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} €/pièce
+            </Text>
+          )}
+          <Feather name="chevron-right" size={16} color={theme.color.muted} />
+        </Pressable>
+
         <TechnicalSheet technical={recipe.technical} source={recipe.source} />
 
         <View style={styles.segment}>
@@ -232,7 +261,7 @@ export default function RecipeDetail() {
         </View>
 
         <View style={styles.content}>
-          {tab === 'ingredients' && recipe.ingredients.map((ing: string, i: number) => (
+          {tab === 'ingredients' && scaledIngredients.map((ing: string, i: number) => (
             <View key={i} style={styles.ingredientRow} testID={`ing-${i}`}>
               <View style={styles.dot} />
               <Text style={styles.ingredientText}>{ing}</Text>
@@ -385,6 +414,15 @@ const styles = StyleSheet.create({
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
+  costBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: theme.spacing.md, marginHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+  },
+  costBtnEmoji: { fontSize: 16 },
+  costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
+  costBadge: { fontSize: 12, color: theme.color.brand, fontWeight: '700' },
   sheet: {
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,

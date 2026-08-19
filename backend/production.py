@@ -84,6 +84,17 @@ def normalize_name(name: str) -> str:
     return n.strip(" .,;:")
 
 
+def to_base(quantity: float, unit: str) -> tuple:
+    """Weight/volume converted to its base unit (g or ml).
+
+    The conversion table a baker actually needs, shared by production
+    (shopping-list aggregation) and costing (price lookup) rather than
+    duplicated between them.
+    """
+    base_unit, mult = _UNIT_BASE[unit]
+    return quantity * mult, base_unit
+
+
 def parse_ingredient(line: str) -> Optional[dict]:
     """`"500 g de farine T65"` -> quantity/unit/name, or None if not parseable."""
     if not line:

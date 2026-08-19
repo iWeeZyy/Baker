@@ -6,15 +6,18 @@ app was scaffolded with are gone: they were written by a language model, not by
 a baker, and a baking app that cannot say where a quantity comes from is worth
 less than one with fewer recipes.
 
-The tips below are the last of that first batch. They are kept for now because
-they state nothing a baker would dispute, but they carry no source either.
+`BAKER_TIPS` below are the eight original tips, marked as the app's own
+content rather than a book's. `TIPS_SEED` merges them with the tips already
+extracted from both books during the recipe import, reclassified and
+structured for the Astuces library by `tips_seed.build_tips_library`.
 
 Removing a recipe from this file removes it from the database on the next boot
 (see the startup handler in `server.py`) — the seed is authoritative, so
 retiring content is a deploy and not a manual cleanup.
 """
 from families import FAMILY_BY_TITLE, family_of
-from seed_books import BOOK_RECIPES, BOOK_TIPS
+from seed_books import BOOK_RECIPES
+from tips_seed import build_tips_library
 
 BAKER_TIPS = [
     {
@@ -80,8 +83,7 @@ if _UNASSIGNED:
 
 RECIPES_SEED = [{**r, "family": family_of(r["title"], r["category"])} for r in BOOK_RECIPES]
 
-_BOOK_TIP_TITLES = {t["title"] for t in BOOK_TIPS}
-TIPS_SEED = [t for t in BAKER_TIPS if t["title"] not in _BOOK_TIP_TITLES] + BOOK_TIPS
+TIPS_SEED = build_tips_library(BAKER_TIPS)
 
 
 # Demo baker accounts. They accept friend requests instantly and reply to
