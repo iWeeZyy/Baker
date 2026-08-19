@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { confirmAsync } from '@/src/confirm';
 import { theme } from '@/src/theme';
 import { ExportLayout, EXPORT_WIDTH } from '@/src/schedule/ExportLayout';
 import { ScheduleTable } from '@/src/schedule/ScheduleTable';
@@ -122,19 +123,13 @@ export default function ScheduleScreen() {
 
   const removeRow = (row: number) => setRows(prev => prev.filter((_, i) => i !== row));
 
-  const confirmDelete = () => {
-    Alert.alert('Supprimer cet emploi du temps', 'Cette action est définitive.', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api(`/schedules/${scheduleId}`, { method: 'DELETE' });
-            router.replace('/(tabs)/planning' as any);
-          } catch (e: any) { setError(e.message || 'Suppression impossible'); }
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    const ok = await confirmAsync('Supprimer cet emploi du temps', 'Cette action est définitive.', 'Supprimer', true);
+    if (!ok) return;
+    try {
+      await api(`/schedules/${scheduleId}`, { method: 'DELETE' });
+      router.replace('/(tabs)/planning' as any);
+    } catch (e: any) { setError(e.message || 'Suppression impossible'); }
   };
 
   const duplicate = async () => {

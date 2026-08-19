@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { confirmAsync } from '@/src/confirm';
 import { theme } from '@/src/theme';
 
 export default function BakerProfile() {
@@ -42,15 +43,14 @@ export default function BakerProfile() {
     finally { setActionLoading(false); }
   };
 
-  const removeFriend = () => {
-    Alert.alert(
+  const removeFriend = async () => {
+    const ok = await confirmAsync(
       'Retirer cet ami',
       `Vous ne pourrez plus échanger de messages avec ${data?.user?.name || 'cette personne'}.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Retirer', style: 'destructive', onPress: doRemoveFriend },
-      ],
+      'Retirer',
+      true,
     );
+    if (ok) await doRemoveFriend();
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
