@@ -61,6 +61,17 @@ export default function Home() {
           <Feather name="chevron-right" size={20} color={theme.color.muted} />
         </Pressable>
 
+        <Pressable testID="cost-calculator-card" onPress={() => router.push('/cost/new')} style={styles.calcCard}>
+          <View style={styles.calcIcon}>
+            <Text style={{ fontSize: 18 }}>💰</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.calcTitle}>Coût de revient</Text>
+            <Text style={styles.calcSub}>Prix matières, marge, prix de vente</Text>
+          </View>
+          <Feather name="chevron-right" size={20} color={theme.color.muted} />
+        </Pressable>
+
         {featured && (
           <Pressable testID={`hero-recipe-${featured.id}`} onPress={() => router.push(`/recipe/${featured.id}`)} style={styles.hero}>
             <Image source={{ uri: featured.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />

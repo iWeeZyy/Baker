@@ -119,6 +119,7 @@ export default function RecipeDetail() {
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [costInfo, setCostInfo] = useState<{ available: boolean; cost_per_piece?: number } | null>(null);
 
   const loadCommunity = useCallback(async () => {
     try {
@@ -137,6 +138,9 @@ export default function RecipeDetail() {
         const r = await api(`/recipes/${id}`);
         setRecipe(r);
         try { const f = await api(`/recipes/${id}/favorite`); setFavorited(f.favorited); } catch {}
+        // Le badge de coût est un bonus d'affichage : son échec ne doit jamais
+        // bloquer le chargement de la fiche elle-même.
+        api(`/recipes/${id}/cost`).then(setCostInfo).catch(() => setCostInfo(null));
         await loadCommunity();
       } finally { setLoading(false); }
     })();
@@ -230,6 +234,17 @@ export default function RecipeDetail() {
         <Text style={styles.description}>{recipe.description}</Text>
 
         <QuantitySelector testID="quantity-selector" value={quantity} onChange={setQuantity} />
+
+        <Pressable testID="cost-btn" onPress={() => router.push(`/cost/${id}`)} style={styles.costBtn}>
+          <Text style={styles.costBtnEmoji}>💰</Text>
+          <Text style={styles.costBtnText}>Calculer le coût</Text>
+          {costInfo?.available && costInfo.cost_per_piece != null && (
+            <Text testID="cost-badge" style={styles.costBadge}>
+              {costInfo.cost_per_piece.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} €/pièce
+            </Text>
+          )}
+          <Feather name="chevron-right" size={16} color={theme.color.muted} />
+        </Pressable>
 
         <TechnicalSheet technical={recipe.technical} source={recipe.source} />
 
@@ -399,6 +414,15 @@ const styles = StyleSheet.create({
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
+  costBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: theme.spacing.md, marginHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+  },
+  costBtnEmoji: { fontSize: 16 },
+  costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
+  costBadge: { fontSize: 12, color: theme.color.brand, fontWeight: '700' },
   sheet: {
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
