@@ -16,14 +16,21 @@ from typing import Optional
 # à cheval rendrait le filtre par catégorie incohérent, c'est pourquoi les pâtes
 # de base sont séparées en pâtes tourées (viennoiseries) et pâtes à tarte
 # (pâtisseries) plutôt que réunies.
+#
+# Six catégories, et non trois. Les levains, le snacking et les brioches ont
+# quitté « Pains » et « Viennoiseries » pour la même raison qui avait fait
+# naître les familles : une puce qui recouvre soixante fiches ne trie plus rien.
+# Un levain ne se cherche pas comme une baguette, et un pan bagnat encore moins.
+# Les familles d'une même catégorie se suivent, pour que la grille « Tous » les
+# présente groupées.
 FAMILIES = [
     {"key": "pains-classiques", "label": "Pains classiques", "category": "Pains"},
     {"key": "pains-speciaux", "label": "Pains spéciaux", "category": "Pains"},
-    {"key": "levains", "label": "Levains et préfermentations", "category": "Pains"},
-    {"key": "snacking", "label": "Pains à garnir et snacking", "category": "Pains"},
+    {"key": "levains", "label": "Levains et préfermentations", "category": "Levains"},
+    {"key": "snacking", "label": "Pains à garnir et snacking", "category": "Snacking"},
     {"key": "feuilletees", "label": "Viennoiseries feuilletées", "category": "Viennoiseries"},
-    {"key": "brioches", "label": "Brioches et babkas", "category": "Viennoiseries"},
     {"key": "pates-tourees", "label": "Pâtes tourées et levées", "category": "Viennoiseries"},
+    {"key": "brioches", "label": "Brioches et babkas", "category": "Brioches"},
     {"key": "tartes", "label": "Tartes", "category": "Pâtisseries"},
     {"key": "pates-a-tarte", "label": "Pâtes à tarte", "category": "Pâtisseries"},
     {"key": "gateaux", "label": "Gâteaux", "category": "Pâtisseries"},
@@ -38,17 +45,26 @@ FAMILIES = [
     # une recette qu'aucune vignette n'ouvre est une recette perdue. Ils ne sont
     # renvoyés par l'API que lorsqu'ils contiennent quelque chose.
     {"key": "autres-pains", "label": "Autres pains", "category": "Pains", "catch_all": True},
+    {"key": "autres-levains", "label": "Autres levains", "category": "Levains", "catch_all": True},
+    {"key": "autres-snacking", "label": "Autres pains garnis", "category": "Snacking", "catch_all": True},
     {"key": "autres-viennoiseries", "label": "Autres viennoiseries", "category": "Viennoiseries", "catch_all": True},
+    {"key": "autres-brioches", "label": "Autres brioches", "category": "Brioches", "catch_all": True},
     {"key": "autres-patisseries", "label": "Autres pâtisseries", "category": "Pâtisseries", "catch_all": True},
 ]
 
 FAMILY_KEYS = {f["key"] for f in FAMILIES}
 LABELS = {f["key"]: f["label"] for f in FAMILIES}
+CATEGORY_BY_KEY = {f["key"]: f["category"] for f in FAMILIES}
 
+# Les catégories, dans l'ordre où leurs familles apparaissent. Déduites et non
+# écrites : une catégorie existe parce qu'une famille la porte. C'est ce qui
+# évite qu'une puce survive à la dernière famille qui la remplissait, ou qu'une
+# liste recopiée ailleurs se désynchronise en silence.
+CATEGORIES = list(dict.fromkeys(f["category"] for f in FAMILIES))
+
+# Le fourre-tout de chaque catégorie, pour les recettes de la communauté.
 CATCH_ALL = {
-    "Pains": "autres-pains",
-    "Viennoiseries": "autres-viennoiseries",
-    "Pâtisseries": "autres-patisseries",
+    f["category"]: f["key"] for f in FAMILIES if f.get("catch_all")
 }
 
 _ASSIGNMENTS = {

@@ -11,10 +11,10 @@ import { theme } from '@/src/theme';
 // Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
 // une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
 // revient de lui-même au premier ajout — mieux qu'une puce qui n'ouvre sur rien.
-const CATEGORY_ORDER = ['Pains', 'Viennoiseries', 'Pâtisseries'];
+const CATEGORY_ORDER = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 
 /**
- * L'entrée du catalogue : les familles, pas les 117 fiches.
+ * L'entrée du catalogue : les familles, pas les deux cents fiches.
  *
  * Trois catégories pour tout ranger ne suffisaient plus — quatre-vingts fiches
  * tombaient sous « Pâtisseries ». La famille est le rang qu'un boulanger emploie

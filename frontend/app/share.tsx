@@ -9,7 +9,7 @@ import { api, API_BASE, getToken } from '@/src/api';
 import { type Family } from '@/src/families';
 import { theme } from '@/src/theme';
 
-const CATEGORIES = ['Pains', 'Viennoiseries', 'Pâtisseries'];
+const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
 
 export default function ShareRecipe() {

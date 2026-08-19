@@ -31,7 +31,10 @@ export type FamilyKey =
   | 'muffins-scones'
   | 'garnitures'
   | 'autres-pains'
+  | 'autres-levains'
+  | 'autres-snacking'
   | 'autres-viennoiseries'
+  | 'autres-brioches'
   | 'autres-patisseries';
 
 export type Family = {
@@ -62,10 +65,14 @@ export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
   'petites-patisseries': require('../assets/images/families/petites-patisseries.png'),
   'muffins-scones': require('../assets/images/families/muffins-scones.png'),
   'garnitures': require('../assets/images/families/garnitures.png'),
-  // Les trois fourre-tout partagent l'épi de blé : ils n'ont pas de forme
-  // propre, puisqu'ils recueillent ce qui n'a pas de famille.
+  // Les fourre-tout partagent l'épi de blé : ils n'ont pas de forme propre,
+  // puisqu'ils recueillent ce qui n'a pas de famille. Il y en a un par
+  // catégorie, donc six.
   'autres-pains': AUTRES,
+  'autres-levains': AUTRES,
+  'autres-snacking': AUTRES,
   'autres-viennoiseries': AUTRES,
+  'autres-brioches': AUTRES,
   'autres-patisseries': AUTRES,
 };
 
