@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
+import { scaleIngredientLine } from '@/src/ingredientScale';
+import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
 type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
@@ -164,6 +166,16 @@ export default function RecipeDetail() {
     try { await api(`/recipes/${id}/note`, { method: 'PUT', body: JSON.stringify({ content: note }) }); setNoteSaved(true); } catch {}
   };
 
+  // Affichage et calculs uniquement : la recette d'origine (recipe.ingredients)
+  // n'est jamais réécrite, donc revenir à 1 rend exactement les quantités de
+  // départ, sans multiplication cumulative possible.
+  const [quantity, setQuantity] = useState(1);
+  useEffect(() => { setQuantity(1); }, [id]);
+  const scaledIngredients = useMemo(
+    () => ((recipe?.ingredients as string[] | undefined) ?? []).map((line) => scaleIngredientLine(line, quantity)),
+    [recipe, quantity],
+  );
+
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
   const imgUri = recipe.image_path ? `${API_BASE}/files/${recipe.image_path}` : recipe.image_url;
@@ -217,6 +229,8 @@ export default function RecipeDetail() {
 
         <Text style={styles.description}>{recipe.description}</Text>
 
+        <QuantitySelector testID="quantity-selector" value={quantity} onChange={setQuantity} />
+
         <TechnicalSheet technical={recipe.technical} source={recipe.source} />
 
         <View style={styles.segment}>
@@ -232,7 +246,7 @@ export default function RecipeDetail() {
         </View>
 
         <View style={styles.content}>
-          {tab === 'ingredients' && recipe.ingredients.map((ing: string, i: number) => (
+          {tab === 'ingredients' && scaledIngredients.map((ing: string, i: number) => (
             <View key={i} style={styles.ingredientRow} testID={`ing-${i}`}>
               <View style={styles.dot} />
               <Text style={styles.ingredientText}>{ing}</Text>
