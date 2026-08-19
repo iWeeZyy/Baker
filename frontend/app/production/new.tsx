@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator,
-  ScrollView, KeyboardAvoidingView, Platform, Alert,
+  ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { confirmAsync } from '@/src/confirm';
 import { isPlanLimitError } from '@/src/plan';
 import { theme } from '@/src/theme';
 
@@ -108,22 +109,15 @@ export default function ProductionForm() {
     }
   };
 
-  const confirmDelete = () => {
-    Alert.alert('Supprimer cette production', 'Cette action est définitive.', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api(`/productions/${id}`, { method: 'DELETE' });
-            router.replace('/(tabs)/planning' as any);
-          } catch (e: any) {
-            setError(e.message || 'Suppression impossible');
-          }
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    const ok = await confirmAsync('Supprimer cette production', 'Cette action est définitive.', 'Supprimer', true);
+    if (!ok) return;
+    try {
+      await api(`/productions/${id}`, { method: 'DELETE' });
+      router.replace('/(tabs)/planning' as any);
+    } catch (e: any) {
+      setError(e.message || 'Suppression impossible');
+    }
   };
 
   if (loading) {
