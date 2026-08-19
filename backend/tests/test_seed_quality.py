@@ -20,9 +20,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from seed_data import RECIPES_SEED, TIPS_SEED  # noqa: E402
 from production import parse_ingredient  # noqa: E402
-from families import FAMILIES, FAMILY_KEYS  # noqa: E402
+from families import CATEGORIES as FAMILY_CATEGORIES, FAMILIES, FAMILY_KEYS  # noqa: E402
 
-CATEGORIES = {"Pains", "Viennoiseries", "Pâtisseries"}
+# Les catégories sont celles que portent les familles : les lister une
+# seconde fois ici reviendrait à pouvoir en oublier une.
+CATEGORIES = set(FAMILY_CATEGORIES)
 DIFFICULTIES = {"Facile", "Intermédiaire", "Avancé"}
 TIP_CATEGORIES = {
     "Fermentation", "Hydratation", "Cuisson", "Façonnage",

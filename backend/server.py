@@ -30,7 +30,7 @@ from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
 import staff
 from plans import resolve_plan, limits_for, production_quota, ads_config
-from families import FAMILIES, FAMILY_KEYS, family_of
+from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 
 # ---------- Config ----------
 mongo_url = os.environ['MONGO_URL']
@@ -1165,7 +1165,9 @@ async def list_tips(category: Optional[str] = None):
 @api_router.get("/categories")
 async def categories():
     return {
-        "recipes": ["Tous", "Pains", "Viennoiseries", "Pâtisseries"],
+        # « Tous » est une puce d'interface, pas une catégorie : le reste vient
+        # de families.py, qui décide seul de ce qui existe.
+        "recipes": ["Tous", *CATEGORIES],
         "tips": ["Tous", "Fermentation", "Hydratation", "Cuisson", "Façonnage",
                  "Dépannage", "Tourage", "Matériel"],
     }

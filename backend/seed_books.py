@@ -763,7 +763,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche au chocolat",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 140,
         "hydration": 50,
@@ -825,7 +825,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche canneberges et crumble",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 95,
         "hydration": 50,
@@ -877,7 +877,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche fleur aux fraises",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 105,
         "hydration": 50,
@@ -924,7 +924,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Tarte-brioche aux fruits",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Facile",
         "time_minutes": 65,
         "hydration": 50,
@@ -979,7 +979,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Serpentin aux fruits",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 75,
         "hydration": 50,
@@ -1039,7 +1039,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche individuelle",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Facile",
         "time_minutes": 60,
         "hydration": 50,
@@ -1081,7 +1081,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche tressée",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 155,
         "hydration": 40,
@@ -3712,7 +3712,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Levain chef",
-        "category": "Pains",
+        "category": "Levains",
         "difficulty": "Intermédiaire",
         "time_minutes": 2885,
         "hydration": 0,
@@ -3746,7 +3746,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Levain dur",
-        "category": "Pains",
+        "category": "Levains",
         "difficulty": "Intermédiaire",
         "time_minutes": 305,
         "hydration": 50,
@@ -3783,7 +3783,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Levain liquide",
-        "category": "Pains",
+        "category": "Levains",
         "difficulty": "Intermédiaire",
         "time_minutes": 305,
         "hydration": 100,
@@ -3817,7 +3817,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Poolish",
-        "category": "Pains",
+        "category": "Levains",
         "difficulty": "Facile",
         "time_minutes": 185,
         "hydration": 100,
@@ -6327,7 +6327,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Grosse brioche à tête",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 300,
         "hydration": 0,
@@ -6376,7 +6376,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Petite brioche à tête",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 288,
         "hydration": 0,
@@ -6423,7 +6423,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Couronne",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 135,
         "hydration": 0,
@@ -6470,7 +6470,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Navettes",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 201,
         "hydration": 0,
@@ -6909,7 +6909,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Cinnamon roll",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Avancé",
         "time_minutes": 320,
         "hydration": 0,
@@ -7314,7 +7314,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Babka",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Avancé",
         "time_minutes": 330,
         "hydration": 36,
@@ -7374,7 +7374,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche des rois",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 985,
         "hydration": 0,
@@ -7431,7 +7431,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Briochettes aux pralines roses",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 230,
         "hydration": 0,
@@ -7485,7 +7485,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Gâche",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 405,
         "hydration": 0,
@@ -7547,7 +7547,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche vendéenne",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 420,
         "hydration": 0,
@@ -7613,7 +7613,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche vegan",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Avancé",
         "time_minutes": 275,
         "hydration": 0,
@@ -7682,7 +7682,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Kouglof",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 425,
         "hydration": 0,
@@ -7742,7 +7742,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Panettone",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Avancé",
         "time_minutes": 875,
         "hydration": 0,
@@ -7824,7 +7824,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Viennoise aux pépites de chocolat",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 225,
         "hydration": 47,
@@ -7890,7 +7890,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Brioche à la cardamome",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Avancé",
         "time_minutes": 560,
         "hydration": 0,
@@ -8044,7 +8044,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pompe à huile",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 980,
         "hydration": 40,
@@ -8100,7 +8100,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Beignet",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 183,
         "hydration": 0,
@@ -8156,7 +8156,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Bugnes",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 183,
         "hydration": 0,
@@ -8211,7 +8211,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Donuts",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Intermédiaire",
         "time_minutes": 183,
         "hydration": 36,
@@ -8373,7 +8373,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Tarte au sucre",
-        "category": "Viennoiseries",
+        "category": "Brioches",
         "difficulty": "Facile",
         "time_minutes": 280,
         "hydration": 36,
@@ -8433,7 +8433,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Focaccia",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 334,
         "hydration": 69,
@@ -8498,7 +8498,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Flammekueche",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Facile",
         "time_minutes": 180,
         "hydration": 64,
@@ -8555,7 +8555,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pizza jambon tomate",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Facile",
         "time_minutes": 175,
         "hydration": 64,
@@ -8611,7 +8611,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Bagel au pastrami",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 185,
         "hydration": 59,
@@ -8675,7 +8675,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pain polaire au saumon",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 182,
         "hydration": 53,
@@ -8736,7 +8736,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pita aux falafels",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 182,
         "hydration": 67,
@@ -8794,7 +8794,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Panini tomate, mozzarella et pesto",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Facile",
         "time_minutes": 948,
         "hydration": 64,
@@ -8848,7 +8848,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Black burger végétarien",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 250,
         "hydration": 51,
@@ -8925,7 +8925,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Gua bao au poulet",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 143,
         "hydration": 60,
@@ -8992,7 +8992,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pan bagnat",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Avancé",
         "time_minutes": 466,
         "hydration": 71,
@@ -9065,7 +9065,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Wrap au fromage et légumes",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Facile",
         "time_minutes": 91,
         "hydration": 58,
@@ -9118,7 +9118,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Parisien revisité",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Avancé",
         "time_minutes": 354,
         "hydration": 54,
@@ -9180,7 +9180,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Croque-monsieur revisité",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Facile",
         "time_minutes": 35,
         "hydration": 0,
@@ -9218,7 +9218,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Pain surprise",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Avancé",
         "time_minutes": 365,
         "hydration": 67,
@@ -9282,7 +9282,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Hot-dog",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 230,
         "hydration": 57,
@@ -9346,7 +9346,7 @@ BOOK_RECIPES = [
     },
     {
         "title": "Croissant au jambon",
-        "category": "Pains",
+        "category": "Snacking",
         "difficulty": "Intermédiaire",
         "time_minutes": 135,
         "hydration": 0,
