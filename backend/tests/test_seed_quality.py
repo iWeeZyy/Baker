@@ -21,15 +21,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from seed_data import RECIPES_SEED, TIPS_SEED  # noqa: E402
 from production import parse_ingredient  # noqa: E402
 from families import CATEGORIES as FAMILY_CATEGORIES, FAMILIES, FAMILY_KEYS  # noqa: E402
+from tips_seed import TIP_CATEGORIES as _TIP_CATEGORIES  # noqa: E402
 
 # Les catégories sont celles que portent les familles : les lister une
-# seconde fois ici reviendrait à pouvoir en oublier une.
+# seconde fois ici reviendrait à pouvoir en oublier une. Même principe pour
+# les astuces, dont la taxonomie vit dans `tips_seed.py`.
 CATEGORIES = set(FAMILY_CATEGORIES)
 DIFFICULTIES = {"Facile", "Intermédiaire", "Avancé"}
-TIP_CATEGORIES = {
-    "Fermentation", "Hydratation", "Cuisson", "Façonnage",
-    "Dépannage", "Tourage", "Matériel",
-}
+TIP_CATEGORIES = set(_TIP_CATEGORIES)
 # Les clés que la fiche technique sait afficher. Une clé inconnue serait
 # silencieusement invisible à l'écran, ce qui est pire qu'une donnée absente.
 TECHNICAL_KEYS = {

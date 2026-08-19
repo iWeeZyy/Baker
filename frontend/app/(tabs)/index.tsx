@@ -11,20 +11,16 @@ import { formatDuration } from '@/src/format';
 import { theme } from '@/src/theme';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
-type Tip = { id: string; title: string; category: string; content: string; icon: string };
 
 export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
   const load = useCallback(async () => {
     try {
-      const [r, t] = await Promise.all([api('/recipes'), api('/tips')]);
-      setRecipes(r);
-      setTips(t);
+      setRecipes(await api('/recipes'));
     } catch (e) { console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -107,24 +103,6 @@ export default function Home() {
           </View>
         )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Astuces du jour</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}>
-            {/* All of them, not the first six: the carousel already scrolls,
-                and a tip nobody can reach is a tip that was not added. */}
-            {tips.map(t => (
-              <View key={t.id} style={styles.tipCard} testID={`tip-${t.id}`}>
-                <View style={styles.tipIcon}><Feather name={(t.icon as any) || 'star'} size={16} color={theme.color.brand} /></View>
-                <Text style={styles.tipCat}>{t.category.toUpperCase()}</Text>
-                <Text style={styles.tipTitle}>{t.title}</Text>
-                <Text style={styles.tipBody} numberOfLines={4}>{t.content}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
         {/* Between two sections, in the flow of the scroll: nothing to dismiss,
             nothing covered. Renders nothing at all for a Pro user. */}
         <AdSlot placement="home" />
@@ -188,11 +166,6 @@ const styles = StyleSheet.create({
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: theme.color.onSurface },
-  tipCard: { width: 260, padding: 20, backgroundColor: theme.color.surfaceSecondary, borderRadius: 4 },
-  tipIcon: { width: 32, height: 32, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  tipCat: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  tipTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 6, marginBottom: 8 },
-  tipBody: { fontSize: 13, color: theme.color.onSurfaceSecondary, lineHeight: 19 },
   classicCard: { width: 180 },
   classicImage: { width: 180, height: 180, borderRadius: 4 },
   classicTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },

@@ -32,6 +32,7 @@ import staff
 import costing
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
+from tips_seed import TIP_CATEGORIES
 
 # ---------- Config ----------
 mongo_url = os.environ['MONGO_URL']
@@ -1332,13 +1333,41 @@ async def delete_cost_history_entry(calc_id: str, user: dict = Depends(get_curre
     return {"status": "deleted"}
 
 # ---------- Tips ----------
+# The library stays small enough (a few hundred entries at most) that the app
+# fetches it whole and searches client-side, the same choice already made for
+# families/recipes browsing — one request, then instant local filtering
+# rather than a round trip on every keystroke.
 @api_router.get("/tips")
 async def list_tips(category: Optional[str] = None):
+    # "Toutes" is the tips chip's "no filter" label ("Tous" is the recipes
+    # one) — both are accepted so a client can't silently get zero results by
+    # sending the wrong one.
     q = {}
-    if category and category != "Tous":
+    if category and category not in ("Tous", "Toutes"):
         q["category"] = category
     cursor = db.tips.find(q, {"_id": 0})
     return await cursor.to_list(500)
+
+@api_router.get("/tips/favorites")
+async def my_tip_favorites(user: dict = Depends(get_current_user)):
+    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(500)
+    ids = [f["tip_id"] for f in favs]
+    return await db.tips.find({"id": {"$in": ids}}, {"_id": 0}).to_list(500)
+
+@api_router.get("/tips/favorite-ids")
+async def my_tip_favorite_ids(user: dict = Depends(get_current_user)):
+    """The bare id set, for marking ⭐ on a whole list without one request per card."""
+    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0, "tip_id": 1}).to_list(500)
+    return [f["tip_id"] for f in favs]
+
+@api_router.post("/tips/{tip_id}/favorite")
+async def toggle_tip_favorite(tip_id: str, user: dict = Depends(get_current_user)):
+    existing = await db.tip_favorites.find_one({"user_id": user["user_id"], "tip_id": tip_id})
+    if existing:
+        await db.tip_favorites.delete_one({"user_id": user["user_id"], "tip_id": tip_id})
+        return {"favorited": False}
+    await db.tip_favorites.insert_one({"user_id": user["user_id"], "tip_id": tip_id, "created_at": datetime.now(timezone.utc)})
+    return {"favorited": True}
 
 # ---------- Categories ----------
 @api_router.get("/categories")
@@ -1347,8 +1376,7 @@ async def categories():
         # « Tous » est une puce d'interface, pas une catégorie : le reste vient
         # de families.py, qui décide seul de ce qui existe.
         "recipes": ["Tous", *CATEGORIES],
-        "tips": ["Tous", "Fermentation", "Hydratation", "Cuisson", "Façonnage",
-                 "Dépannage", "Tourage", "Matériel"],
+        "tips": ["Toutes", *TIP_CATEGORIES],
     }
 
 @api_router.get("/families")
@@ -1510,6 +1538,9 @@ async def startup():
     # Backs the monthly Free-plan count.
     await db.productions.create_index([("user_id", 1), ("created_at", -1)])
     await db.schedules.create_index([("user_id", 1), ("week_start", -1)])
+    await db.tips.create_index("title", unique=True)
+    await db.tips.create_index("category")
+    await db.tip_favorites.create_index([("user_id", 1), ("tip_id", 1)], unique=True)
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
