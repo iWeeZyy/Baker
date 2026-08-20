@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from seed_data import BAKER_TIPS, TIPS_SEED  # noqa: E402
 from seed_books import BOOK_TIPS  # noqa: E402
-from tips_seed import NEW_FERRANDI_TIPS, TIP_CATEGORIES  # noqa: E402
+from tips_seed import NEW_FERRANDI_TIPS, TIP_CATEGORIES, _PAGE_BACKFILL  # noqa: E402
 
 
 def _normalize(text):
@@ -146,6 +146,18 @@ class TestSources:
     def test_new_ferrandi_tips_carry_a_page_citation(self):
         for t in NEW_FERRANDI_TIPS:
             assert ", p. " in t["source"]
+
+    def test_page_backfill_titles_all_exist(self):
+        # Un titre mal orthographié dans _PAGE_BACKFILL ne lèverait aucune
+        # erreur : il n'ajouterait simplement jamais sa page. On le refuse.
+        book_titles = {t["title"] for t in BOOK_TIPS}
+        for title in _PAGE_BACKFILL:
+            assert title in book_titles, title
+
+    def test_backfilled_tips_actually_carry_their_page(self):
+        by_title = {t["title"]: t for t in TIPS_SEED}
+        for title, page in _PAGE_BACKFILL.items():
+            assert by_title[title]["source"].endswith(page), title
 
     def test_app_source_only_for_baker_tips(self):
         baker_titles = {t["title"] for t in BAKER_TIPS}

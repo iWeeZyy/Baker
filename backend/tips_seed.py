@@ -180,6 +180,22 @@ _KEYWORD_VOCAB = [
     "moule", "papier cuisson", "balance", "thermomètre", "bicarbonate", "vinaigre",
     "madeleine", "biscuit", "sablé", "meringue", "gressin", "bagel", "bretzel", "pita",
     "chocolat noir", "chocolat au lait", "chocolat blanc", "acide", "acidité",
+    # Termes apparus avec la lecture de la section « Techniques de base »
+    # (p. 32-123) : gestes nommés, vocabulaire du fournil, matières.
+    # « clé » et « son » sont volontairement absents : la recherche compare des
+    # sous-chaînes, et ils se cachent dans « couvercle », « boucle » et
+    # « cuisson ». Les autres termes ne s'y attrapent que sous leurs propres
+    # flexions (« bouler », « tresser », « palmiers »), ce qui est voulu.
+    "frasage", "frasée", "bassinage", "division", "dégazage", "dégazer",
+    "rafraîchi", "ressuage", "corne", "crochet", "cuve", "réseau de gluten",
+    "épi", "chevron", "polka", "saucisson", "lame", "ciseaux", "incision",
+    "tresse", "tresser", "brin", "couronne", "goutte", "anneau", "boule",
+    "baguette", "ficelle", "bâtard", "cocotte", "étuve", "dorure", "dorer",
+    "palmier", "chausson", "compote", "sablage", "torréfaction", "torréfier",
+    "meule", "germe", "amande", "macération", "macérer", "raisins",
+    "sirop", "béchamel", "congélateur", "film alimentaire", "filmer",
+    "pâte levée feuilletée", "feuilletage inversé", "beurre manié",
+    "levain chef", "levain tout point", "levain dur", "levain liquide",
 ]
 
 
@@ -199,6 +215,23 @@ def _source_for(title: str, from_book: bool) -> str:
     return SOURCE_FISET if title in _FISET_TITLES else SOURCE_FERRANDI
 
 
+def _resolved_source(tip: dict, from_book: bool) -> str:
+    """La source d'une astuce, page comprise quand elle est connue.
+
+    Une astuce rédigée avec sa propre citation (voir `NEW_FERRANDI_TIPS`) la
+    garde telle quelle. Sinon la source vient du commit qui l'a importée, et
+    `_PAGE_BACKFILL` y ajoute la page si la lecture de la section technique a
+    permis de la retrouver — jamais autrement.
+    """
+    if tip.get("source"):
+        return tip["source"]
+    source = _source_for(tip["title"], from_book)
+    page = _PAGE_BACKFILL.get(tip["title"])
+    if page and source == SOURCE_FERRANDI:
+        return f"{source}, {page}"
+    return source
+
+
 def _migrate(tip: dict, from_book: bool) -> dict:
     title = tip["title"]
     category = _CATEGORY_OVERRIDE.get(title) or _CATEGORY_MAP.get(tip["category"], tip["category"])
@@ -207,10 +240,7 @@ def _migrate(tip: dict, from_book: bool) -> dict:
         "category": category,
         "content": tip["content"],
         "icon": tip.get("icon", "star"),
-        # A tip freshly authored with its own page citation (see
-        # NEW_FERRANDI_TIPS) keeps it; everything else gets the source
-        # inferred from which commit first imported it.
-        "source": tip.get("source") or _source_for(title, from_book),
+        "source": _resolved_source(tip, from_book),
     }
     ps = _PROBLEM_SOLUTIONS.get(title)
     if ps:
@@ -235,13 +265,25 @@ def build_tips_library(baker_tips: list) -> list:
 
 
 # ---------- Astuces supplémentaires, lues directement dans FERRANDI Paris ----------
-# Le chapitre théorique du livre (« Les fondamentaux de la boulangerie et de la
-# viennoiserie », p. 15 à 21) n'avait pas été exploité lors de l'import des
-# recettes — seuls les encarts « Trucs et astuces de chefs », déjà repris dans
-# BOOK_TIPS, l'avaient été. Ce chapitre est de la prose théorique (matières
-# premières, étapes de fabrication), pas des fiches produit : rien n'y
-# recoupe une astuce déjà migrée. Chaque astuce ci-dessous a été lue
-# directement sur la page citée, jamais devinée depuis l'OCR d'un scan.
+# Deux passes de lecture, toutes deux faites page par page sur le scan — le PDF
+# n'a aucune couche texte, et un OCR qui transforme un 8 en 3 n'annonce rien.
+#
+#   1. Le chapitre théorique « Les fondamentaux de la boulangerie et de la
+#      viennoiserie » (p. 15 à 21) : de la prose sur les matières premières et
+#      les étapes de fabrication. Dix-sept astuces.
+#   2. Toute la section « LES TECHNIQUES DE BASE » (p. 32 à 123, quatre-vingt-
+#      douze pages) : les fiches de geste — levains, autolyse, pétrissage,
+#      rabat, boulage, façonnage, les six grignages, tourages, tresses, crèmes.
+#      L'import des recettes n'en avait retenu que les encarts « Trucs et
+#      astuces de chefs » ; les fiches elles-mêmes n'avaient jamais été lues.
+#      Trente-neuf astuces, et surtout la page d'origine enfin rendue aux
+#      vingt-trois astuces de BOOK_TIPS qui en venaient sans le dire
+#      (`_PAGE_BACKFILL`).
+#
+# Les chapitres « Introduction » (p. 10-11, présentation de l'école) et
+# « Matériel » (p. 24-31, glossaire photo légendé) ont été lus intégralement et
+# ne portent aucun conseil : ils ne donnent aucune astuce, et rien n'a été
+# inventé pour combler le vide.
 NEW_FERRANDI_TIPS = [
     {
         "title": "Le T d'une farine mesure sa pureté, pas sa force",
@@ -256,7 +298,8 @@ NEW_FERRANDI_TIPS = [
             "(complète) pour le pain complet."
         ),
         "icon": "grid",
-        "source": SOURCE_FERRANDI + ", p. 16",
+        # La distinction pureté/force est énoncée p. 15, la table d'emploi p. 16.
+        "source": SOURCE_FERRANDI + ", p. 15-16",
     },
     {
         "title": "Toutes les farines ne se panifient pas seules",
@@ -475,4 +518,526 @@ NEW_FERRANDI_TIPS = [
         "icon": "box",
         "source": SOURCE_FERRANDI + ", p. 21",
     },
+
+    # ---- Seconde passe : la section « LES TECHNIQUES DE BASE » (p. 32-123) ----
+    # Chapitre Pain (p. 34-59)
+    {
+        "title": "Du levain chef au levain tout point : une semaine",
+        "category": "Fermentation",
+        "content": (
+            "Un levain chef est prêt quand son odeur devient marquée, que de grosses bulles "
+            "apparaissent et que sa texture rappelle une mousse au chocolat. Dès qu'il commence "
+            "à mousser, il faut le rafraîchir cinq ou six fois — en levain dur ou en levain "
+            "liquide selon ce que l'on veut — pour obtenir, au bout d'une semaine de "
+            "fermentation, un levain tout point."
+        ),
+        "icon": "calendar",
+        "source": SOURCE_FERRANDI + ", p. 37",
+    },
+    {
+        "title": "Les températures d'un rafraîchi",
+        "category": "Température",
+        "content": (
+            "Un levain dur se rafraîchit à l'eau à 35 °C et fermente idéalement à 28 °C ; un "
+            "levain liquide se rafraîchit à l'eau à 45 °C et fermente idéalement à 35 °C. Sans "
+            "cette chaleur la fermentation n'échoue pas, elle prend simplement plus de temps. "
+            "Dans les deux cas : 5 heures à température ambiante, ou 3 heures puis une nuit au "
+            "réfrigérateur, et plusieurs jours de conservation au froid."
+        ),
+        "icon": "thermometer",
+        "source": SOURCE_FERRANDI + ", p. 38-41",
+    },
+    {
+        "title": "Reconnaître une poolish prête",
+        "category": "Fermentation",
+        "content": (
+            "Une poolish est prête à l'emploi quand elle a triplé de volume, qu'elle commence à "
+            "s'aplatir et que quelques crevasses se forment sur le dessus. C'est l'affaissement "
+            "qui signale le sommet."
+        ),
+        "icon": "eye",
+        "source": SOURCE_FERRANDI + ", p. 43",
+    },
+    {
+        "title": "L'autolyse se fait sans sel ni levure",
+        "category": "Pétrissage",
+        "content": (
+            "Mélangez seulement l'eau et la farine, 3 à 5 minutes, jusqu'à une pâte homogène : à "
+            "ce stade elle n'est ni souple ni élastique, et se déchire quand on tire dessus. "
+            "Laissez-la reposer au minimum 30 minutes, idéalement plusieurs heures selon le "
+            "pétrissage prévu ensuite, couverte d'un plastique ou d'un torchon humide sans "
+            "contact direct. À la fin de l'autolyse, la pâte est plus lisse et plus extensible."
+        ),
+        "icon": "clock",
+        "source": SOURCE_FERRANDI + ", p. 44",
+    },
+    {
+        "title": "Sel et levure dans deux creux séparés",
+        "category": "Pétrissage",
+        "content": (
+            "Après une autolyse, faites deux petits creux distincts dans la pâte : la levure "
+            "émiettée dans l'un, le sel dans l'autre. Ramenez un peu de pâte par-dessus pour "
+            "qu'ils commencent à fondre avant le pétrissage."
+        ),
+        "icon": "circle",
+        "source": SOURCE_FERRANDI + ", p. 44",
+    },
+    {
+        "title": "Savoir si la pâte est bien frasée",
+        "category": "Pétrissage",
+        "content": (
+            "Touchez légèrement la pâte avec le dos de la main. Si elle colle, la farine n'a pas "
+            "absorbé toute l'eau : il faut poursuivre le frasage. C'est ce test qui dit quand "
+            "passer du frasage au pétrissage."
+        ),
+        "icon": "activity",
+        "source": SOURCE_FERRANDI + ", p. 45",
+    },
+    {
+        "title": "Le pétrissage à la machine se fait en deux temps",
+        "category": "Pétrissage",
+        "content": (
+            "D'abord le frasage : au crochet, vitesse lente, environ 5 minutes, jusqu'à une pâte "
+            "homogène qui ne colle plus. Ensuite le pétrissage : 5 à 8 minutes pour construire le "
+            "réseau de gluten. La pâte ne doit pas dépasser 24 °C en fin de pétrissage. Vérifiez "
+            "le réseau en étirant la pâte : elle doit être lisse et extensible sans se déchirer."
+        ),
+        "icon": "thermometer",
+        "source": SOURCE_FERRANDI + ", p. 45",
+    },
+    {
+        "title": "Pétrir à la main : étirer, puis ramener par en dessous",
+        "category": "Pétrissage",
+        "content": (
+            "Délayez au fouet l'eau, le sel et la levure émiettée dans un saladier, ajoutez la "
+            "farine et amalgamez aux doigts, en vous aidant d'une corne. Débarrassez sur un plan "
+            "fariné : le pétrissage consiste à étirer la pâte vers l'extérieur, puis à la ramener "
+            "par en dessous, jusqu'à ce qu'elle soit souple et élastique. Là aussi, ne dépassez "
+            "pas 24 °C en fin de pétrissage."
+        ),
+        "icon": "activity",
+        "source": SOURCE_FERRANDI + ", p. 46-47",
+    },
+    {
+        "title": "Bouler une grosse pâte à deux mains",
+        "category": "Façonnage",
+        "content": (
+            "Le boulage d'une grosse pièce reprend le geste d'une petite, mais à deux mains : les "
+            "deux auriculaires passent légèrement sous la pâte à chaque rotation. Le pouce et "
+            "l'auriculaire touchent la table et la font tourner pour finir de la lisser."
+        ),
+        "icon": "circle",
+        "source": SOURCE_FERRANDI + ", p. 50",
+    },
+    {
+        "title": "La soudure d'une baguette se fait sur le pouce",
+        "category": "Façonnage",
+        "content": (
+            "Pour souder une baguette, pliez la pâte en deux en vous servant du pouce comme "
+            "pivot : placez-le à l'extrémité gauche, au milieu de l'épaisseur, et de l'autre main "
+            "repliez la pâte par-dessus en avançant, en appuyant légèrement sur la jointure pour "
+            "que l'ensemble colle. Roulez ensuite légèrement pour affiner les extrémités en pointes."
+        ),
+        "icon": "minus",
+        "source": SOURCE_FERRANDI + ", p. 52",
+    },
+    {
+        "title": "Grigner un épi aux ciseaux, sans les retirer",
+        "category": "Cuisson",
+        "content": (
+            "L'épi se fait aux ciseaux sur un pâton à la pousse légère : incisez profondément, aux "
+            "trois quarts, par le dessus, à 45 degrés, tous les 4 à 6 cm, sans couper complètement. "
+            "Décalez chaque « grain » au fur et à mesure, en alternant à droite puis à gauche — "
+            "sans retirer les ciseaux entre deux incisions, sinon la pâte se recolle. À la sortie "
+            "du four, cette forme est très fragile et se casse facilement."
+        ),
+        "icon": "scissors",
+        "source": SOURCE_FERRANDI + ", p. 53",
+    },
+    {
+        "title": "En cocotte, pas de buée",
+        "category": "Cuisson",
+        "content": (
+            "Une cocotte fermée retient la vapeur du pain lui-même : on enfourne donc sans buée. "
+            "Préchauffez la cocotte à vide à 260 °C, déposez-y le pâton grigné sur son papier "
+            "cuisson, refermez le couvercle et comptez 30 minutes à 260 °C. Retirez le couvercle "
+            "une fois le pain coloré pour finir la cuisson, puis débarrassez aussitôt sur grille "
+            "pour le ressuage."
+        ),
+        "icon": "cloud",
+        "source": SOURCE_FERRANDI + ", p. 59",
+    },
+
+    # Chapitre Viennoiserie (p. 60-109)
+    {
+        "title": "Quadriller une détrempe pour la détendre",
+        "category": "Viennoiserie",
+        "content": (
+            "Une fois la détrempe boulée, incisez-la en quadrillage au couteau avant de la "
+            "filmer : c'est ce qui la détend. Comptez ensuite 20 minutes au réfrigérateur au "
+            "minimum avant de commencer le tourage."
+        ),
+        "icon": "grid",
+        "source": SOURCE_FERRANDI + ", p. 67 et 71",
+    },
+    {
+        "title": "Le feuilletage inversé enferme la détrempe dans le beurre",
+        "category": "Viennoiserie",
+        "content": (
+            "C'est l'inverse du feuilletage classique : le beurre manié est abaissé en un "
+            "rectangle deux fois plus grand que la détrempe, puis rabattu sur elle en soudant "
+            "tous les côtés — la pâte se retrouve enfermée dans le beurre, et non le beurre dans "
+            "la pâte. Entre deux tours, filmez le pâton au frais pour éviter le croûtage."
+        ),
+        "icon": "layers",
+        "source": SOURCE_FERRANDI + ", p. 72-73",
+    },
+    {
+        "title": "Une pâte levée feuilletée se pétrit plus froide",
+        "category": "Température",
+        "content": (
+            "Contrairement à une pâte à pain, qu'on arrête à 24 °C, une pâte levée feuilletée doit "
+            "sortir du pétrin autour de 21-23 °C : elle part ensuite au tourage, où toute chaleur "
+            "ferait fondre le beurre. L'eau employée est d'ailleurs à 4 °C. Après un pointage court "
+            "de 15 minutes à température ambiante, elle se conserve une nuit, filmée, avant d'être "
+            "tourée."
+        ),
+        "icon": "thermometer",
+        "source": SOURCE_FERRANDI + ", p. 74",
+    },
+    {
+        "title": "La pâte levée feuilletée se raffermit au congélateur",
+        "category": "Viennoiserie",
+        "content": (
+            "Là où un feuilletage classique passe au réfrigérateur, la pâte levée feuilletée va au "
+            "congélateur : 30 minutes après l'abaisse de départ, puis 15 minutes entre les tours et "
+            "30 minutes avant utilisation. Entre deux tours, le pâton s'incise au couteau de chaque "
+            "côté, dans l'épaisseur."
+        ),
+        "icon": "wind",
+        "source": SOURCE_FERRANDI + ", p. 75-76",
+    },
+    {
+        "title": "Les viennoiseries poussent à 26 °C",
+        "category": "Fermentation",
+        "content": (
+            "Croissants et pains au chocolat poussent 2 heures à 2 h 30 en étuve à 26 °C ; les "
+            "pains aux raisins, les brioches à tête et les couronnes, 1 h 30 à 2 heures. Sans "
+            "étuve, un four éteint dans lequel on place un récipient d'eau bouillante fait le même "
+            "travail. La cuisson suit en four ventilé : 170 °C environ 15 minutes pour un croissant "
+            "ou un pain au chocolat, 160 °C environ 20 minutes pour un pain aux raisins."
+        ),
+        "icon": "thermometer",
+        "source": SOURCE_FERRANDI + ", p. 78",
+    },
+    {
+        "title": "Faire macérer les raisins avant de les rouler",
+        "category": "Hydratation",
+        "content": (
+            "Les raisins secs se macèrent une heure dans un peu d'eau tiède ou d'alcool — rhum, "
+            "kirsch, fleur d'oranger — puis s'égouttent avant d'être répartis sur la crème "
+            "pâtissière. Secs, ils pomperaient l'eau de la pâte."
+        ),
+        "icon": "droplet",
+        "source": SOURCE_FERRANDI + ", p. 81",
+    },
+    {
+        "title": "Un chausson cru se congèle",
+        "category": "Conservation",
+        "content": (
+            "Les chaussons aux pommes se congèlent crus. Ils se cuisent alors encore congelés, en "
+            "comptant 7 minutes de cuisson de plus."
+        ),
+        "icon": "wind",
+        "source": SOURCE_FERRANDI + ", p. 86",
+    },
+    {
+        "title": "Un chausson se juge par le dessous",
+        "category": "Cuisson",
+        "content": (
+            "Comptez 30 minutes à 190 °C : le dessous du chausson doit être coloré et ferme comme "
+            "les feuillets. C'est là que se lit la cuisson, pas sur le dessus doré. À la sortie du "
+            "four, badigeonnez de sirop porté à ébullition puis refroidi."
+        ),
+        "icon": "eye",
+        "source": SOURCE_FERRANDI + ", p. 86",
+    },
+    {
+        "title": "Les palmiers se tournent au sucre",
+        "category": "Viennoiserie",
+        "content": (
+            "Partez d'une pâte feuilletée à mi-tourage, après deux tours. Fleurez ensuite le plan "
+            "de travail de sucre — et non de farine — pour donner un tour double puis un tour "
+            "simple, en saupoudrant de sucre à chaque fois. C'est ce sucre pris dans les feuillets "
+            "qui caramélise à la cuisson."
+        ),
+        "icon": "grid",
+        "source": SOURCE_FERRANDI + ", p. 87",
+    },
+    {
+        "title": "Un palmier se retourne en cours de cuisson",
+        "category": "Cuisson",
+        "content": (
+            "Enfournez à 180 °C pendant 20 minutes, puis retournez les palmiers dès que la face du "
+            "dessous est bien caramélisée et poursuivez 10 minutes pour dorer l'autre face. Sans ce "
+            "retournement, une seule face caramélise."
+        ),
+        "icon": "rotate-ccw",
+        "source": SOURCE_FERRANDI + ", p. 88",
+    },
+    {
+        "title": "Le beurre entre en dernier dans une brioche",
+        "category": "Pétrissage",
+        "content": (
+            "Frasez tous les ingrédients sauf le beurre, puis pétrissez 5 minutes en vitesse lente "
+            "et 15 minutes en vitesse moyenne : la pâte commence à se décoller et doit devenir "
+            "élastique. Cornez le fond de cuve pour que tout se mélange. C'est seulement là qu'on "
+            "incorpore le beurre ramolli, avec 5 minutes de pétrissage de plus, jusqu'à ce que la "
+            "pâte se détache des bords."
+        ),
+        "icon": "clock",
+        "source": SOURCE_FERRANDI + ", p. 90",
+    },
+    {
+        "title": "Rompre une pâte à brioche lui donne de la force",
+        "category": "Façonnage",
+        "content": (
+            "Après un pointage de 30 minutes à température ambiante, rompez la pâte pour la dégazer "
+            "au maximum : c'est ce qui lui apporte de la force. Stockez-la ensuite idéalement une "
+            "nuit au réfrigérateur, au minimum 2 heures avant utilisation. Une pâte à brioche se "
+            "garde 48 heures au froid, et se cuit de 170 à 220 °C selon le poids des pièces."
+        ),
+        "icon": "activity",
+        "source": SOURCE_FERRANDI + ", p. 90-91",
+    },
+    {
+        "title": "La tête d'une brioche se monte en goutte dans un anneau",
+        "category": "Façonnage",
+        "content": (
+            "Détaillez deux pâtons par pièce — un gros, un petit — et boulez-les. Percez la grosse "
+            "boule pour en faire un anneau, façonnez la petite en forme de goutte, puis enfoncez "
+            "bien la goutte au centre de l'anneau. Beurrez soigneusement le moule au pinceau avant "
+            "d'y déposer la brioche, et démoulez dès la sortie du four pour permettre le ressuage."
+        ),
+        "icon": "circle",
+        "source": SOURCE_FERRANDI + ", p. 93-97",
+    },
+    {
+        "title": "Une couronne se creuse, elle ne se roule pas",
+        "category": "Façonnage",
+        "content": (
+            "Percez la boule, agrandissez doucement le trou sans déchirer la pâte, puis rabattez la "
+            "bordure du trou vers l'extérieur. Faites rouler ce boudin sous la paume pour obtenir "
+            "une forme régulière et bien arrondie, rabattez l'extérieur du disque sur le boudin, "
+            "puis étirez et roulez jusqu'à la couronne. Si la pâte se déchire ou résiste, laissez-la "
+            "se détendre quelques minutes avant de continuer."
+        ),
+        "icon": "circle",
+        "source": SOURCE_FERRANDI + ", p. 98-99",
+    },
+    {
+        "title": "La tresse à un brin se noue en huit",
+        "category": "Façonnage",
+        "content": (
+            "Prenez un boudin de 40 cm et visualisez-y trois parties égales. Ramenez la pointe vers "
+            "le tiers restant, en veillant à ce qu'elle repose sur le boudin. Faites passer le brin "
+            "de gauche dans la boucle : par-dessus le premier brin, puis par-dessous le second. "
+            "Tenez le haut et faites une rotation pour former un « 8 », insérez le bout de pâte "
+            "restant dans la nouvelle petite boucle, puis pincez les extrémités."
+        ),
+        "icon": "repeat",
+        "source": SOURCE_FERRANDI + ", p. 102-103",
+    },
+    {
+        "title": "Tresser à deux brins, en croix",
+        "category": "Façonnage",
+        "content": (
+            "Disposez deux brins de 50 à 60 cm en croix, le vertical posé sur l'horizontal. "
+            "Rabattez le brin de droite vers la gauche en le plaçant au-dessous, puis celui de "
+            "gauche vers la droite en le plaçant au-dessus. Ramenez ensuite le brin du bas vers le "
+            "haut par la gauche, et celui du haut vers le bas par la droite. Répétez jusqu'au bout, "
+            "puis pincez les extrémités."
+        ),
+        "icon": "repeat",
+        "source": SOURCE_FERRANDI + ", p. 104-105",
+    },
+    {
+        "title": "Tresser à trois brins",
+        "category": "Façonnage",
+        "content": (
+            "Pincez ensemble une extrémité de trois brins aux bouts pointus. Face à vous, placez "
+            "deux brins côte à côte à droite et le troisième plus loin à gauche. Ramenez le brin le "
+            "plus à droite par-dessus le deuxième, vers le troisième. Prenez ensuite le brin "
+            "complètement à gauche, passez-le par-dessus le deuxième et ramenez-le vers le "
+            "troisième à droite. Répétez, en gardant la tresse bien à plat, puis pincez les "
+            "extrémités."
+        ),
+        "icon": "repeat",
+        "source": SOURCE_FERRANDI + ", p. 106-107",
+    },
+    {
+        "title": "Ne serrez jamais une tresse",
+        "category": "Façonnage",
+        "content": (
+            "On doit pouvoir voir le plan de travail entre chaque nœud d'une tresse. Ce jeu laisse "
+            "la place à la pousse : une tresse serrée se déchire à la cuisson, faute de pouvoir "
+            "gonfler."
+        ),
+        "icon": "alert-circle",
+        "source": SOURCE_FERRANDI + ", p. 106",
+    },
+
+    # Chapitre Crèmes et autres garnitures (p. 110-123)
+    {
+        "title": "Parfumer une crème pâtissière",
+        "category": "Général",
+        "content": (
+            "Le café s'ajoute sous forme de 15 à 20 g d'extrait, de 15 à 20 g de café lyophilisé "
+            "dans le lait, ou de 70 g de café moulu infusé dans le lait tiède puis filtré. Les "
+            "alcools comptent 2 à 3 % du poids de la crème et s'ajoutent dans la crème froide. Le "
+            "chocolat, lui, se met dans la crème chaude : 40 à 50 g de cacao pure pâte 100 %, "
+            "remplaçable par le chocolat de votre choix — en réduisant alors le sucre, sans quoi la "
+            "crème serait trop sucrée."
+        ),
+        "icon": "droplet",
+        "source": SOURCE_FERRANDI + ", p. 112",
+    },
+    {
+        "title": "Refroidir vite une crème pâtissière",
+        "category": "Conservation",
+        "content": (
+            "Ne laissez pas une crème pâtissière refroidir dans sa casserole : étalez-la sur une "
+            "plaque recouverte de film alimentaire, puis filmez-la au contact. Elle perd sa chaleur "
+            "en quelques minutes au lieu de plusieurs heures. Le beurre, lui, s'incorpore hors du "
+            "feu, en morceaux, en fin de cuisson."
+        ),
+        "icon": "wind",
+        "source": SOURCE_FERRANDI + ", p. 113",
+    },
+    {
+        "title": "Filmer au contact, systématiquement",
+        "category": "Conservation",
+        "content": (
+            "Crème pâtissière, compote, béchamel : toutes se conservent filmées au contact, pour "
+            "qu'aucune peau ne se forme et qu'aucune eau ne se condense dessus. Comptez 24 heures "
+            "au réfrigérateur pour une crème pâtissière, 48 heures pour une béchamel, 3 jours pour "
+            "une compote de pommes."
+        ),
+        "icon": "layers",
+        "source": SOURCE_FERRANDI + ", p. 113, 116 et 123",
+    },
+    {
+        "title": "Une compote se sucre selon les pommes",
+        "category": "Général",
+        "content": (
+            "Le sucre d'une compote n'est pas une constante : comptez environ 25 g pour 500 g de "
+            "pommes, à ajuster selon leur acidité. Les pommes se détaillent en cubes de 1 cm et se "
+            "cuisent dans du beurre fondu, 5 minutes jusqu'à ce qu'elles deviennent fondantes, puis "
+            "3 minutes de plus après l'ajout du sucre. La compote est prête lorsque les morceaux "
+            "ont caramélisé."
+        ),
+        "icon": "eye",
+        "source": SOURCE_FERRANDI + ", p. 116-117",
+    },
+    {
+        "title": "Le sablage torréfie les fruits secs en même temps que le sucre",
+        "category": "Cuisson",
+        "content": (
+            "Cuisez le sucre à 117 °C, puis ajoutez les fruits secs non grillés : le sucre devient "
+            "opaque et commence à sabler, ses cristaux se collent autour des fruits, et en "
+            "poursuivant la cuisson il caramélise tout en les torréfiant. C'est pourquoi on part de "
+            "fruits crus. Vérifiez la torréfaction en coupant un fruit en deux, jamais à la couleur "
+            "du sucre."
+        ),
+        "icon": "thermometer",
+        "source": SOURCE_FERRANDI + ", p. 118-119",
+    },
+
+    # Chapitre des fondamentaux, pages non lues lors de la première passe
+    {
+        "title": "Ce qu'une farine de meule a de plus",
+        "category": "Farines",
+        "content": (
+            "L'appellation « farine de meule » est réservée aux farines obtenues par broyage des "
+            "céréales entre deux meules de pierre, et non par des cylindres en métal. Cette méthode "
+            "conserve le germe du grain et une partie du son, ce qui préserve la richesse "
+            "nutritionnelle de la farine."
+        ),
+        "icon": "grid",
+        "source": SOURCE_FERRANDI + ", p. 15",
+    },
+    {
+        "title": "Les trois parties d'un grain de blé",
+        "category": "Farines",
+        "content": (
+            "Un grain de blé se compose d'une enveloppe externe de cellulose — le son —, d'une "
+            "amande qui contient l'amidon et le gluten, et d'un germe riche en huile. C'est la part "
+            "de son conservée qui distingue une farine complète d'une farine blanche. Le blé tendre "
+            "est la céréale la plus utilisée pour le pain car naturellement riche en gluten, donc "
+            "aisément panifiable."
+        ),
+        "icon": "layers",
+        "source": SOURCE_FERRANDI + ", p. 15",
+    },
+    {
+        "title": "Pointage, détente, apprêt : les trois repos",
+        "category": "Fermentation",
+        "content": (
+            "Le pointage est le premier temps de repos, juste après le pétrissage : c'est la "
+            "première étape de la fermentation. La détente est la pause entre la division et le "
+            "façonnage des pâtons. L'apprêt est le deuxième temps de repos, après le façonnage, et "
+            "l'étape finale de la fermentation. Après la cuisson vient le ressuage : l'évaporation "
+            "de l'eau du pain une fois défourné."
+        ),
+        "icon": "clock",
+        "source": SOURCE_FERRANDI + ", p. 23",
+    },
+    {
+        "title": "Le lexique du fournil",
+        "category": "Général",
+        "content": (
+            "Frasage : mélange des ingrédients avant le pétrissage. Bassinage : ajout d'eau en "
+            "cours de pétrissage. Division : découpe du pâton avant le façonnage. Dégazage : "
+            "chasser les gaz de la pâte après une première levée, au boulage par exemple. "
+            "Boulage : façonner le pain en boule. Clé : le point de soudure créé au façonnage, "
+            "placé le plus souvent en dessous pour être invisible. Rafraîchi : nourrir le levain de "
+            "farine et d'eau. Poolish : une pâte préfermentée à la levure."
+        ),
+        "icon": "book-open",
+        "source": SOURCE_FERRANDI + ", p. 23",
+    },
 ]
+
+# ---------- Pages rendues aux astuces de BOOK_TIPS ----------
+# Ces astuces ont été extraites des encarts « Trucs et astuces de chefs » lors
+# de l'import des recettes, sans que la page soit notée. La lecture complète de
+# la section technique a permis de retrouver leur origine exacte : la page est
+# rendue ici plutôt que devinée. Une astuce dont la page n'a pas été retrouvée
+# avec certitude n'y figure pas et garde sa source sans numéro.
+_PAGE_BACKFILL = {
+    "Reconnaître un levain à maturité": "p. 39 et 41",
+    "Doser la levure d'une poolish": "p. 43",
+    "Savoir quand arrêter les rabats": "p. 48",
+    "Un rabat se donne dans les deux sens": "p. 48-49",
+    "Sept ou huit plis pour bouler": "p. 50",
+    "Le pli d'une baguette fait deux tiers de sa hauteur": "p. 51",
+    "Un coup de lame par dix centimètres": "p. 54",
+    "Grigner une baguette en biais, sur un tiers": "p. 54",
+    "Ne jamais inciser deux fois au même endroit": "p. 55",
+    "Choisir son grignage selon la pâte": "p. 56-58",
+    "La profondeur de l'incision décide de la forme": "p. 57-58",
+    "Un tiers du poids de la pâte en beurre de tourage": "p. 62-63",
+    "Les trois tours et ce qu'ils plient": "p. 64-65",
+    "Marquer les tours du doigt": "p. 65",
+    "Le beurre doit avoir la fermeté de la détrempe": "p. 67 et 73",
+    "Cinq tours pour un feuilletage": "p. 69",
+    "Écraser la pointe du croissant": "p. 78",
+    "Cinq minutes de froid avant la seconde dorure": "p. 78 et 80",
+    # « La chaîne du froid décide du feuilletage » n'est PAS ici : l'encart de
+    # la p. 86 dit la même chose, mais cette astuce-là vient de Josée Fiset et
+    # garde donc sa source. Deux ouvrages peuvent énoncer la même règle.
+    "Enfourner sur plaque brûlante pour faire ressortir la tête": "p. 94 et 97",
+    "Moins de farine dans une crème pâtissière au chocolat": "p. 113",
+    "La crème d'amande ne se cuit jamais seule": "p. 115",
+    "Un praliné trop torréfié devient amer": "p. 119",
+}
