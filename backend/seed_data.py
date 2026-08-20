@@ -16,6 +16,7 @@ Removing a recipe from this file removes it from the database on the next boot
 retiring content is a deploy and not a manual cleanup.
 """
 from families import FAMILY_BY_TITLE, family_of
+from products import product_of
 from seed_books import BOOK_RECIPES
 from tips_seed import build_tips_library
 
@@ -81,7 +82,18 @@ if _UNASSIGNED:
         "recettes sans famille dans families.py : " + ", ".join(_UNASSIGNED)
     )
 
-RECIPES_SEED = [{**r, "family": family_of(r["title"], r["category"])} for r in BOOK_RECIPES]
+# L'archétype visuel est apposé de la même manière, mais sans contrôle
+# d'exhaustivité : contrairement à la famille, il a le droit d'être absent
+# (`products.py` explique pourquoi). Une fiche sans archétype garde l'absence
+# d'image, que l'écran gère déjà.
+RECIPES_SEED = [
+    {
+        **r,
+        "family": family_of(r["title"], r["category"]),
+        "product": product_of(r["title"]),
+    }
+    for r in BOOK_RECIPES
+]
 
 TIPS_SEED = build_tips_library(BAKER_TIPS)
 

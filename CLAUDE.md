@@ -71,8 +71,20 @@ The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), 
 - A family belongs to exactly one category, which is why base doughs are split into `pates-tourees` (Viennoiseries) and `pates-a-tarte` (Pâtisseries) instead of one straddling family.
 - `pains` is currently **declared but empty**: the imported work is a pastry and viennoiserie book. Empty families are not returned by the API and the browse chips are derived from the families actually present, so both the tile and the "Pains" chip reappear on their own with the first bread.
 - Three `catch_all` families (`autres-*`) exist only for community recipes submitted without one. `GET /api/families` omits empty families, so they stay out of the grid until something lands in them; `?include_empty=1` is for the share form, which has to offer a family before anything is in it.
-- Tiles are **drawn, not photographed**: `frontend/assets/images/families/*.svg` rendered to PNG by `frontend/scripts/build-family-tiles.mjs` (Chromium via Playwright, run by hand, not part of the build). Only `src/theme.ts` colours are used. `FAMILY_TILES` in `src/families.ts` is a `Record<FamilyKey, …>`, so a family without a tile fails `tsc` rather than showing an empty box.
-- Recipe cards inside a family carry **no image** on purpose: the imported sheets have no photo, and one generic picture repeated over nineteen tarts would read as a photo of each.
+- Tiles are **drawn, not photographed**: `frontend/assets/images/families/*.svg` rendered to PNG by `frontend/scripts/build-tiles.mjs` (Chromium via Playwright, run by hand, not part of the build; it renders the `products/` tiles too). Only `src/theme.ts` colours are used. `FAMILY_TILES` in `src/families.ts` is a `Record<FamilyKey, …>`, so a family without a tile fails `tsc` rather than showing an empty box.
+- Recipe cards inside a family carry **no image** on purpose: the imported sheets have no photo, and one generic picture repeated over nineteen tarts would read as a photo of each. (The recipe *screen* does carry a drawn illustration — see the next section for why a drawing is allowed to repeat where a photo isn't.)
+
+### Recipe illustrations — `backend/products.py`, `frontend/src/products.ts`
+
+None of the 194 imported sheets has a photo, and none will: the books' photographs are not reproduced (the data is taken, the images are not), and free-licence photo banks are documentary archives whose culinary quality is below the rest of the app. So a recipe screen shows a **drawing of its archetype** — the shape, not the dish.
+
+A drawing reads as an **emblem** rather than as a picture of that particular piece, which is exactly what makes repetition acceptable where a photo would lie: nineteen tarts sharing one drawing say "a tart"; nineteen copies of one photo would say "here is *that* tart".
+
+- `backend/products.py` is the single source, same shape as `families.py`: an ordered `PRODUCTS` list of archetype keys and an `_ASSIGNMENTS` table mapping recipe titles to them. `seed_data.py` stamps `product` on each seeded recipe via `product_of`.
+- Unlike `family`, `product` is **allowed to be absent**, and the table deliberately does not cover the whole catalogue (150/194). A kouglof, a braid or a palmier gets no archetype because no drawing renders that shape honestly — a pain de mie illustrated by a boule would be worse than nothing. `app/recipe/[id].tsx` then shows a plain warm band (not a grey one, which would read as a failed image load).
+- Tiles come from the same pipeline as the family tiles: SVG in `frontend/assets/images/{families,products}/`, rendered to PNG by `frontend/scripts/build-tiles.mjs` (now walks both directories). Sixteen archetypes reuse a family tile that already draws exactly that shape; six are drawn for the products. Only `src/theme.ts` colours are used.
+- `PRODUCT_TILES` in `src/products.ts` is a `Record<ProductKey, …>`, so an archetype without a tile fails `tsc`. `backend/tests/test_products.py` covers what `tsc` can't see: an unknown title, an archetype nobody uses, a `require` pointing at a missing PNG, a PNG with no SVG source.
+- The short list of archetypes is the point, not a to-do: drawings that didn't read (a spiral overflowing its frame, a braid that looked like a chain of beads) were thrown away rather than shipped.
 
 ### Recipe content — `backend/seed_data.py`, `backend/seed_books.py`
 
