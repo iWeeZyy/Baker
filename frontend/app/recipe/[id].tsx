@@ -9,6 +9,7 @@ import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
 import { scaleIngredientLine } from '@/src/ingredientScale';
+import { productTile } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
@@ -183,14 +184,43 @@ export default function RecipeDetail() {
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
   const imgUri = recipe.image_path ? `${API_BASE}/files/${recipe.image_path}` : recipe.image_url;
+  // À défaut de photo, l'illustration de l'archétype (voir src/products.ts).
+  // Une recette dont la forme n'a pas de dessin juste n'en reçoit aucun et
+  // garde le bandeau nu — c'est délibéré, pas un chargement raté.
+  const tile = imgUri ? null : productTile(recipe.product as string | undefined);
 
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
         <View style={styles.heroWrap}>
-          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-          <LinearGradient colors={['rgba(42,31,26,0.4)', 'transparent', 'rgba(42,31,26,0.7)']} style={StyleSheet.absoluteFillObject} />
+          {imgUri ? (
+            <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          ) : (
+            // Sans photo, un fond chaud plutôt qu'une bande grise, qui se
+            // lirait comme une image qui n'a pas chargé. L'illustration de
+            // l'archétype vient par-dessus quand la forme en a une ; sinon la
+            // bande reste unie — c'est un état voulu, pas un échec.
+            //
+            // Un dessin se recadre mal : il se lit entier ou pas du tout, d'où
+            // `contain`, remonté pour laisser la bande basse au titre.
+            <View style={styles.heroPlain}>
+              {tile ? (
+                <View style={styles.heroDrawing} testID="recipe-illustration">
+                  <Image source={tile} style={{ flex: 1 }} contentFit="contain" />
+                </View>
+              ) : null}
+            </View>
+          )}
+          <LinearGradient
+            // Sans photo, on n'assombrit que le bas : noircir le haut salirait
+            // l'illustration sans rien rendre plus lisible, les deux boutons
+            // portant déjà leur propre pastille.
+            colors={imgUri
+              ? ['rgba(42,31,26,0.4)', 'transparent', 'rgba(42,31,26,0.7)']
+              : ['transparent', 'transparent', 'rgba(42,31,26,0.72)']}
+            style={StyleSheet.absoluteFillObject}
+          />
           <SafeAreaView edges={['top']} style={styles.heroTop}>
             <Pressable testID="back-btn" onPress={() => router.back()} style={styles.iconBtn}>
               <Feather name="arrow-left" size={20} color="#fff" />
@@ -397,6 +427,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.color.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
   heroWrap: { height: 420, position: 'relative' },
+  heroPlain: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.color.surfaceSecondary },
+  heroDrawing: { flex: 1, marginBottom: 92 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },
   heroBottom: { position: 'absolute', bottom: 24, left: 24, right: 24 },

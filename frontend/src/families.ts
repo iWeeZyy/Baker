@@ -11,7 +11,7 @@ import type { ImageSourcePropType } from 'react-native';
  * Les images sont des PNG et non des SVG : `react-native-svg` n'est pas dans le
  * projet, et `require` doit être statique pour que Metro embarque le fichier.
  * Les sources SVG vivent à côté des PNG, régénérables par
- * `scripts/build-family-tiles.mjs`.
+ * `scripts/build-tiles.mjs`.
  */
 export type FamilyKey =
   | 'pains-classiques'

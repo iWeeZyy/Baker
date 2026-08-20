@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <rect width="1200" height="900" fill="#F3EFEA"/>
+  <circle cx="600" cy="450" r="300" fill="#EAE3DB"/>
+  <circle cx="600" cy="450" r="234" fill="#D4A373"/>
+  <circle cx="600" cy="450" r="234" fill="none" stroke="#8B4527" stroke-width="12" stroke-opacity="0.28"/>
+  <path d="M600 450 m -234 0 a 234 234 0 0 1 468 0 a 234 234 0 0 1 -468 0 M600 450 m -86 0 a 86 86 0 0 0 172 0 a 86 86 0 0 0 -172 0"
+        fill="#F0DAC6" fill-rule="evenodd"/>
+  <circle cx="600" cy="450" r="86" fill="#EAE3DB"/>
+  <circle cx="600" cy="450" r="86" fill="none" stroke="#8B4527" stroke-width="10" stroke-opacity="0.25"/>
+  <g fill="#C05A35">
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(600 250) rotate(18)"/>
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(766 372) rotate(-32)"/>
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(742 574) rotate(40)"/>
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(540 640) rotate(-14)"/>
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(414 500) rotate(62)"/>
+    <rect x="-26" y="-8" width="52" height="16" rx="8" transform="translate(452 320) rotate(-48)"/>
+  </g>
+</svg>

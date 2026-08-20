@@ -1,5 +1,8 @@
 /**
- * Rend les vignettes de famille : assets/images/families/*.svg -> *.png
+ * Rend les vignettes dessinées : assets/images/{families,products}/*.svg -> *.png
+ *
+ * Deux jeux, même traitement : les vignettes de **famille** ouvrent le
+ * catalogue, celles de **produit** illustrent une fiche qui n'a pas de photo.
  *
  * Les écrans affichent des PNG et non les SVG : `react-native-svg` n'est pas
  * installé, et un PNG s'affiche à l'identique sur iOS, Android et web via
@@ -10,7 +13,7 @@
  * Ne tourne pas pendant le build : à relancer à la main après avoir touché
  * un SVG.
  *
- *   npm i -D playwright && node scripts/build-family-tiles.mjs
+ *   npm i -D playwright && node scripts/build-tiles.mjs
  *
  * CHROMIUM_PATH permet de pointer un Chromium déjà installé.
  */
@@ -32,7 +35,8 @@ try {
   process.exit(1);
 }
 
-const DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../assets/images/families');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../assets/images');
+const DIRS = ['families', 'products'].map(d => join(ROOT, d));
 // 4:3. Une vignette occupe une demi-largeur d'écran (~200 pt), donc 1200 px
 // couvre déjà le triple de la densité la plus élevée ; doubler encore
 // quadruplerait le poids du bundle pour un gain invisible.
@@ -47,17 +51,21 @@ const page = await browser.newPage({
   deviceScaleFactor: SCALE,
 });
 
-const files = (await readdir(DIR)).filter(f => f.endsWith('.svg')).sort();
-for (const file of files) {
-  const svg = await readFile(join(DIR, file), 'utf8');
-  await page.setContent(
-    `<!doctype html><style>html,body{margin:0;padding:0}svg{display:block}</style>${svg}`,
-    { waitUntil: 'load' },
-  );
-  const out = join(DIR, file.replace(/\.svg$/, '.png'));
-  await page.screenshot({ path: out, omitBackground: false });
-  console.log(`${file} -> ${out.split('/').pop()}`);
+let count = 0;
+for (const dir of DIRS) {
+  const files = (await readdir(dir)).filter(f => f.endsWith('.svg')).sort();
+  for (const file of files) {
+    const svg = await readFile(join(dir, file), 'utf8');
+    await page.setContent(
+      `<!doctype html><style>html,body{margin:0;padding:0}svg{display:block}</style>${svg}`,
+      { waitUntil: 'load' },
+    );
+    const out = join(dir, file.replace(/\.svg$/, '.png'));
+    await page.screenshot({ path: out, omitBackground: false });
+    console.log(`${dir.split('/').pop()}/${file} -> ${out.split('/').pop()}`);
+    count += 1;
+  }
 }
 
 await browser.close();
-console.log(`${files.length} vignettes rendues`);
+console.log(`${count} vignettes rendues`);

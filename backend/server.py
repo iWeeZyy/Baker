@@ -153,6 +153,11 @@ class Recipe(BaseModel):
     # Assigned from families.py for the catalogue; falls back to the category's
     # catch-all for community recipes, so nothing is unreachable.
     family: Optional[str] = None
+    # L'archétype visuel — la forme, pas le produit (voir products.py). Il porte
+    # l'illustration de la fiche à défaut de photo. Absent quand aucun dessin de
+    # la bibliothèque ne rend la forme honnêtement, et la fiche reste alors sans
+    # image : un dessin approximatif montrerait autre chose que la recette.
+    product: Optional[str] = None
     image_url: str = ""
     image_path: Optional[str] = None
     description: str
