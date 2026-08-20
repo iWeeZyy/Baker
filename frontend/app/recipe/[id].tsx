@@ -8,7 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
-import { scaleIngredientLine, scaleYieldLabel } from '@/src/ingredientScale';
+import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
 import { productTile } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
@@ -192,6 +192,16 @@ export default function RecipeDetail() {
     [recipe, quantity],
   );
 
+  // Les étapes sont mises à l'échelle une fois, et le texte obtenu sert **aussi**
+  // à `parseDuration` : le minuteur d'une étape doit être lu sur le texte que
+  // l'utilisateur a sous les yeux, pas sur une autre version. `scaleStepLine` ne
+  // touche jamais à une durée, donc les minuteurs sont identiques à 1 et à 3 —
+  // mais ils le sont par construction, pas par hasard.
+  const scaledSteps = useMemo(
+    () => ((recipe?.steps as string[] | undefined) ?? []).map((line) => scaleStepLine(line, quantity)),
+    [recipe, quantity],
+  );
+
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
   const imgUri = recipe.image_path ? `${API_BASE}/files/${recipe.image_path}` : recipe.image_url;
@@ -310,7 +320,7 @@ export default function RecipeDetail() {
           ))}
 
           {tab === 'steps' && (() => {
-            const seq = recipe.steps
+            const seq = scaledSteps
               .map((s: string, i: number) => ({ i, dur: parseDuration(s) }))
               .filter((x: any) => x.dur)
               .map((x: any) => ({ label: `Étape ${x.i + 1}`, seconds: x.dur }));
@@ -322,7 +332,7 @@ export default function RecipeDetail() {
                     <Text style={styles.seqBtnText}>Lancer les {seq.length} minuteurs en séquence</Text>
                   </Pressable>
                 )}
-                {recipe.steps.map((s: string, i: number) => {
+                {scaledSteps.map((s: string, i: number) => {
                   const dur = parseDuration(s);
                   return (
                     <View key={i} style={styles.stepRow} testID={`step-${i}`}>
