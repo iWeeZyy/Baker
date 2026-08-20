@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
 import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
-import { productTile } from '@/src/products';
+import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
@@ -76,6 +76,38 @@ const TECHNICAL_ROWS: [string, string][] = [
 /** Keeps "205 °C" and "1 h 30" on one line rather than wrapping on the space. */
 function unbreakable(text: string) {
   return text.replace(/(\d)\s+(°C|h\b|min\b|g\b|ml\b|cm\b)/g, '$1\u00a0$2');
+}
+
+/**
+ * Le crédit d'une photo.
+ *
+ * Les API Guidelines de Pexels vont plus loin que la licence : dès qu'on passe
+ * par leur API, il faut nommer le photographe avec un lien vers son profil et
+ * renvoyer vers Pexels. Ce n'est donc pas une politesse, c'est la condition
+ * d'usage — et c'est aussi pourquoi `recipe_photos.py` refuse une entrée sans
+ * auteur ni page source : on ne peut pas créditer ce qu'on n'a pas noté.
+ *
+ * Rendu discrètement sous la photo, dans le style du « D'après … » qui crédite
+ * déjà l'ouvrage en bas de la fiche technique. Aucun écran nouveau.
+ */
+function PhotoCredit({ credit }: { credit?: Record<string, any> | null }) {
+  if (!credit?.author || !credit?.page) return null;
+  const open = (url?: string) => { if (url) Linking.openURL(url).catch(() => {}); };
+  return (
+    <View style={styles.photoCredit} testID="photo-credit">
+      <Feather name="camera" size={11} color={theme.color.muted} />
+      <Text style={styles.photoCreditText}>
+        Photo{' '}
+        <Text style={styles.photoCreditLink} onPress={() => open(credit.author_url)}>
+          {credit.author}
+        </Text>
+        {' · '}
+        <Text style={styles.photoCreditLink} onPress={() => open(credit.page)}>
+          Pexels
+        </Text>
+      </Text>
+    </View>
+  );
 }
 
 function TechnicalSheet(
@@ -204,19 +236,20 @@ export default function RecipeDetail() {
 
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
-  const imgUri = recipe.image_path ? `${API_BASE}/files/${recipe.image_path}` : recipe.image_url;
-  // À défaut de photo, l'illustration de l'archétype (voir src/products.ts).
-  // Une recette dont la forme n'a pas de dessin juste n'en reçoit aucun et
-  // garde le bandeau nu — c'est délibéré, pas un chargement raté.
-  const tile = imgUri ? null : productTile(recipe.product as string | undefined);
+  // Téléversement, puis photo du produit, puis dessin d'archétype, puis rien.
+  // La règle vit dans `src/products.ts` et sert aussi à l'accueil, pour que les
+  // deux écrans ne puissent pas diverger.
+  const image = recipeImage(recipe, API_BASE);
+  const photo = image.kind === 'upload' || image.kind === 'photo' ? image.uri : null;
+  const tile = image.kind === 'drawing' ? image.source : null;
 
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
         <View style={styles.heroWrap}>
-          {imgUri ? (
-            <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          {photo ? (
+            <Image source={{ uri: photo }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           ) : (
             // Sans photo, un fond chaud plutôt qu'une bande grise, qui se
             // lirait comme une image qui n'a pas chargé. L'illustration de
@@ -237,7 +270,7 @@ export default function RecipeDetail() {
             // Sans photo, on n'assombrit que le bas : noircir le haut salirait
             // l'illustration sans rien rendre plus lisible, les deux boutons
             // portant déjà leur propre pastille.
-            colors={imgUri
+            colors={photo
               ? ['rgba(42,31,26,0.4)', 'transparent', 'rgba(42,31,26,0.7)']
               : ['transparent', 'transparent', 'rgba(42,31,26,0.72)']}
             style={StyleSheet.absoluteFillObject}
@@ -264,6 +297,8 @@ export default function RecipeDetail() {
             {recipe.author_name && <Text style={styles.author}>par {recipe.author_name}</Text>}
           </View>
         </View>
+
+        <PhotoCredit credit={photo ? recipe.image_credit : null} />
 
         <View style={styles.metaRow}>
           <View style={styles.metaCol}><Text style={styles.metaLabel}>DIFFICULTÉ</Text><Text style={styles.metaVal}>{recipe.difficulty}</Text></View>
@@ -459,6 +494,12 @@ const styles = StyleSheet.create({
   category: { color: theme.color.brandSecondary, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: '#fff', marginTop: 6, lineHeight: 36 },
   author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 6, fontStyle: 'italic' },
+  photoCredit: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 24, paddingTop: 10,
+  },
+  photoCreditText: { fontSize: 11, color: theme.color.muted, fontStyle: 'italic' },
+  photoCreditLink: { textDecorationLine: 'underline' },
   metaRow: { flexDirection: 'row', paddingHorizontal: 24, paddingVertical: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 32 },
   metaCol: { flex: 1 },
   metaLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },

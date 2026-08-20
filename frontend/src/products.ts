@@ -86,3 +86,55 @@ export function productTile(key?: string | null): ImageSourcePropType | null {
   if (!key) return null;
   return PRODUCT_TILES[key as ProductKey] ?? null;
 }
+
+/**
+ * L'image d'une fiche recette, dans l'ordre de préférence.
+ *
+ *   1. la photo téléversée par l'auteur d'une recette de la communauté ;
+ *   2. la photographie du produit, quand la banque en a une qui montre
+ *      vraiment ce produit-là (voir `backend/recipe_photos.py`) ;
+ *   3. le dessin de l'archétype — la forme, pas la pièce ;
+ *   4. rien, et l'écran pose alors une bande unie.
+ *
+ * Cette fonction existe pour que la règle vive à **un seul endroit**. Elle en
+ * remplace six copies, dont quatre repliaient sur une URL Unsplash codée en
+ * dur — une photo de pain générique, unique, répétée sur toutes les cartes,
+ * vestige du gabarit d'origine et dont personne n'avait vérifié la licence.
+ * Les deux autres ne repliaient sur rien : l'accueil affichait un rectangle
+ * blanc par recette.
+ */
+export type RecipeImageSource =
+  | { kind: 'upload'; uri: string }
+  | { kind: 'photo'; uri: string }
+  | { kind: 'drawing'; source: ImageSourcePropType }
+  | { kind: 'none' };
+
+type ImageableRecipe = {
+  image_path?: string | null;
+  image_url?: string | null;
+  product?: string | null;
+};
+
+export function recipeImage(recipe: ImageableRecipe | null | undefined, apiBase: string): RecipeImageSource {
+  if (!recipe) return { kind: 'none' };
+  if (recipe.image_path) return { kind: 'upload', uri: `${apiBase}/files/${recipe.image_path}` };
+  if (recipe.image_url) return { kind: 'photo', uri: recipe.image_url };
+  const drawing = productTile(recipe.product);
+  if (drawing) return { kind: 'drawing', source: drawing };
+  return { kind: 'none' };
+}
+
+/**
+ * La même chose réduite à ce qu'attend `<Image source>`, pour les vignettes
+ * de liste où l'on n'a pas besoin de distinguer une photo d'un dessin.
+ * Renvoie `undefined` quand il n'y a rien : `expo-image` n'affiche alors rien
+ * du tout, plutôt qu'une image cassée.
+ */
+export function recipeImageSource(
+  recipe: ImageableRecipe | null | undefined,
+  apiBase: string,
+): ImageSourcePropType | undefined {
+  const image = recipeImage(recipe, apiBase);
+  if (image.kind === 'none') return undefined;
+  return image.kind === 'drawing' ? image.source : { uri: image.uri };
+}

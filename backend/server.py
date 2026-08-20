@@ -160,6 +160,11 @@ class Recipe(BaseModel):
     product: Optional[str] = None
     image_url: str = ""
     image_path: Optional[str] = None
+    # Le crédit de la photo — photographe, profil, page source, licence. Les
+    # API Guidelines de Pexels l'exigent dès qu'on passe par leur API, plus
+    # largement que la licence elle-même. Absent quand la fiche n'a pas de
+    # photo : on ne crédite que ce qu'on affiche (voir recipe_photos.py).
+    image_credit: Optional[dict] = None
     description: str
     ingredients: List[str]
     steps: List[str]
