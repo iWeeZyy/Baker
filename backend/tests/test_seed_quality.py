@@ -102,6 +102,31 @@ class TestRecipesCoherent:
         if first:
             assert int(first.group(1)) == pieces, f"{label!r} vs {pieces}"
 
+    # Les formes que `scaleYieldLabel` (frontend/src/ingredientScale.ts) sait
+    # multiplier. Un libellé d'une forme inconnue s'afficherait tel quel
+    # pendant que les ingrédients, eux, seraient multipliés — la fiche se
+    # contredirait sans rien signaler. Un ouvrage qui introduit une tournure
+    # nouvelle doit donc casser ce test, pas passer inaperçu.
+    SCALABLE = re.compile(
+        r"^("
+        r"\d+(?:[.,]\d+)?\s*(?:g|kg|ml|cl|l)(?![^\W\d_])"   # « 500 g de béchamel »
+        r"|de\s+\d.*"                                       # « de 8 à 10 portions »
+        r"|pour\s+\d.*"                                     # « Pour 6 personnes »
+        r"|(?:environ\s+)?(?:\d+(?:[.,]\d+)?|une?)\s+\S.*"  # « 8 mauricettes de 105 g »
+        r")$",
+        re.IGNORECASE,
+    )
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_rendement_multipliable(self, r):
+        label = (r.get("technical") or {}).get("yield_label")
+        if not label:
+            return
+        assert self.SCALABLE.match(label.strip()), (
+            f"« {label} » n'entre dans aucune forme que le sélecteur de "
+            f"quantité sait multiplier"
+        )
+
 
 class TestNoScanArtifacts:
     """Les fautes que laisse une extraction de PDF, une par contrôle."""
@@ -229,3 +254,84 @@ class TestTips:
     def test_pas_de_doublon(self):
         titles = [t["title"] for t in TIPS_SEED]
         assert len(titles) == len(set(titles))
+
+
+class TestEtapesMultipliables:
+    """Ce que le sélecteur de quantité sait — et ne sait pas — lire dans une étape.
+
+    `scaleStepLine` (frontend/src/ingredientScale.ts) ne multiplie qu'un compte
+    de pièces gouverné par un verbe de division, et s'abstient dans quatre cas
+    où multiplier serait faux. Ces tests figent la frontière : ils ne relisent
+    pas le code TypeScript, ils recensent les tournures du catalogue, pour qu'un
+    ouvrage introduisant une tournure nouvelle se signale au lieu de passer.
+    """
+
+    VERBE = re.compile(
+        r"\b(?:divis|s[ée]par|d[ée]taill|dress|fa[çc]onn|coup|partag|pes)[a-zéèê]*\b",
+        re.IGNORECASE,
+    )
+    PIECE = (r"p[âa]tons?|boules?|disques?|tron[çc]ons?|bandes?|cercles?|carr[ée]s?"
+             r"|rectangles?|galettes?|demi-baguettes?|b[âa]tards?|boudins?|parts?|pi[èe]ces?")
+    COMPTE = re.compile(r"(\d+(?:[.,]\d+)?)\s+(?:" + PIECE + r")\b", re.IGNORECASE)
+    COTE = re.compile(r"\d\s*[×x]\s*\d")
+
+    # Les recettes dont au moins une étape garde le compte d'une seule fournée.
+    # Aucune n'est un oubli : dans chacune, multiplier donnerait une étape fausse
+    # ou irréalisable — une cote de pâte énoncée avant le compte, un compte par
+    # pièce, ou un nombre coordonné que le chiffre seul laisserait désaccordé.
+    # Cette liste est petite et doit le rester : si elle s'allonge, c'est qu'un
+    # nouvel ouvrage écrit ses étapes autrement, et la règle est à relire.
+    INTACTES = {
+        "Brioche feuilletée",
+        "Brioche vegan",
+        "Brioche à la cardamome",
+        "Chaussons aux pommes",
+        "Cinnamon roll",
+        "Croissants",
+        "Cruffin",
+        "Grosse brioche à tête",
+        "Kouign amann",
+        "Pain de méteil feuilleté",
+        "Pains au chocolat",
+        "Petite brioche à tête",
+        "Écrin feuilleté aux noisettes",
+    }
+
+    def test_la_liste_des_recettes_intactes_ne_grandit_pas(self):
+        titres = {r["title"] for r in RECIPES_SEED}
+        inconnues = sorted(self.INTACTES - titres)
+        assert inconnues == [], (
+            f"recettes listées comme intactes mais absentes du catalogue : {inconnues}"
+        )
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_une_cote_avant_un_compte_est_une_tournure_connue(self, r):
+        """Une cote de la pâte entière placée avant un compte bloque la mise à
+        l'échelle de l'étape. C'est voulu — mais la recette doit alors figurer
+        dans INTACTES, faute de quoi personne ne saura qu'elle ne suit pas."""
+        for step in r["steps"]:
+            if not self.VERBE.search(step):
+                continue
+            cote = self.COTE.search(step)
+            compte = self.COMPTE.search(step)
+            if cote and compte and cote.start() < compte.start(1):
+                assert r["title"] in self.INTACTES, (
+                    f"« {r['title']} » a une étape dont le compte suit une cote "
+                    f"de la pâte ({step[:70]}…) : elle ne se multipliera pas, "
+                    f"il faut soit l'ajouter à INTACTES, soit revoir la règle"
+                )
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_aucune_etape_ne_melange_compte_et_duree_sans_unite(self, r):
+        """Un compte de pièces se distingue d'une durée par son nom de pièce.
+        Une étape écrivant « diviser en 8 » sans nommer la pièce serait
+        indistinguable d'un nombre quelconque, et ne se multiplierait pas."""
+        for step in r["steps"]:
+            for m in re.finditer(r"\b(?:[Dd]iviser|[Ss]éparer)\s+(?:la p[âa]te\s+)?en\s+(\d+)\s+(\S+)",
+                                 step):
+                mot = m.group(2).rstrip(".,;:")
+                assert re.fullmatch(self.PIECE, mot, re.IGNORECASE), (
+                    f"« {r['title']} » : « diviser en {m.group(1)} {mot} » — "
+                    f"« {mot} » n'est pas un nom de pièce connu, le compte ne "
+                    f"suivra pas le multiplicateur"
+                )
