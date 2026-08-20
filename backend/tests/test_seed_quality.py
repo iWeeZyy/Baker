@@ -102,6 +102,31 @@ class TestRecipesCoherent:
         if first:
             assert int(first.group(1)) == pieces, f"{label!r} vs {pieces}"
 
+    # Les formes que `scaleYieldLabel` (frontend/src/ingredientScale.ts) sait
+    # multiplier. Un libellé d'une forme inconnue s'afficherait tel quel
+    # pendant que les ingrédients, eux, seraient multipliés — la fiche se
+    # contredirait sans rien signaler. Un ouvrage qui introduit une tournure
+    # nouvelle doit donc casser ce test, pas passer inaperçu.
+    SCALABLE = re.compile(
+        r"^("
+        r"\d+(?:[.,]\d+)?\s*(?:g|kg|ml|cl|l)(?![^\W\d_])"   # « 500 g de béchamel »
+        r"|de\s+\d.*"                                       # « de 8 à 10 portions »
+        r"|pour\s+\d.*"                                     # « Pour 6 personnes »
+        r"|(?:environ\s+)?(?:\d+(?:[.,]\d+)?|une?)\s+\S.*"  # « 8 mauricettes de 105 g »
+        r")$",
+        re.IGNORECASE,
+    )
+
+    @pytest.mark.parametrize("r", RECIPES_SEED, ids=ids(RECIPES_SEED))
+    def test_rendement_multipliable(self, r):
+        label = (r.get("technical") or {}).get("yield_label")
+        if not label:
+            return
+        assert self.SCALABLE.match(label.strip()), (
+            f"« {label} » n'entre dans aucune forme que le sélecteur de "
+            f"quantité sait multiplier"
+        )
+
 
 class TestNoScanArtifacts:
     """Les fautes que laisse une extraction de PDF, une par contrôle."""

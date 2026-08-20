@@ -8,7 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
-import { scaleIngredientLine } from '@/src/ingredientScale';
+import { scaleIngredientLine, scaleYieldLabel } from '@/src/ingredientScale';
 import { productTile } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
@@ -78,9 +78,20 @@ function unbreakable(text: string) {
   return text.replace(/(\d)\s+(°C|h\b|min\b|g\b|ml\b|cm\b)/g, '$1\u00a0$2');
 }
 
-function TechnicalSheet({ technical, source }: { technical?: Record<string, any> | null; source?: string | null }) {
+function TechnicalSheet(
+  { technical, source, quantity }:
+  { technical?: Record<string, any> | null; source?: string | null; quantity: number },
+) {
+  // Seul le rendement suit le multiplicateur. Une durée et une température
+  // n'en dépendent pas : un pointage de 15 minutes reste 15 minutes qu'on
+  // fasse huit pièces ou vingt-quatre, et le four reste à 250 °C.
   const rows = TECHNICAL_ROWS
-    .map(([key, label]) => [label, technical?.[key]] as const)
+    .map(([key, label]) => [
+      label,
+      key === 'yield_label' && typeof technical?.[key] === 'string'
+        ? scaleYieldLabel(technical[key], quantity)
+        : technical?.[key],
+    ] as const)
     .filter(([, value]) => typeof value === 'string' && value.trim().length > 0);
   const equipment: string[] = Array.isArray(technical?.equipment) ? technical!.equipment : [];
 
@@ -276,7 +287,7 @@ export default function RecipeDetail() {
           <Feather name="chevron-right" size={16} color={theme.color.muted} />
         </Pressable>
 
-        <TechnicalSheet technical={recipe.technical} source={recipe.source} />
+        <TechnicalSheet technical={recipe.technical} source={recipe.source} quantity={quantity} />
 
         <View style={styles.segment}>
           <Pressable testID="segment-ingredients" onPress={() => setTab('ingredients')} style={[styles.segBtn, tab === 'ingredients' && styles.segActive]}>

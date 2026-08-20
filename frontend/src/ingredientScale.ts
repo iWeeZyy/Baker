@@ -90,3 +90,109 @@ export function resolveManualQuantity(raw: string): number {
 export function formatMultiplierForInput(value: number): string {
   return Number.isInteger(value) ? String(value) : String(value).replace('.', ',');
 }
+
+// ---------- Le rendement ----------
+// Une ligne « Rendement » est, elle aussi, du texte libre recopié du livre :
+// « 8 mauricettes de 105 g », « 1 couronne, pour 6 personnes », « 500 g de
+// béchamel », « de 8 à 10 portions ». Elle doit suivre le multiplicateur,
+// sans quoi la fiche se contredit — les ingrédients triplent et le rendement
+// annonce toujours huit pièces.
+//
+// La règle reste celle des ingrédients : on ne met à l'échelle que ce qu'on
+// sait lire. Le nombre de pièces se multiplie ; le poids d'**une** pièce, un
+// diamètre, une plage de poids à la pièce ne bougent pas. C'est aussi pour ça
+// que seul le rendement est mis à l'échelle dans la fiche technique : un
+// pointage de 15 minutes reste 15 minutes qu'on fasse huit pièces ou
+// vingt-quatre, et un four reste à 250 °C.
+
+// Ce qui clôt le groupe nominal de tête : au-delà, on décrit un poids, des
+// portions ou une remarque, qui ne s'accordent pas avec le nombre de pièces.
+const HEAD_END = /\s+de\s|\s+pour\s|\s+ou\s|,|\(/;
+
+/** Accorde au pluriel « grosse brioche » -> « grosses brioches ». */
+function pluralizeHead(rest: string): string {
+  const cut = rest.search(HEAD_END);
+  const head = cut === -1 ? rest : rest.slice(0, cut);
+  const tail = cut === -1 ? '' : rest.slice(cut);
+  const plural = head
+    .split(/(\s+)/)
+    .map((w) => (/\s/.test(w) || /[sxz]$/i.test(w) || !w ? w : `${w}s`))
+    .join('');
+  return plural + tail;
+}
+
+/** Ramène au singulier quand la mise à l'échelle retombe sur une seule pièce. */
+function singularizeHead(rest: string): string {
+  const cut = rest.search(HEAD_END);
+  const head = cut === -1 ? rest : rest.slice(0, cut);
+  const tail = cut === -1 ? '' : rest.slice(cut);
+  return head.replace(/([sx])(?=\s|$)/g, '') + tail;
+}
+
+/** « pour 1 personnes » -> « pour 1 personne ». */
+function agreeSingular(text: string): string {
+  return text.replace(/\b1(\s+)(personne|portion)s\b/gi, '1$1$2');
+}
+
+function scaleAll(text: string, pattern: RegExp, factor: number): string {
+  return text.replace(pattern, (whole) =>
+    whole.replace(new RegExp(NUM, 'g'), (n) =>
+      formatScaledNumber(parseFloat(n.replace(',', '.')) * factor)),
+  );
+}
+
+/**
+ * Ce qui, dans la queue d'un rendement, décrit le total et suit donc le
+ * multiplicateur : « ou 8 muffins rectangulaires », « , pour 6 à 8 personnes »,
+ * « (de 8 à 10 portions) ».
+ *
+ * Volontairement absent : « de 8 portions chacun », que « chacun » désigne
+ * comme un compte par pièce, et « de 280 g » / « de 25 à 30 cm », qui sont un
+ * poids et un diamètre à la pièce.
+ */
+const TAIL_TOTALS = [
+  new RegExp(`\\bou\\s+${NUM}\\b`, 'gi'),
+  new RegExp(`,\\s*pour\\s+${NUM}(?:\\s*à\\s*${NUM})?\\s+personnes?`, 'gi'),
+  new RegExp(`\\((?:de\\s+)?${NUM}\\s*à\\s*${NUM}\\s+(?:portions?|personnes?)\\)`, 'gi'),
+];
+
+/**
+ * Multiplie le rendement d'une fiche technique par `factor`.
+ *
+ * Renvoie le libellé inchangé quand il n'entre dans aucune forme connue :
+ * comme partout ailleurs, on préfère ne rien toucher plutôt qu'annoncer un
+ * rendement qu'on aurait deviné.
+ */
+export function scaleYieldLabel(label: string, factor: number): string {
+  if (!label || factor === 1) return label;
+  const text = label.trim();
+
+  // « 500 g de béchamel », « 190 g de levain » : ici la masse *est* le
+  // rendement, elle se multiplie. (Ailleurs, un « de 105 g » est le poids
+  // d'une pièce et ne bouge pas.)
+  // `(?!\p{L})` et non `\b` : `\b` ne connaît que l'ASCII, et « 2 gâteaux »
+  // se lisait alors comme « 2 g » suivi de « âteaux ».
+  const mass = text.match(new RegExp(`^(${NUM})(\\s*)(g|kg|ml|cl|l)(?!\\p{L})(.*)$`, 'iu'));
+  if (mass) {
+    const [, n, ws, unit, rest] = mass;
+    return `${formatScaledNumber(parseFloat(n.replace(',', '.')) * factor)}${ws}${unit}${rest}`;
+  }
+
+  // « de 8 à 10 portions », « Pour 6 personnes » : pas de pièces, seulement
+  // un nombre de parts, qui suit le multiplicateur.
+  if (/^(de\s+\d|pour\s+\d)/i.test(text)) {
+    return agreeSingular(scaleAll(text, new RegExp(`${NUM}(?:\\s*à\\s*${NUM})?`, 'g'), factor));
+  }
+
+  // « 8 mauricettes de 105 g », « environ 20 gressins », « Un pâton de 600 g ».
+  const counted = text.match(new RegExp(`^(environ\\s+|)(${NUM}|Une?)\\s+(\\S.*)$`, 'i'));
+  if (!counted) return label;
+  const [, prefix, rawCount, body] = counted;
+  const count = /^une?$/i.test(rawCount) ? 1 : parseFloat(rawCount.replace(',', '.'));
+  const scaled = count * factor;
+  let rest = body;
+  if (scaled > 1 && count <= 1) rest = pluralizeHead(rest);
+  if (scaled === 1 && count > 1) rest = singularizeHead(rest);
+  for (const pattern of TAIL_TOTALS) rest = scaleAll(rest, pattern, factor);
+  return agreeSingular(`${prefix}${formatScaledNumber(scaled)} ${rest}`);
+}
