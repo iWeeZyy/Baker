@@ -50,6 +50,9 @@ PER_PAGE = 15          # quinze candidats en un appel : de quoi juger sans noyer
 PAUSE = 2.0            # entre deux appels, très en dessous des 200/heure
 RETRIES = 4
 MIN_WIDTH = 1200       # en dessous, la photo pixellise sur le bandeau de la fiche
+# Le User-Agent par défaut d'urllib ("Python-urllib/3.x") se fait bloquer par
+# Pexels avec un 403 — pas par la politique réseau, par le service lui-même.
+UA = "Baker/1.0 (https://github.com/iWeeZyy/Baker)"
 
 # Vignettes de la planche.
 THUMB_KEY = "medium"   # ~350 px : assez pour reconnaître un produit
@@ -73,6 +76,7 @@ def _key() -> str:
 
 def _get(url: str, headers: dict, binary: bool = False):
     """GET avec reprise sur 429 et 5xx. Renvoie (code, corps) ou (code, None)."""
+    headers = {**headers, "User-Agent": UA}
     for attempt in range(RETRIES):
         req = urllib.request.Request(url, headers=headers)
         try:
@@ -81,11 +85,16 @@ def _get(url: str, headers: dict, binary: bool = False):
                 return r.status, body if binary else body.decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             if e.code == 403:
-                # Refus de la politique réseau, pas de la banque : réessayer ne
-                # sert à rien et le README du proxy demande de le signaler.
-                sys.exit(f"403 sur {urllib.parse.urlparse(url).netloc} — hôte refusé "
-                         f"par la politique réseau de l'environnement. À ouvrir avant "
-                         f"de relancer.")
+                # Ce 403 vient de Pexels lui-même — la connexion a réussi, le
+                # service a répondu. Ce n'est pas la politique réseau (elle se
+                # manifeste plus bas, en URLError, avant toute réponse HTTP) :
+                # une clé invalide, un quota dépassé, ou un en-tête rejeté (déjà
+                # rencontré avec le User-Agent par défaut d'urllib). Le signaler
+                # et continuer plutôt qu'arrêter les 193 recettes restantes.
+                print(f"      403 de {urllib.parse.urlparse(url).netloc} — "
+                      f"clé invalide, quota dépassé, ou requête rejetée",
+                      file=sys.stderr)
+                return e.code, None
             if e.code in (429, 500, 502, 503) and attempt < RETRIES - 1:
                 wait = PAUSE * (2 ** attempt)
                 print(f"      {e.code}, pause {wait:.0f} s…", file=sys.stderr)
@@ -167,10 +176,20 @@ def search(query: str, key: str) -> list:
     return out
 
 
+# DejaVu Sans porte les caractères accentués ; la police par défaut de Pillow
+# ne les a pas et les rend en glyphes muets (« Délicieux » devenait illisible).
+_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+
 def contact_sheet(title: str, candidates: list, out_png: Path, key: str) -> int:
     """Assemble les candidats en une planche numérotée. Renvoie le nombre posé."""
-    from PIL import Image, ImageDraw   # importé ici : inutile sans moisson
+    from PIL import Image, ImageDraw, ImageFont   # importé ici : inutile sans moisson
     import io
+
+    try:
+        font = ImageFont.truetype(_FONT_PATH, 13)
+    except OSError:
+        font = ImageFont.load_default()
 
     tiles = []
     for c in candidates:
@@ -194,7 +213,7 @@ def contact_sheet(title: str, candidates: list, out_png: Path, key: str) -> int:
         x, y = (i % COLS) * CELL, (i // COLS) * (CELL + LABEL)
         sheet.paste(im, (x + (CELL - im.width) // 2, y + LABEL + (CELL - LABEL - im.height) // 2))
         draw.rectangle([x, y, x + CELL - 1, y + LABEL - 1], fill="#2a1f1a")
-        draw.text((x + 6, y + 9), f"{i + 1}. {c['alt'][:38] or c['id']}", fill="white")
+        draw.text((x + 6, y + 9), f"{i + 1}. {c['alt'][:38] or c['id']}", fill="white", font=font)
         draw.rectangle([x, y, x + CELL - 1, y + CELL + LABEL - 1], outline="#ddd")
     out_png.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out_png, quality=88)
