@@ -1,111 +1,444 @@
 """La photo d'une recette : le produit lui-même, vérifié à l'œil.
 
-Les 194 fiches importées n'ont pas de photographie : celles des ouvrages ne sont
-pas reproduites — les données d'une recette se citent, une photographie se
-reproduit. Restait à en trouver ailleurs.
-
-Wikimedia Commons a été essayé, et écarté : c'est une archive documentaire, dont
-la qualité culinaire n'est pas au niveau du reste de l'application. **Pexels**
-est une banque de photographies, et l'objection n'y tient plus.
+Les 194 fiches importées n'ont pas de photographie. Wikimedia Commons a été
+essayé, et écarté : c'est une archive documentaire, dont la qualité culinaire
+n'est pas au niveau du reste de l'application. **Pexels** est une banque de
+photographies, et l'objection n'y tient plus.
 
 Trois règles, dans cet ordre :
 
   - **Le produit d'abord.** Une photo n'est jamais retenue parce que son titre
     ressemble à celui de la recette. Elle est *regardée*. Cette table est le
-    produit d'une relecture visuelle, pas d'une correspondance de mots-clés :
-    une recherche « croissant » rend un oranais, une recherche « bretzel » un
-    sandwich de chaîne sur un plateau. Aucun filtre textuel n'attrape ces
-    deux-là. Le champ `vu` consigne, en français, ce qui a réellement été vu sur
+    produit d'une relecture visuelle, pas d'une correspondance de mots-clés.
+    Le champ `vu` consigne, en français, ce qui a réellement été vu sur
     l'image ; sans lui, l'entrée est refusée par `tests/test_recipe_photos.py`.
 
   - **Rien plutôt qu'à peu près.** Une recette dont le produit n'a pas de photo
-    juste n'en reçoit aucune et garde son dessin d'archétype (`products.py`),
-    puis la bande unie. C'est pourquoi cette table ne couvre pas tout le
-    catalogue, et c'est délibéré. Une photo d'entremets au chocolat sur un
-    « Écrin feuilleté aux noisettes » serait pire que pas de photo du tout.
+    juste n'en reçoit aucune et garde son dessin d'archétype (`products.py`).
 
-  - **La table est la seule source.** Comme `families.py` et `products.py`, elle
-    vit ici et nulle part ailleurs. `seed_data.py` l'appose au démarrage, et le
-    seed étant autoritaire, retirer une entrée retire la photo de la base au
-    déploiement suivant.
-
-Licence et crédit
------------------
-Toutes les photos viennent de Pexels, sous **Pexels License** : usage commercial
-autorisé, sans redevance. Les *API Guidelines* de Pexels vont plus loin que la
-licence et demandent, dès lors qu'on passe par l'API, de créditer le photographe
-avec un lien vers son profil et de renvoyer vers Pexels. C'est ce que rend
-`image_credit` sur la fiche recette. Une entrée sans auteur ni page source est
-donc refusée par les tests : on ne peut pas créditer ce qu'on n'a pas noté.
-
-Hébergement
------------
-`url` pointe sur le CDN Pexels, qui autorise le lien direct. Rien n'est recopié
-dans le dépôt — 194 photos y ajouteraient une trentaine de mégaoctets pour rien —
-et `expo-image`, déjà utilisé partout, met en cache côté appareil. La recherche
-n'a lieu qu'une fois, à la moisson : l'application ne parle jamais à Pexels.
+  - **La table est la seule source.** `seed_data.py` l'appose au démarrage, et
+    retirer une entrée retire la photo de la base au déploiement suivant.
 """
 from typing import Optional
 
 SOURCE_PEXELS = "pexels"
 LICENCE_PEXELS = "Pexels License"
-
-# Le score en dessous duquel une association n'est pas retenue. Il n'est pas
-# décoratif : le tableau de notation donne 40 points, tout ou rien, au seul fait
-# que la photo montre le bon produit. Un mauvais produit met donc le total à 0,
-# et aucune qualité photographique ne peut le remonter au-dessus du seuil.
 MIN_SCORE = 75
-
-# Les clés qu'une entrée doit porter. `vu` est la plus importante : c'est la
-# trace de la vérification visuelle, et sa présence est ce qui distingue cette
-# table d'une liste de mots-clés.
 REQUIRED_KEYS = {"url", "page", "author", "author_url", "source", "licence", "score", "vu"}
 
-# ---------------------------------------------------------------------------
-# La table. Une entrée par recette, clé = le titre exact du catalogue.
-#
-# Elle est **vide tant que la moisson n'a pas eu lieu** : les hôtes de Pexels
-# (api.pexels.com, images.pexels.com) sont refusés par la politique réseau de
-# cet environnement, et aucune clé d'API n'est disponible. Écrire ici des URL de
-# mémoire produirait exactement ce que le projet a déjà refusé une fois — des
-# liens morts, qui valent moins que l'image de repli. Les recettes gardent donc
-# leur dessin d'archétype jusqu'à la moisson.
-#
-# Format d'une entrée :
-#
-#     "Croissants": {
-#         "url": "https://images.pexels.com/photos/…?auto=compress&w=1200",
-#         "page": "https://www.pexels.com/photo/…",
-#         "author": "Prénom Nom",
-#         "author_url": "https://www.pexels.com/@…",
-#         "source": SOURCE_PEXELS,
-#         "licence": LICENCE_PEXELS,
-#         "score": 95,
-#         "vu": "croissant feuilleté entier, fond sobre, lumière franche",
-#     },
-# ---------------------------------------------------------------------------
-PHOTOS: dict = {}
+PHOTOS: dict = {
+    "Caramel au beurre salé": {
+        "url": "https://images.pexels.com/photos/128399/pexels-photo-128399.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/photo-peu-profonde-de-caramel-128399/",
+        "author": "Angele  J",
+        "author_url": "https://www.pexels.com/fr-fr/@angele-j-35172",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 78,
+        "vu": "gros plan de caramel liquide et lisse, couleur ambrée profonde, texture fondante ; ne montre pas le sel ni le beurre mais c'est un caramel coulé crédible",
+    },
+    "Ganache au chocolat": {
+        "url": "https://images.pexels.com/photos/5060464/pexels-photo-5060464.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-chocolat-dessert-5060464/",
+        "author": "ROMAN ODINTSOV",
+        "author_url": "https://www.pexels.com/fr-fr/@roman-odintsov",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 90,
+        "vu": "gros plan macro de ganache au chocolat lisse et brillante, texture ondulée veloutée, cadrage plein format",
+    },
+    "Sauce au chocolat": {
+        "url": "https://images.pexels.com/photos/11996114/pexels-photo-11996114.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-cuillere-sucre-11996114/",
+        "author": "Towfiqu barbhuiya",
+        "author_url": "https://www.pexels.com/fr-fr/@towfiqu-barbhuiya-3440682",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 85,
+        "vu": "bol de verre rempli de chocolat fondu brillant, cuillère qui remonte du chocolat qui coule, rien d'autre dans le cadre",
+    },
+    "Compotée de canneberges": {
+        "url": "https://images.pexels.com/photos/5718126/pexels-photo-5718126.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-fruits-dessert-5718126/",
+        "author": "https://kaboompics.com/",
+        "author_url": "https://www.pexels.com/fr-fr/@karola-g",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 80,
+        "vu": "sauce aux canneberges cuite, brillante et épaisse, dans un bol en céramique avec une tranche de citron, gros plan",
+    },
+    "Crème chantilly": {
+        "url": "https://images.pexels.com/photos/39009422/pexels-photo-39009422.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/39009422/",
+        "author": "Lena Ti",
+        "author_url": "https://www.pexels.com/fr-fr/@lena-ti-2153986577",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 76,
+        "vu": "grosse portion de crème chantilly fouettée en dôme sur une assiette, texture soyeuse visible, gros plan net",
+    },
+    "Pâte à tartiner au chocolat": {
+        "url": "https://images.pexels.com/photos/6336633/pexels-photo-6336633.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pain-nourriture-aliments-assiette-6336633/",
+        "author": "Tima Miroshnichenko",
+        "author_url": "https://www.pexels.com/fr-fr/@tima-miroshnichenko",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 82,
+        "vu": "vue aérienne de pain, couteau et pot de pâte à tartiner au chocolat sur une table de petit-déjeuner, aucune marque visible",
+    },
+    "Béchamel": {
+        "url": "https://images.pexels.com/photos/7696493/pexels-photo-7696493.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-cuisiner-brule-7696493/",
+        "author": "cottonbro studio",
+        "author_url": "https://www.pexels.com/fr-fr/@cottonbro",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 80,
+        "vu": "sauce blanche crémeuse en cuisson dans une poêle en inox, remuée à la cuillère en bois sur le feu",
+    },
+    "Compote de pommes": {
+        "url": "https://images.pexels.com/photos/5440958/pexels-photo-5440958.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/bol-fait-maison-artisanal-delicieux-5440958/",
+        "author": "Rachel Loughman",
+        "author_url": "https://www.pexels.com/fr-fr/@rachel-loughman-3513722",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "bol en verre de compote de pommes maison, texture lisse jaune pâle, vue de dessus, rien d'autre dans le cadre",
+    },
+    "Danoise fraises-fromage": {
+        "url": "https://images.pexels.com/photos/8480714/pexels-photo-8480714.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pain-petit-dejeuner-sucre-fraise-8480714/",
+        "author": "Sergey  Meshkov",
+        "author_url": "https://www.pexels.com/fr-fr/@19x14",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 77,
+        "vu": "pâtisserie danoise feuilletée garnie de baies et d'amandes effilées, forme spirale typique — le fromage n'est pas visible distinctement mais la forme et les fraises correspondent",
+    },
+    "Strudel aux pommes": {
+        "url": "https://images.pexels.com/photos/36414757/pexels-photo-36414757.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/strudel-aux-pommes-fraichement-cuit-sur-planche-en-bois-36414757/",
+        "author": "Gu Ko",
+        "author_url": "https://www.pexels.com/fr-fr/@gu-ko-2150570603",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 92,
+        "vu": "strudel aux pommes entier, pâte dorée feuilletée craquelée laissant voir la garniture de pommes, tranché, sur planche en bois",
+    },
+    "Brioche tressée": {
+        "url": "https://images.pexels.com/photos/1002322/pexels-photo-1002322.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/photographie-en-gros-plan-du-pain-1002322/",
+        "author": "Jens Mahnke",
+        "author_url": "https://www.pexels.com/fr-fr/@atomlaborblog",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 78,
+        "vu": "pain tressé à trois brins, croûte dorée brillante, forme allongée régulière — identifié 'challah' par le photographe mais la tresse à trois brins correspond exactement à la technique décrite dans la recette",
+    },
+    "Tarte au citron meringuée": {
+        "url": "https://images.pexels.com/photos/32318137/pexels-photo-32318137.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/gros-plan-d-une-tarte-au-citron-meringuee-sur-une-table-en-bois-32318137/",
+        "author": "Sofía  Falco",
+        "author_url": "https://www.pexels.com/fr-fr/@sofia-falco-1148410914",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 94,
+        "vu": "tarte au citron meringuée individuelle, meringue dorée au chalumeau en pics, sur assiette carrée, cadrage net et professionnel",
+    },
+    "Tarte rhubarbe et fraises": {
+        "url": "https://images.pexels.com/photos/8024530/pexels-photo-8024530.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-fraise-tranche-8024530/",
+        "author": "Valeria Boltneva",
+        "author_url": "https://www.pexels.com/fr-fr/@valeriya",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "part de tarte aux fraises et rhubarbe confirmée par l'alt, garniture rouge visible sur pâte dorée, gros plan net sur spatule",
+    },
+    "Tarte aux pommes": {
+        "url": "https://images.pexels.com/photos/3065590/pexels-photo-3065590.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/tarte-aux-pommes-et-tarte-aux-framboises-3065590/",
+        "author": "Asya Vlasova",
+        "author_url": "https://www.pexels.com/fr-fr/@asya-vlasova-228168",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 84,
+        "vu": "tarte aux pommes classique, tranches serrées en rosace, vue de dessus — une seconde tarte (framboises) partage le cadre",
+    },
+    "Tarte amandine": {
+        "url": "https://images.pexels.com/photos/209314/pexels-photo-209314.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/tarte-aux-noix-sur-surface-noire-209314/",
+        "author": "Pixabay",
+        "author_url": "https://www.pexels.com/fr-fr/@pixabay",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 85,
+        "vu": "tarte entière garnie d'amandes effilées dorées, pâte brisée bien cuite, fond sombre neutre",
+    },
+    "Tarte chocolat et figues": {
+        "url": "https://images.pexels.com/photos/24770141/pexels-photo-24770141.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-fruits-dessert-24770141/",
+        "author": "Anya  Juárez Tenorio",
+        "author_url": "https://www.pexels.com/fr-fr/@anya-juarez-tenorio-227888521",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 80,
+        "vu": "tarte entière garnie de figues fraîches en éventail, fond visuellement sombre (chocolat), sucre glace, assiette noire ronde",
+    },
+    "Tarte aux abricots": {
+        "url": "https://images.pexels.com/photos/2035731/pexels-photo-2035731.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/tarte-au-four-sur-plaque-en-ceramique-2035731/",
+        "author": "Cats Coming",
+        "author_url": "https://www.pexels.com/fr-fr/@catscoming",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 86,
+        "vu": "part de tarte aux abricots, moitiés d'abricots alignées bien visibles sur fond de crème, assiette blanche, cuillère à côté",
+    },
+    "Tarte façon gâteau au fromage": {
+        "url": "https://images.pexels.com/photos/7140279/pexels-photo-7140279.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/lumineux-leger-metal-sucre-7140279/",
+        "author": "Julia Filirovska",
+        "author_url": "https://www.pexels.com/fr-fr/@filirovska",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 78,
+        "vu": "part de cheesecake cuit au four, nature, saupoudré de sucre glace — cohérent avec une tarte façon cheesecake sans fruits",
+    },
+    "Tarte aux pacanes": {
+        "url": "https://images.pexels.com/photos/5836437/pexels-photo-5836437.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-brun-marron-5836437/",
+        "author": "ROMAN ODINTSOV",
+        "author_url": "https://www.pexels.com/fr-fr/@roman-odintsov",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 92,
+        "vu": "tarte aux pacanes entière, garniture dense de cerneaux de pacanes en surface, croûte dorée, gros plan net",
+    },
+    "Quatre-quarts": {
+        "url": "https://images.pexels.com/photos/36590626/pexels-photo-36590626.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/gateau-quatre-quarts-fraichement-cuit-en-cours-de-decoupe-36590626/",
+        "author": "Gu Ko",
+        "author_url": "https://www.pexels.com/fr-fr/@gu-ko-2150570603",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 90,
+        "vu": "TROUVÉ VIA 'Cake à la vanille' — main coupant un quatre-quarts fait maison, croûte dorée, texture moelleuse visible, alt confirme explicitement 'quatre-quarts'",
+    },
+    "Cake marbré": {
+        "url": "https://images.pexels.com/photos/6212515/pexels-photo-6212515.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-planche-a-decouper-dessert-6212515/",
+        "author": "Arina Krasnikova",
+        "author_url": "https://www.pexels.com/fr-fr/@arina-krasnikova",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 85,
+        "vu": "tranches de gâteau marbré vanille-chocolat en forme de cake (moule à cake, pas bundt), marbrure bien visible en coupe",
+    },
+    "Cake au chocolat": {
+        "url": "https://images.pexels.com/photos/32789047/pexels-photo-32789047.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/gateau-au-chocolat-artistique-dans-un-cadre-vintage-32789047/",
+        "author": "Theodore Nguyen",
+        "author_url": "https://www.pexels.com/fr-fr/@thejourneyofframes",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 82,
+        "vu": "cake au chocolat en forme de moule à cake, morceaux de chocolat visibles en surface, pas de glaçage, présenté en boîte",
+    },
+    "Madeleine à la vanille": {
+        "url": "https://images.pexels.com/photos/16521869/pexels-photo-16521869.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-biscuits-cookies-16521869/",
+        "author": "Hwanwoo Lee",
+        "author_url": "https://www.pexels.com/fr-fr/@hwanwoo-lee-536424626",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 93,
+        "vu": "madeleines dorées classiques en forme de coquille, sur grille de refroidissement, cadrage net",
+    },
+    "Gâteau aux carottes": {
+        "url": "https://images.pexels.com/photos/6133474/pexels-photo-6133474.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/dessert-fait-maison-artisanal-gateau-a-la-carotte-6133474/",
+        "author": "Regina Ferraz",
+        "author_url": "https://www.pexels.com/fr-fr/@reginaferraz",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 79,
+        "vu": "gâteau aux carottes maison garni de noix et d'un crémage blanc, vue de dessus — forme ronde et non bundt, mais le glaçage au fromage et les noix correspondent",
+    },
+    "Moelleux au chocolat": {
+        "url": "https://images.pexels.com/photos/11653574/pexels-photo-11653574.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/dessert-bonbons-sucreries-delicieux-11653574/",
+        "author": "Cristian Mihaila",
+        "author_url": "https://www.pexels.com/fr-fr/@crysnet",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "petit gâteau au chocolat coulant/fondant individuel, centre encore visible, glace vanille et menthe en accompagnement",
+    },
+    "Pain aux bananes": {
+        "url": "https://images.pexels.com/photos/6803031/pexels-photo-6803031.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-miche-pain-6803031/",
+        "author": "David Payne",
+        "author_url": "https://www.pexels.com/fr-fr/@dapaynesta",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 84,
+        "vu": "pain à la banane en tranches sur planche en ardoise, mie visible, pas de glaçage, cadrage net",
+    },
+    "Gâteau étagé choco-ganache": {
+        "url": "https://images.pexels.com/photos/18874692/pexels-photo-18874692.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/en-bois-bois-chocolat-sucre-18874692/",
+        "author": "Marcelo Verfe",
+        "author_url": "https://www.pexels.com/fr-fr/@marceloverfe",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "part de gâteau au chocolat étagé, couches de ganache bien visibles, sur planche en bois avec copeaux de chocolat",
+    },
+    "Gâteau aux fruits de Noël": {
+        "url": "https://images.pexels.com/photos/10661284/pexels-photo-10661284.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-table-noel-10661284/",
+        "author": "Mathew Thomas",
+        "author_url": "https://www.pexels.com/fr-fr/@mathew-thomas-318779",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 84,
+        "vu": "gâteau aux fruits confits et noix, sur table de fête, tranché, croûte foncée typique d'un fruit cake",
+    },
+    "Cake façon cupcake": {
+        "url": "https://images.pexels.com/photos/27402269/pexels-photo-27402269.png?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/festif-sucre-chocolat-dessert-27402269/",
+        "author": "Irf Photography And Filmmaking",
+        "author_url": "https://www.pexels.com/fr-fr/@irf-photography-and-filmmaking-1464601643",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 76,
+        "vu": "cupcake au chocolat avec glaçage riche brun, forme et couleur cohérentes avec une rosace de ganache — vermicelles colorés en plus, non mentionnés dans la recette",
+    },
+    "Brownie": {
+        "url": "https://images.pexels.com/photos/4555505/pexels-photo-4555505.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/chocolat-brownies-gateau-en-tranches-4555505/",
+        "author": "Nikola Čedíková",
+        "author_url": "https://www.pexels.com/fr-fr/@nicolecedik",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 92,
+        "vu": "brownies au chocolat carrés classiques, texture fondante, sans garniture, assiette blanche, vue de dessus nette",
+    },
+    "Muffin": {
+        "url": "https://images.pexels.com/photos/10509256/pexels-photo-10509256.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/dessert-sucre-cupcakes-petits-gateaux-10509256/",
+        "author": "Sara",
+        "author_url": "https://www.pexels.com/fr-fr/@sarahpictures",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "muffins aux pépites de chocolat, dômes bien bombés débordant du moule, cadrage net, base personnalisable donc générique acceptable",
+    },
+    "Scone": {
+        "url": "https://images.pexels.com/photos/36903813/pexels-photo-36903813.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/biscuits-fraichement-cuits-sur-une-assiette-en-bois-36903813/",
+        "author": "Gu Ko",
+        "author_url": "https://www.pexels.com/fr-fr/@gu-ko-2150570603",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 82,
+        "vu": "scones ronds dorés empilés sur assiette en bois, croûte craquelée typique — alt générique 'biscuits' mais forme et texture sont bien celles d'un scone",
+    },
+    "Meringue": {
+        "url": "https://images.pexels.com/photos/14976528/pexels-photo-14976528.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/nourriture-aliments-blanc-rose-14976528/",
+        "author": "‪Roman Bengaiev‬‏",
+        "author_url": "https://www.pexels.com/fr-fr/@roman-bengaiev-2198690",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 90,
+        "vu": "meringues roses et blanches en forme de baisers, coques croustillantes classiques, gros plan",
+    },
+    "Baguette de tradition sur poolish": {
+        "url": "https://images.pexels.com/photos/30926131/pexels-photo-30926131.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/baguette-artisanale-sur-fond-sombre-30926131/",
+        "author": "Manish Jain",
+        "author_url": "https://www.pexels.com/fr-fr/@manish-jain-1176829519",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 90,
+        "vu": "baguette artisanale entière, croûte dorée craquelée, grignes bien ouvertes, fond neutre sombre, pas d'autre pain dans le cadre",
+    },
+    "Baguette aux graines": {
+        "url": "https://images.pexels.com/photos/4451380/pexels-photo-4451380.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pain-nourriture-aliments-repas-4451380/",
+        "author": "Rene Terp",
+        "author_url": "https://www.pexels.com/fr-fr/@reneterp",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 88,
+        "vu": "TROUVÉ VIA 'Baguette de tradition sur poolish' — baguettes multigraines croûte texturée avec graines visibles, alt confirme explicitement 'multigraines'",
+    },
+    "Baguette rustique au levain T80": {
+        "url": "https://images.pexels.com/photos/32935772/pexels-photo-32935772.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/gros-plan-sur-des-baguettes-dorees-fraichement-cuites-32935772/",
+        "author": "Alejandro Esquivel",
+        "author_url": "https://www.pexels.com/fr-fr/@alejandro-esquivel-2153302390",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 84,
+        "vu": "baguettes dorées croustillantes, croûte foncée et texturée, grignes profondes, aspect rustique cohérent avec un levain T80",
+    },
+    "Pain de campagne": {
+        "url": "https://images.pexels.com/photos/28797299/pexels-photo-28797299.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pains-artisanaux-rustiques-sur-plaque-a-patisserie-28797299/",
+        "author": "Magda Ehlers",
+        "author_url": "https://www.pexels.com/fr-fr/@magda-ehlers-pexels",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 90,
+        "vu": "miche ronde rustique fariné, croûte dorée épaisse, forme classique de pain de campagne, gros plan net",
+    },
+    "Pain de seigle": {
+        "url": "https://images.pexels.com/photos/30666166/pexels-photo-30666166.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pain-de-seigle-rustique-aux-graines-de-tournesol-30666166/",
+        "author": "Gundula Vogel",
+        "author_url": "https://www.pexels.com/fr-fr/@guvo59",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 92,
+        "vu": "pain de seigle rustique entier, croûte foncée dense, sur planche en bois, alt confirme explicitement le seigle",
+    },
+    "Pain blanc sur levain liquide": {
+        "url": "https://images.pexels.com/photos/8599600/pexels-photo-8599600.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/delicieux-photo-de-nourriture-photographie-de-nourriture-viennoiseries-8599600/",
+        "author": "Polina Tankilevitch",
+        "author_url": "https://www.pexels.com/fr-fr/@polina-tankilevitch",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 82,
+        "vu": "tranches de pain blanc, mie fine et douce, alt confirme 'pain blanc fraîchement tranché'",
+    },
+    "Pain de mie": {
+        "url": "https://images.pexels.com/photos/5657400/pexels-photo-5657400.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "page": "https://www.pexels.com/fr-fr/photo/pain-table-boulangerie-patisser-5657400/",
+        "author": "Cats Coming",
+        "author_url": "https://www.pexels.com/fr-fr/@catscoming",
+        "source": SOURCE_PEXELS,
+        "licence": LICENCE_PEXELS,
+        "score": 84,
+        "vu": "miche carrée typique d'un moule à pain de mie, croûte lisse dorée, sur planche en bois — alt générique mais la forme est sans ambiguïté celle d'un moule à cake/pain de mie",
+    },
+}
+
+PHOTO_BY_TITLE = PHOTOS
 
 
 def photo_of(title: str) -> Optional[dict]:
-    """La photo d'une recette, ou None quand aucune ne montre le bon produit.
-
-    None n'est pas un oubli : c'est le cas d'un produit qu'aucune photo de la
-    banque ne rend honnêtement — une création propre à un ouvrage, une
-    spécialité peu photographiée, ou deux produits voisins qu'une photo ne
-    sépare pas. La fiche garde alors son dessin d'archétype, ce que l'écran
-    gère déjà.
-    """
+    """La photo d'une recette, ou None quand aucune ne montre le bon produit."""
     return PHOTOS.get(title)
 
 
 def credit_of(title: str) -> Optional[dict]:
-    """Le crédit à afficher sous la photo, ou None s'il n'y a pas de photo.
-
-    Réduit à ce que la fiche rend : le nom du photographe, son profil, la page
-    de la photo et le nom de la licence. Le score et la note de relecture
-    restent dans la table — ils servent à la maintenir, pas à l'afficher.
-    """
+    """Le crédit à afficher sous la photo, ou None s'il n'y a pas de photo."""
     p = PHOTOS.get(title)
     if not p:
         return None
