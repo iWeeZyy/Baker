@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { api, saveToken, getToken, clearToken, setInMemoryToken } from './api';
 import { disconnectRealtime } from './realtime';
+import { syncWidgetData, clearWidgetData } from './widgetData';
 
 export type User = {
   user_id: string;
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setInMemoryToken(token);
     await saveToken(token);
     setUser(u);
+    syncWidgetData(u.user_id);
   }, []);
 
   useEffect(() => {
@@ -40,6 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await api('/auth/me');
           setUser(me);
+          // Le widget a des données dès le lancement de l'app, sans attendre
+          // un passage par l'onglet Planning.
+          syncWidgetData(me.user_id);
         } catch {
           await clearToken();
           setInMemoryToken(null);
@@ -61,6 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    // Effacé avant même que le token ne le soit : aucune fenêtre où le widget
+    // pourrait encore republier les données de ce compte.
+    clearWidgetData();
     try { await api('/auth/logout', { method: 'POST' }); } catch {}
     disconnectRealtime();
     await clearToken();

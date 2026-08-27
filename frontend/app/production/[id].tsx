@@ -6,9 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
 import { theme } from '@/src/theme';
+import { syncWidgetData } from '@/src/widgetData';
+import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/bakers-live-activity';
 
 type Line = {
   line_id: string;
@@ -97,6 +100,7 @@ const NEXT_STATUS: Record<Step['status'], Step['status']> = {
 
 export default function ProductionDetail() {
   const router = useRouter();
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { start } = useTimer();
 
@@ -123,13 +127,33 @@ export default function ProductionDetail() {
   const patchStep = async (stepId: string, body: Record<string, unknown>) => {
     setBusyStep(stepId);
     setError(null);
+    const before = data?.steps.find(s => s.step_id === stepId) || null;
     try {
       // The server returns the whole production: one round-trip also refreshes
       // the schedule, which a new duration may have unblocked upstream.
-      setData(await api(`/productions/${id}/steps/${stepId}`, {
+      const updated: Detail = await api(`/productions/${id}/steps/${stepId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
-      }));
+      });
+      setData(updated);
+
+      // Live Activity "cuisson en cours" : démarre/actualise/termine sur le
+      // même choix de statut que l'utilisateur vient de faire, jamais un
+      // second geste à part. L'échéance vient de la durée connue de
+      // l'étape — jamais devinée — décomptée à partir de maintenant, comme
+      // le minuteur de cuisson (startTimer) déjà déclenché par le même tap.
+      const after = updated.steps.find(s => s.step_id === stepId) || null;
+      if (after?.status === 'doing') {
+        const endAtIso = after.duration_minutes != null
+          ? new Date(Date.now() + after.duration_minutes * 60000).toISOString()
+          : null;
+        if (before?.status === 'doing') updateBakeActivity(after.text, endAtIso);
+        else startBakeActivity(after.recipe_title, after.text, endAtIso);
+      } else if (before?.status === 'doing') {
+        endBakeActivity();
+      }
+
+      if (user) syncWidgetData(user.user_id);
     } catch (e: any) {
       setError(e.message || 'Mise à jour impossible');
     } finally {
@@ -163,6 +187,8 @@ export default function ProductionDetail() {
     if (!ok) return;
     try {
       await api(`/productions/${id}`, { method: 'DELETE' });
+      endBakeActivity();
+      if (user) syncWidgetData(user.user_id);
       router.replace('/(tabs)/planning' as any);
     } catch (e: any) {
       setError(e.message || 'Suppression impossible');

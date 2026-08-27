@@ -10,7 +10,11 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native — régénérés par `expo prebuild` (workflow managed + Continuous
+# Native Generation), jamais commités. Le widget iOS vit en source dans
+# targets/ et modules/, tous deux suivis normalement.
+/ios/
+/android/
 .kotlin/
 *.orig.*
 *.jks
