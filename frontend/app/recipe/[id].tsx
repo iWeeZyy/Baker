@@ -79,8 +79,12 @@ const TECHNICAL_ROWS: [string, string][] = [
   ['cuisson', 'Cuisson'],
   ['oven', 'Four'],
   ['dough_temp', 'Températures'],
+  ['room_temp', 'Température labo'],
+  ['levure', 'Levure'],
   ['conservation', 'Conservation'],
   ['accompagnement', 'Accompagnement'],
+  ['observations', 'Observations'],
+  ['conseils', 'Conseils'],
 ];
 
 /** Keeps "205 °C" and "1 h 30" on one line rather than wrapping on the space. */

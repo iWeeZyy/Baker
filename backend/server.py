@@ -33,6 +33,7 @@ import costing
 import imaging
 import moderation
 import text_moderation
+import scan
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -465,6 +466,162 @@ async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current
     await db.recipes.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+# ---------- Recipe scan ----------
+# N'insère jamais rien en base : la structure extraite est renvoyée telle
+# quelle pour l'écran de vérification, et c'est POST /recipes ci-dessus qui
+# crée réellement la recette une fois l'utilisateur satisfait — donc la
+# modération, l'assignation de famille et l'upload de photo de couverture
+# existants s'appliquent sans rien dupliquer.
+MAX_SCAN_PAGES = 6
+
+SCAN_SYSTEM_PROMPT = (
+    "Tu es un expert boulanger qui lit des fiches recette papier, imprimées ou "
+    "manuscrites, pour en extraire les informations vers l'outil "
+    "submit_recipe_extraction. Règle absolue : n'invente JAMAIS une valeur "
+    "absente ou illisible sur les photos fournies — dans ce cas laisse le champ "
+    "à null et marque sa confiance \"absent\". Utilise \"low\" pour une valeur "
+    "lisible mais incertaine (écriture peu claire, chiffre ambigu), et \"high\" "
+    "pour une valeur clairement lisible. Si plusieurs photos sont fournies, ce "
+    "sont les pages successives d'une seule et même fiche : regroupe toutes "
+    "les informations dans une seule extraction plutôt que d'en produire une "
+    "par page."
+)
+
+def _confidence_field(value_schema: dict) -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "value": value_schema,
+            "confidence": {"type": "string", "enum": ["high", "low", "absent"]},
+        },
+        "required": ["value", "confidence"],
+    }
+
+# Les clés de fabrication qu'un écran de recette sait déjà afficher
+# (TECHNICAL_ROWS côté frontend) — l'extraction ne produit rien en dehors
+# de cette liste, pour rester affichable sans construire un rendu parallèle.
+SCAN_TECHNICAL_KEYS = [
+    "dough_temp", "room_temp", "cuisson", "petrissage", "pointage",
+    "appret", "fermentation", "oven", "levure", "observations", "conseils",
+]
+
+SCAN_TOOL = {
+    "name": "submit_recipe_extraction",
+    "description": "Soumet les informations extraites d'une ou plusieurs photos de fiche recette de boulangerie.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": _confidence_field({"type": ["string", "null"]}),
+            "category": _confidence_field({"type": ["string", "null"], "enum": CATEGORIES + [None]}),
+            "yield_pieces": _confidence_field({"type": ["integer", "null"]}),
+            "piece_weight_g": _confidence_field({"type": ["number", "null"]}),
+            "total_dough_weight_g": _confidence_field({"type": ["number", "null"]}),
+            "description": _confidence_field({"type": ["string", "null"], "description": "La méthode de fabrication résumée, si présente sur la fiche."}),
+            "ingredients": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "quantity": {"type": ["number", "null"]},
+                        "unit": {"type": ["string", "null"], "enum": ["g", "kg", "ml", "cl", "l", "piece", None]},
+                        "ingredient_type": {"type": ["string", "null"]},
+                        "stated_percentage": {"type": ["number", "null"], "description": "Le pourcentage boulanger s'il est déjà imprimé sur la fiche, sans le recalculer."},
+                        "confidence": {"type": "string", "enum": ["high", "low"]},
+                    },
+                    "required": ["name", "confidence"],
+                },
+            },
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string"},
+                        "confidence": {"type": "string", "enum": ["high", "low"]},
+                    },
+                    "required": ["text", "confidence"],
+                },
+            },
+            "technical": {
+                "type": "object",
+                "properties": {key: _confidence_field({"type": ["string", "null"]}) for key in SCAN_TECHNICAL_KEYS},
+            },
+        },
+        "required": ["title", "ingredients", "steps"],
+    },
+}
+
+def _scan_ingredient_lines(ingredients: list) -> List[str]:
+    """Reconstruit des lignes "<qté> <unité> <nom>" au format attendu par
+    production.parse_ingredient. Seuls les ingrédients avec une quantité et
+    une unité de poids/volume reconnue y participent — un ingrédient sans
+    unité (ex. "3 œufs") reste déjà non pris en compte pour les mêmes
+    raisons ailleurs dans l'application ; ce n'est pas une perte de
+    données, juste ce qu'il faut pour calculer pourcentages/hydratation."""
+    lines = []
+    for ing in ingredients or []:
+        qty, unit, name = ing.get("quantity"), ing.get("unit"), ing.get("name")
+        if qty is None or unit not in ("g", "kg", "ml", "cl", "l") or not name:
+            continue
+        lines.append(f"{qty} {unit} {name}")
+    return lines
+
+@api_router.post("/recipes/scan/analyze")
+async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+    """Extrait les informations d'une ou plusieurs photos de fiche recette
+    via Claude Vision — le même client que /chat, seul service IA du
+    projet, appelé différemment (tool-use) pour garantir une sortie
+    structurée plutôt que d'analyser du texte libre. Rien n'est écrit sur
+    disque ni conservé au-delà de cette requête."""
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    if not files:
+        raise HTTPException(400, "Aucune image reçue")
+    if len(files) > MAX_SCAN_PAGES:
+        raise HTTPException(400, f"{MAX_SCAN_PAGES} pages maximum par scan")
+
+    image_blocks = []
+    for f in files:
+        raw = await f.read()
+        if not raw:
+            raise HTTPException(400, "Fichier vide")
+        if len(raw) > MAX_PHOTO_UPLOAD_BYTES:
+            raise HTTPException(413, "Image trop volumineuse")
+        try:
+            prepared = await run_in_threadpool(imaging.prepare_for_analysis, raw)
+        except Exception:
+            raise HTTPException(400, "Fichier image invalide")
+        image_blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(prepared).decode("ascii")},
+        })
+
+    content = image_blocks + [{"type": "text", "text": "Extrais les informations de cette fiche recette."}]
+
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=4000,
+            system=SCAN_SYSTEM_PROMPT,
+            tools=[SCAN_TOOL],
+            tool_choice={"type": "tool", "name": "submit_recipe_extraction"},
+            messages=[{"role": "user", "content": content}],
+        )
+    except anthropic.APIError as e:
+        logger.error(f"Anthropic API error (scan): {e}")
+        raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    tool_use = next((b for b in response.content if b.type == "tool_use"), None)
+    if not tool_use:
+        raise HTTPException(502, "L'analyse n'a pas pu être réalisée, réessaie")
+    extraction = tool_use.input
+
+    ingredient_lines = _scan_ingredient_lines(extraction.get("ingredients", []))
+    extraction["bakers_percentages"] = scan.bakers_percentages(ingredient_lines)
+    extraction["hydration"] = scan.compute_hydration(ingredient_lines)
+    return extraction
 
 @api_router.post("/recipes/{recipe_id}/favorite")
 async def toggle_favorite(recipe_id: str, user: dict = Depends(get_current_user)):
