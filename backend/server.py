@@ -248,6 +248,10 @@ class ChatMessageInput(BaseModel):
 class CommentInput(BaseModel):
     content: str
     parent_id: Optional[str] = None
+    reply_to_user_id: Optional[str] = None
+
+class CommentEditInput(BaseModel):
+    content: str
 
 class NoteInput(BaseModel):
     content: str
@@ -799,21 +803,49 @@ async def toggle_comment_like(comment_id: str, user: dict = Depends(get_current_
 
 @api_router.post("/recipes/{recipe_id}/comments")
 async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(get_current_user)):
+    reply_to_user_name = None
+    if inp.reply_to_user_id:
+        # Dénormalisé volontairement : contrairement à la photo, le nom
+        # d'un utilisateur n'est modifiable par aucune fonctionnalité de
+        # cette application — ce n'est donc pas une donnée qui peut devenir
+        # périmée, pas besoin d'un lookup en direct à chaque lecture.
+        target = await db.users.find_one({"user_id": inp.reply_to_user_id}, {"_id": 0, "name": 1})
+        reply_to_user_name = (target or {}).get("name")
     doc = {
         "id": str(uuid.uuid4()),
         "recipe_id": recipe_id,
         "parent_id": inp.parent_id,
+        "reply_to_user_id": inp.reply_to_user_id,
+        "reply_to_user_name": reply_to_user_name,
         "user_id": user["user_id"],
         "user_name": user.get("name") or "Boulanger",
         "user_picture": user.get("picture"),
         "content": inp.content.strip(),
         "created_at": datetime.now(timezone.utc),
+        "edited_at": None,
     }
     moderation_result = text_moderation.classify_comment(doc["content"])
     await _moderate_and_flag(moderation_result, "comment", doc["id"], user["user_id"])
     await db.comments.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+@api_router.put("/recipes/{recipe_id}/comments/{comment_id}")
+async def edit_comment(recipe_id: str, comment_id: str, inp: CommentEditInput, user: dict = Depends(get_current_user)):
+    comment = await db.comments.find_one({"id": comment_id, "recipe_id": recipe_id}, {"_id": 0})
+    if not comment:
+        raise HTTPException(404, "Commentaire introuvable")
+    if comment["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Vous ne pouvez modifier que vos propres commentaires")
+    content = inp.content.strip()
+    # Les mêmes règles qu'à la création, y compris la whitelist boulangère
+    # — une modification n'est pas un chemin de contournement de la
+    # modération.
+    moderation_result = text_moderation.classify_comment(content)
+    await _moderate_and_flag(moderation_result, "comment", comment_id, user["user_id"])
+    edited_at = datetime.now(timezone.utc)
+    await db.comments.update_one({"id": comment_id}, {"$set": {"content": content, "edited_at": edited_at}})
+    return {**comment, "content": content, "edited_at": edited_at}
 
 @api_router.delete("/recipes/{recipe_id}/comments/{comment_id}")
 async def delete_comment(recipe_id: str, comment_id: str, user: dict = Depends(get_current_user)):
@@ -830,6 +862,55 @@ async def delete_comment(recipe_id: str, comment_id: str, user: dict = Depends(g
     await db.comments.delete_many({"id": {"$in": ids_to_delete}})
     await db.comment_likes.delete_many({"comment_id": {"$in": ids_to_delete}})
     return {"deleted_ids": ids_to_delete}
+
+@api_router.get("/comments/mine")
+async def my_comments(before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Tout ce que l'utilisateur a publié — commentaires et réponses —
+    triés du plus récent au plus ancien, paginé par curseur exactement
+    comme GET /messages/{friend_id} (avant/après reste la seule convention
+    de pagination du projet)."""
+    COMMENTS_PAGE_SIZE = 20
+    q: dict = {"user_id": user["user_id"]}
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+        q["created_at"] = {"$lt": cursor_dt}
+    docs = await db.comments.find(q, {"_id": 0}).sort("created_at", -1).limit(COMMENTS_PAGE_SIZE).to_list(COMMENTS_PAGE_SIZE)
+    has_more = len(docs) == COMMENTS_PAGE_SIZE
+
+    recipe_ids = list({d["recipe_id"] for d in docs})
+    recipes_by_id = {}
+    if recipe_ids:
+        async for r in db.recipes.find({"id": {"$in": recipe_ids}}, {"_id": 0, "id": 1, "title": 1, "family": 1, "product": 1, "image_path": 1, "image_url": 1}):
+            recipes_by_id[r["id"]] = r
+    counts = await _comment_like_counts([d["id"] for d in docs])
+
+    out = []
+    for d in docs:
+        # Ne devrait jamais arriver (aucune route ne permet de supprimer une
+        # recette aujourd'hui) — garde-fou bon marché plutôt qu'un lien mort
+        # si l'architecture change un jour.
+        recipe = recipes_by_id.get(d["recipe_id"])
+        if not recipe:
+            continue
+        out.append({
+            "id": d["id"],
+            "recipe_id": d["recipe_id"],
+            "recipe_title": recipe["title"],
+            "recipe_family": recipe.get("family"),
+            "recipe_product": recipe.get("product"),
+            "recipe_image_path": recipe.get("image_path"),
+            "recipe_image_url": recipe.get("image_url"),
+            "content": d["content"],
+            "created_at": d["created_at"],
+            "edited_at": d.get("edited_at"),
+            "like_count": counts.get(d["id"], 0),
+            "parent_id": d.get("parent_id"),
+            "reply_to_user_name": d.get("reply_to_user_name"),
+        })
+    return {"comments": out, "has_more": has_more}
 
 # ---------- Personal Notes ----------
 @api_router.get("/recipes/{recipe_id}/note")
@@ -2042,6 +2123,7 @@ async def startup():
     await db.likes.create_index("recipe_id")
     await db.comments.create_index("recipe_id")
     await db.comments.create_index("parent_id")
+    await db.comments.create_index([("user_id", 1), ("created_at", -1)])
     await db.comment_likes.create_index([("user_id", 1), ("comment_id", 1)], unique=True)
     await db.comment_likes.create_index("comment_id")
     await db.comment_likes.create_index("recipe_id")
