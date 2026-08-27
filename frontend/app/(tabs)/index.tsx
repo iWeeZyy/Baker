@@ -28,10 +28,15 @@ export default function Home() {
 
   useEffect(() => { load(); }, [load]);
 
-  const featured = recipes[0];
-  const coupsDeCoeur = recipes.filter((r: any) => r.coup_de_coeur);
-  const classics = recipes.filter(r => !r.is_user_submitted).slice(1, 8);
-  const community = recipes.filter((r: any) => r.is_user_submitted).slice(0, 6);
+  // L'accueil est la vitrine de l'app : seules les recettes avec une vraie
+  // photo (upload communautaire ou photographie du catalogue) y figurent —
+  // jamais le dessin générique d'archétype, répété sur des dizaines de
+  // recettes, ni la bande de couleur unie faute d'image.
+  const withPhoto = recipes.filter(r => r.image_path || r.image_url);
+  const featured = withPhoto[0];
+  const coupsDeCoeur = withPhoto.filter((r: any) => r.coup_de_coeur);
+  const classics = withPhoto.filter(r => !r.is_user_submitted).slice(1, 8);
+  const community = withPhoto.filter((r: any) => r.is_user_submitted).slice(0, 6);
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
 
@@ -116,20 +121,22 @@ export default function Home() {
             nothing covered. Renders nothing at all for a Pro user. */}
         <AdSlot placement="home" />
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Grands classiques</Text>
+        {classics.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Grands classiques</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
+              {classics.map(r => (
+                <Pressable key={r.id} testID={`classic-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
+                  <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
+                  <Text style={styles.classicTitle}>{r.title}</Text>
+                  <Text style={styles.classicMeta}>{r.difficulty} · {(r as any).like_count} {"j'aime"}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
-            {classics.map(r => (
-              <Pressable key={r.id} testID={`classic-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
-                <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
-                <Text style={styles.classicTitle}>{r.title}</Text>
-                <Text style={styles.classicMeta}>{r.difficulty} · {(r as any).like_count} {"j'aime"}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+        )}
 
         {community.length > 0 && (
           <View style={styles.section}>
