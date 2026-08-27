@@ -61,10 +61,10 @@ function reportMessage(messageId: string) {
 
 function PhotoBubble({ item, mine }: { item: Message; mine: boolean }) {
   const [token, setToken] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(mine); // senders always see their own photo unblurred
-  // "Masquer" just collapses the warning card to a small tappable hint —
-  // the photo itself stays exactly as blurred either way, only pressing
-  // "Afficher l'image" ever changes that.
+  const [revealed, setRevealed] = useState(mine); // l'expéditeur voit toujours sa propre photo non floutée
+  // « Masquer » ne fait que replier la carte d'avertissement en un petit
+  // rappel — la photo reste exactement aussi floutée dans les deux cas,
+  // seul « Afficher l'image » change réellement quelque chose.
   const [dismissed, setDismissed] = useState(false);
   const isSensitive = !mine && item.moderation?.level === 'sensitive';
 

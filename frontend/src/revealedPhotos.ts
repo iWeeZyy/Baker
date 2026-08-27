@@ -1,14 +1,16 @@
 /**
- * Remembers which sensitive message photos a user has chosen to reveal, so
- * they don't have to confirm again every time they reopen a conversation
- * (message-photo spec, "mémoriser le choix"). A plain local preference is
- * enough here — no server round trip, no change to the message model: the
- * choice only affects how this device renders a photo it can already fetch.
+ * Retient quelles photos sensibles un utilisateur a choisi de révéler, pour
+ * qu'il n'ait pas à confirmer à nouveau à chaque réouverture d'une
+ * conversation (cahier des charges des photos de message, « mémoriser le
+ * choix »). Une simple préférence locale suffit ici — pas d'aller-retour
+ * serveur, pas de changement au modèle de message : le choix ne change que
+ * la façon dont cet appareil affiche une photo qu'il peut déjà récupérer.
  *
- * Capped at MAX_ENTRIES so the stored list can't grow forever over years of
- * use; the oldest reveals are dropped first, which just means a very old
- * sensitive photo might ask for confirmation again — cheap trade for a
- * bounded footprint.
+ * Plafonné à MAX_ENTRIES pour que la liste stockée ne grossisse pas
+ * indéfiniment sur plusieurs années d'usage ; les révélations les plus
+ * anciennes sont retirées en premier, ce qui signifie au pire qu'une très
+ * vieille photo sensible redemandera confirmation — compromis acceptable
+ * pour un espace de stockage borné.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -41,6 +43,6 @@ export async function markPhotoRevealed(messageId: string): Promise<void> {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(next));
   } catch {
-    // Best-effort: worst case the user re-confirms next time they open this photo.
+    // Best-effort : au pire l'utilisateur reconfirme la prochaine fois qu'il ouvre cette photo.
   }
 }

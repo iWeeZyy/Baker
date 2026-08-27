@@ -1,9 +1,10 @@
-"""Unit tests for image-moderation classification.
+"""Tests unitaires pour la classification de modération des images.
 
-Pure functions, no server and no network needed — the threshold logic and
-the fallback-on-failure behaviour are the safety net for the rule the whole
-feature depends on: a photo is never blocked just for being potentially
-sexual, and an unanalyzed photo is never presented as safe.
+Fonctions pures, sans serveur ni réseau — la logique de seuil et le
+comportement de repli en cas d'échec sont le filet de sécurité de la règle
+sur laquelle repose toute la fonctionnalité : une photo n'est jamais
+bloquée simplement parce qu'elle est potentiellement sexuelle, et une photo
+non analysée n'est jamais présentée comme sûre.
 """
 import sys
 from pathlib import Path
@@ -28,9 +29,10 @@ class TestClassify:
         assert level == moderation.SENSITIVE
 
     def test_partial_alone_can_reach_sensitive(self):
-        # Partial/suggestive nudity, even at a high score, must never reach
-        # BLOCKED by itself — only `raw` (fully explicit) can. This is the
-        # rule from the spec: potential nudity is never "manifestement interdit".
+        # La nudité partielle/suggestive, même à un score élevé, ne doit
+        # jamais atteindre BLOCKED à elle seule — seul `raw` (explicite
+        # sans ambiguïté) le peut. C'est la règle du cahier des charges :
+        # une nudité potentielle n'est jamais « manifestement interdite ».
         level, _ = moderation.classify(0.0, 0.99)
         assert level == moderation.SENSITIVE
 
@@ -54,13 +56,14 @@ class TestClassify:
 
 
 class TestAnalyzeFallback:
-    """`analyze()` must never raise, and must never silently call an
-    unanalyzed photo "normal" — checked here by forcing the underlying
-    provider call to fail, entirely in-process (no live server involved)."""
+    """`analyze()` ne doit jamais lever d'exception, et ne doit jamais
+    qualifier de « normale » une photo non analysée — vérifié ici en
+    forçant l'échec de l'appel au fournisseur, entièrement en local (aucun
+    serveur réel n'est impliqué)."""
 
     def test_provider_off_falls_back_without_raising(self, monkeypatch):
         monkeypatch.setattr(moderation, "PROVIDER", "off")
-        result = moderation.analyze(b"not a real image, never decoded on this path")
+        result = moderation.analyze(b"pas une vraie image, jamais decodee sur ce chemin")
         assert result.status == "unavailable"
         assert result.level == moderation.FALLBACK_LEVEL
 
@@ -68,37 +71,38 @@ class TestAnalyzeFallback:
         monkeypatch.setattr(moderation, "PROVIDER", "sightengine")
 
         def _boom(image_bytes):
-            raise RuntimeError("simulated network failure")
+            raise RuntimeError("panne réseau simulée")
 
         monkeypatch.setattr(moderation, "_sightengine_score", _boom)
-        result = moderation.analyze(b"irrelevant")
+        result = moderation.analyze(b"peu importe")
         assert result.status == "unavailable"
         assert result.provider == "fallback"
         assert result.level == moderation.FALLBACK_LEVEL
 
     def test_fallback_level_defaults_to_sensitive_not_normal(self):
-        # The default in .env.example / the module — an unanalyzed photo
-        # must be cautious by default, never assumed safe.
+        # La valeur par défaut dans .env.example / le module — une photo non
+        # analysée doit rester prudente par défaut, jamais présumée sûre.
         assert moderation.FALLBACK_LEVEL != moderation.NORMAL
 
     def test_default_fallback_env_value_is_honoured(self, monkeypatch):
         monkeypatch.setattr(moderation, "FALLBACK_LEVEL", moderation.BLOCKED)
         monkeypatch.setattr(moderation, "PROVIDER", "off")
-        result = moderation.analyze(b"irrelevant")
+        result = moderation.analyze(b"peu importe")
         assert result.level == moderation.BLOCKED
 
     def test_successful_classification_is_not_marked_unavailable(self, monkeypatch):
         monkeypatch.setattr(moderation, "PROVIDER", "sightengine")
         monkeypatch.setattr(moderation, "_sightengine_score", lambda image_bytes: (0.0, 0.0))
-        result = moderation.analyze(b"irrelevant")
+        result = moderation.analyze(b"peu importe")
         assert result.status == "checked"
         assert result.level == moderation.NORMAL
         assert result.provider == "sightengine"
 
 
 class TestStubProvider:
-    """The deterministic, network-free stand-in used by MODERATION_PROVIDER=stub
-    (test suite / local dev only — see the module docstring)."""
+    """Le simulacre déterministe et sans réseau utilisé quand
+    MODERATION_PROVIDER=stub (suite de tests / développement local
+    uniquement — voir le docstring du module)."""
 
     def _solid(self, r, g, b):
         import io

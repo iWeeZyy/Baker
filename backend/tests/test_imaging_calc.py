@@ -1,10 +1,11 @@
-"""Unit tests for message-photo image processing.
+"""Tests unitaires pour le traitement d'image des photos de message.
 
-Pure functions, no server needed. Covers the two properties the rest of the
-feature depends on: the stored/displayed photo is capped in size (spec point
-12, "optimise les photos avant upload"), and the blurred preview genuinely
-discards detail rather than merely smearing it — it is generated from a tiny
-source resolution, not a blur filter over the full-size photo.
+Fonctions pures, sans serveur. Couvre les deux propriétés dont dépend le
+reste de la fonctionnalité : la photo stockée/affichée est plafonnée en
+taille (point 12 du cahier des charges, « optimise les photos avant
+upload »), et l'aperçu flouté fait réellement disparaître le détail plutôt
+que de simplement l'étaler — il est produit à partir d'une résolution
+source minuscule, pas d'un filtre de flou appliqué à la photo pleine taille.
 """
 import io
 import sys
@@ -56,7 +57,7 @@ class TestPrepareDisplay:
 
     def test_invalid_bytes_raise(self):
         with pytest.raises(Exception):
-            imaging.prepare_display(b"this is not an image")
+            imaging.prepare_display(b"ceci n'est pas une image")
 
 
 class TestMakeBlurPreview:
@@ -67,10 +68,10 @@ class TestMakeBlurPreview:
             assert im.size == imaging.display_size(1200, 800)
 
     def test_output_discards_fine_detail(self):
-        # A checkerboard has high-frequency detail; if the blur genuinely
-        # discards it (shrink-then-blur), the result's pixels barely vary.
-        # A blur filter applied directly to the full image would leave
-        # far more local contrast than this.
+        # Un damier a un détail à haute fréquence ; si le flou le fait
+        # vraiment disparaître (réduction puis flou), les pixels du
+        # résultat varient à peine. Un filtre de flou appliqué directement
+        # à l'image pleine taille laisserait bien plus de contraste local.
         size = 400
         im = Image.new("RGB", (size, size))
         px = im.load()
@@ -83,8 +84,8 @@ class TestMakeBlurPreview:
         with Image.open(io.BytesIO(blurred)) as out:
             values = out.convert("L").tobytes()
         spread = max(values) - min(values)
-        assert spread < 80, f"blurred preview still varies by {spread}/255 — detail was not discarded"
+        assert spread < 80, f"l'aperçu flouté varie encore de {spread}/255 — le détail n'a pas disparu"
 
     def test_invalid_bytes_raise(self):
         with pytest.raises(Exception):
-            imaging.make_blur_preview(b"this is not an image")
+            imaging.make_blur_preview(b"ceci n'est pas une image")

@@ -50,18 +50,20 @@ anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY) if ANTHRO
 UPLOADS_DIR = ROOT_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
-# A separate directory tree for message photos, never reachable through the
-# public /files/{path} route below (which is rooted at UPLOADS_DIR and
-# refuses to resolve outside it). Message photos are private: they are only
-# ever served through /messages/photos/{message_id}, which checks auth and
-# conversation membership on every request. Two roots — not a filename
-# prefix check on the shared one — so a bug in that check can never expose
-# a private photo through the public route.
+# Une arborescence séparée pour les photos de message, jamais atteignable
+# par la route publique /files/{path} ci-dessous (qui est ancrée sur
+# UPLOADS_DIR et refuse de résoudre en dehors). Les photos de message sont
+# privées : elles ne sont servies que par /messages/photos/{message_id}, qui
+# vérifie l'authentification et l'appartenance à la conversation à chaque
+# requête. Deux racines distinctes — pas une vérification de préfixe sur une
+# racine partagée — pour qu'un bug dans cette vérification ne puisse jamais
+# exposer une photo privée via la route publique.
 PRIVATE_DIR = ROOT_DIR / "private_uploads"
 PRIVATE_DIR.mkdir(exist_ok=True)
 
-# A raw upload above this is rejected before any processing (spec point 12).
-# Generous for a phone photo; not a streaming limit, just a sanity cap.
+# Un envoi brut au-delà de cette taille est refusé avant tout traitement
+# (point 12 du cahier des charges). Généreux pour une photo de téléphone ;
+# ce n'est pas une limite en flux continu, juste un plafond raisonnable.
 MAX_PHOTO_UPLOAD_BYTES = 12 * 1024 * 1024
 
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
@@ -698,11 +700,12 @@ async def get_messages(friend_id: str, before: Optional[str] = None, user: dict 
     return {"messages": msgs, "has_more": has_more}
 
 async def _deliver_message(from_id: str, to_id: str, content: str, extra: Optional[dict] = None) -> dict:
-    """Persist a message and push it to the recipient's live sockets.
+    """Enregistre un message et le pousse vers les sockets actifs du destinataire.
 
-    `extra` carries the fields a photo message needs on top of a text one
-    (type, photo_path, photo_blur_path, moderation) without giving photo
-    messages a separate collection or a separate delivery/push path.
+    `extra` porte les champs propres à un message photo, en plus de ceux
+    d'un message texte (type, photo_path, photo_blur_path, moderation),
+    sans donner aux messages photo une collection ou un chemin de
+    livraison/diffusion séparé.
     """
     doc = {
         "id": str(uuid.uuid4()),
@@ -747,11 +750,12 @@ async def send_photo_message(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
 ):
-    """Sends a photo in a conversation. The photo is always sent — a
-    "sensitive" classification changes how it is later shown to the
-    recipient (blurred, behind a warning), never whether it is sent.
-    Only a classification of "blocked" (unambiguously explicit) is refused
-    outright, before anything is written to storage.
+    """Envoie une photo dans une conversation. La photo est toujours envoyée
+    — une classification « sensible » change seulement la façon dont elle
+    est ensuite montrée au destinataire (floutée, derrière un
+    avertissement), jamais le fait qu'elle soit envoyée. Seule une
+    classification « bloquée » (explicite sans ambiguïté) est refusée
+    d'emblée, avant qu'un seul octet ne soit écrit en stockage.
     """
     me = user["user_id"]
     if not await _are_friends(me, friend_id):
@@ -768,9 +772,10 @@ async def send_photo_message(
     except Exception:
         raise HTTPException(400, "Fichier image invalide")
 
-    # The (already resized) display image is what gets analyzed, not the raw
-    # upload — smaller payload to the provider, and nothing bigger than what
-    # will actually be shown ever leaves the server (spec point 10).
+    # C'est l'image d'affichage (déjà redimensionnée) qui est analysée, pas
+    # l'envoi brut — un payload plus léger vers le fournisseur, et rien de
+    # plus grand que ce qui sera réellement affiché ne quitte jamais le
+    # serveur (point 10 du cahier des charges).
     result = await run_in_threadpool(moderation.analyze, display_bytes)
 
     if result.level == moderation.BLOCKED:
@@ -802,18 +807,20 @@ async def send_photo_message(
             "checked_at": datetime.now(timezone.utc),
         },
     })
-    # No bot auto-reply to a photo — the bot's reply flow is text-only
-    # (see _bot_reply), and teaching it to react to images is out of scope.
+    # Pas de réponse automatique du bot à une photo — son circuit de
+    # réponse est uniquement textuel (voir _bot_reply), et lui apprendre à
+    # réagir à des images sort du cadre de cette fonctionnalité.
     return doc
 
 @api_router.get("/messages/photos/{message_id}")
 async def get_message_photo(message_id: str, variant: str = "display", user: dict = Depends(get_current_user)):
-    """Serves a message photo. Requires being one of the two parties to
-    that exact message AND still being friends with the other one — the
-    same rule GET /messages/{friend_id} already enforces for text history,
-    kept identical here rather than invented anew. Guessing another
-    message's id only ever proves you aren't a party to it (403/404); it
-    can never be used to reach someone else's photo.
+    """Sert une photo de message. Nécessite d'être l'une des deux parties de
+    ce message précis ET d'être toujours ami avec l'autre — la même règle
+    que GET /messages/{friend_id} applique déjà à l'historique texte,
+    reprise telle quelle plutôt que réinventée. Deviner l'identifiant d'un
+    autre message ne prouve jamais qu'une chose : qu'on n'en fait pas
+    partie (403/404) ; cela ne peut jamais servir à atteindre la photo de
+    quelqu'un d'autre.
     """
     me = user["user_id"]
     msg = await db.messages.find_one({"id": message_id, "type": "photo"}, {"_id": 0})

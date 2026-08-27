@@ -1,18 +1,21 @@
-"""Photo-messaging API tests: upload, moderation, private serving, reveal,
-reporting. Shares the fixed friend accounts from test_messaging.py so the
-whole messaging suite (text + photo) is idempotent against a persistent
-database, and reuses the same photo-message endpoints throughout — nothing
-here duplicates the existing text-message flow, which test_messaging.py
-already covers and which this file does not touch.
+"""Tests de l'API de messagerie photo : envoi, modération, service privé,
+révélation, signalement. Réutilise les comptes amis fixes de
+test_messaging.py pour que toute la suite de messagerie (texte + photo)
+reste idempotente sur une base persistante, et réutilise les mêmes points
+d'entrée tout du long — rien ici ne duplique le flux de messages texte
+existant, déjà couvert par test_messaging.py et que ce fichier ne touche
+pas.
 
-Levels are produced with solid-colour JPEGs against `moderation._stub_score`'s
-rules (see backend/moderation.py): red -> blocked, orange -> sensitive, grey
--> normal, blue -> simulated provider outage. That mapping is only exercised
-by a real server started with MODERATION_PROVIDER=stub in its environment —
-see backend/CLAUDE.md. Tests whose outcome depends on the exact level are
-skipped when the running server isn't configured that way; every other test
-here (auth, authorization, persistence, private serving, size limits,
-corrupt-upload handling, reporting) is provider-independent and always runs.
+Les niveaux sont produits avec des JPEG en aplat de couleur, selon les
+règles de `moderation._stub_score` (voir backend/moderation.py) : rouge ->
+bloqué, orange -> sensible, gris -> normal, bleu -> panne du fournisseur
+simulée. Cette correspondance n'est exercée que par un serveur réel démarré
+avec MODERATION_PROVIDER=stub dans son environnement — voir
+backend/CLAUDE.md. Les tests dont l'issue dépend du niveau exact sont
+ignorés (skip) quand le serveur testé n'est pas configuré ainsi ; tous les
+autres tests de ce fichier (authentification, autorisation, persistance,
+service privé, limites de taille, gestion des envois corrompus,
+signalement) sont indépendants du fournisseur et tournent toujours.
 """
 import io
 import os
@@ -26,7 +29,7 @@ from test_messaging import ACCOUNTS, API, _login_or_register, auth_headers  # no
 STUB_ACTIVE = os.environ.get("MODERATION_PROVIDER", "").strip().lower() == "stub"
 requires_stub = pytest.mark.skipif(
     not STUB_ACTIVE,
-    reason="requires the server under test to run with MODERATION_PROVIDER=stub",
+    reason="nécessite que le serveur testé tourne avec MODERATION_PROVIDER=stub",
 )
 
 
@@ -74,7 +77,7 @@ def _send_photo(token, friend_id, fileobj, filename="photo.jpg"):
     )
 
 
-# --- Sending: auth, friendship, malformed input (provider-independent) ---
+# --- Envoi : authentification, amitié, entrée malformée (indépendant du fournisseur) ---
 class TestSendPhotoGuards:
     def test_send_requires_auth(self, friends_ab):
         r = requests.post(f"{API}/messages/{friends_ab['b']['user_id']}/photo", files={"file": ("p.jpg", GREY(), "image/jpeg")}, timeout=30)
@@ -113,7 +116,7 @@ class TestSendPhotoGuards:
         assert r.status_code == 413
 
 
-# --- Sending a normal photo end to end (provider-independent shape checks) ---
+# --- Envoi d'une photo normale de bout en bout (vérifications de forme, indépendantes du fournisseur) ---
 class TestSendAndReceivePhoto:
     def test_send_creates_a_photo_message(self, friends_ab):
         r = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
@@ -124,8 +127,8 @@ class TestSendAndReceivePhoto:
         assert doc["to_user_id"] == friends_ab["b"]["user_id"]
         assert doc["moderation"]["level"] in ("normal", "sensitive", "blocked")
         assert doc["moderation"]["status"] in ("checked", "unavailable")
-        # A message that reached the recipient is never itself "blocked" —
-        # blocked photos are refused before anything is stored.
+        # Un message parvenu au destinataire n'est jamais lui-même
+        # « bloqué » — les photos bloquées sont refusées avant tout stockage.
         assert doc["moderation"]["level"] != "blocked"
 
     def test_recipient_sees_the_photo_message_in_history(self, friends_ab):
@@ -149,7 +152,7 @@ class TestSendAndReceivePhoto:
         assert got.headers["content-type"].startswith("image/")
 
 
-# --- Private access control (spec point 9 — provider-independent) ---
+# --- Contrôle d'accès privé (point 9 du cahier des charges — indépendant du fournisseur) ---
 class TestPhotoPrivacy:
     def test_fetching_photo_requires_auth(self, friends_ab):
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
@@ -164,9 +167,10 @@ class TestPhotoPrivacy:
         assert r.status_code == 403
 
     def test_tampering_with_message_id_never_reaches_another_conversation(self, friends_ab, users):
-        # Stranger sends themself... they can't (not friends with anyone
-        # relevant here), so instead: stranger tries every message id it can
-        # observe is not theirs — guessing a real id must still 403, not leak.
+        # L'inconnu ne peut pas s'envoyer un message à lui-même (pas ami
+        # avec les comptes utiles ici) ; à la place : il tente d'accéder à
+        # un identifiant de message réel qui n'est pas le sien — deviner un
+        # identifiant valide doit quand même donner 403, jamais de fuite.
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
         doc = sent.json()
         r = requests.get(f"{API}/messages/photos/{doc['id']}", headers=auth_headers(users["stranger"]["token"]), timeout=30)
@@ -178,18 +182,20 @@ class TestPhotoPrivacy:
         assert r.status_code == 404
 
     def test_blur_variant_404s_when_photo_has_no_blur(self, friends_ab):
-        # A normal-level photo (grey swatch under the real provider, or any
-        # provider that doesn't flag it) has no blur preview stored at all.
+        # Une photo de niveau normal (aplat gris sous le vrai fournisseur,
+        # ou tout fournisseur qui ne la signale pas) n'a aucun aperçu
+        # flouté stocké.
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
         doc = sent.json()
         if doc["moderation"]["level"] != "normal":
-            pytest.skip("this run's provider did not classify the grey swatch as normal")
+            pytest.skip("le fournisseur de cette exécution n'a pas classé l'aplat gris comme normal")
         r = requests.get(f"{API}/messages/photos/{doc['id']}", params={"variant": "blur"}, headers=auth_headers(friends_ab["a"]["token"]), timeout=30)
         assert r.status_code == 404
 
     def test_photo_not_reachable_through_the_public_files_route(self, friends_ab):
-        # Even with the exact storage path, the public /files/{path} route
-        # is rooted at a different directory and must not resolve it.
+        # Même avec le chemin de stockage exact, la route publique
+        # /files/{path} est ancrée sur un autre répertoire et ne doit pas
+        # pouvoir le résoudre.
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
         doc = sent.json()
         pair = "-".join(sorted([friends_ab["a"]["user_id"], friends_ab["b"]["user_id"]]))
@@ -198,13 +204,13 @@ class TestPhotoPrivacy:
         assert r.status_code == 404
 
 
-# --- Graduated classification (requires MODERATION_PROVIDER=stub) ---
+# --- Classification graduée (nécessite MODERATION_PROVIDER=stub) ---
 class TestGraduatedLevels:
     @requires_stub
     def test_red_swatch_is_blocked_outright(self, friends_ab):
         r = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], RED())
         assert r.status_code == 422
-        # Nothing must be stored/delivered for a blocked photo.
+        # Rien ne doit être stocké/livré pour une photo bloquée.
         history = requests.get(f"{API}/messages/{friends_ab['b']['user_id']}", headers=auth_headers(friends_ab["a"]["token"]), timeout=30).json()
         assert not any(m.get("moderation", {}).get("level") == "blocked" for m in history["messages"])
 
@@ -215,13 +221,13 @@ class TestGraduatedLevels:
         doc = sent.json()
         assert doc["moderation"]["level"] == "sensitive"
         assert doc["photo_blur_path"]
-        # The recipient can fetch the blurred stand-in without revealing anything.
+        # Le destinataire peut récupérer l'aperçu flouté sans rien révéler.
         blurred = requests.get(f"{API}/messages/photos/{doc['id']}", params={"variant": "blur"}, headers=auth_headers(friends_ab["b"]["token"]), timeout=30)
         assert blurred.status_code == 200
 
     @requires_stub
     def test_sensitive_photo_is_still_sent_not_blocked(self, friends_ab):
-        # The core rule: "sensitive" never blocks the send.
+        # La règle centrale : « sensible » ne bloque jamais l'envoi.
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], ORANGE())
         assert sent.status_code == 200
         doc = sent.json()
@@ -230,8 +236,9 @@ class TestGraduatedLevels:
 
     @requires_stub
     def test_recipient_can_still_fetch_full_photo_after_choosing_to_reveal(self, friends_ab):
-        # "Revealing" is a client-side choice about which variant to render;
-        # the server always allows fetching either variant once authorized.
+        # « Révéler » est un choix côté client sur la variante à afficher ;
+        # le serveur autorise toujours la récupération de l'une ou l'autre
+        # variante, une fois l'autorisation vérifiée.
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], ORANGE())
         doc = sent.json()
         full = requests.get(f"{API}/messages/photos/{doc['id']}", params={"variant": "display"}, headers=auth_headers(friends_ab["b"]["token"]), timeout=30)
@@ -246,7 +253,7 @@ class TestGraduatedLevels:
         assert doc["moderation"]["level"] != "normal"
 
 
-# --- Reporting ---
+# --- Signalement ---
 class TestReportMessage:
     def test_report_requires_auth(self, friends_ab):
         sent = _send_photo(friends_ab["a"]["token"], friends_ab["b"]["user_id"], GREY())
@@ -278,7 +285,7 @@ class TestReportMessage:
         assert r.status_code == 404
 
 
-# --- Regression: text messages are unaffected ---
+# --- Régression : les messages texte ne sont pas affectés ---
 class TestTextMessagesStillWork:
     def test_text_message_send_and_receive_unaffected(self, friends_ab):
         content = "Toujours du texte, comme avant."
