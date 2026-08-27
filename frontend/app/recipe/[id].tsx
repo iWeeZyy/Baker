@@ -16,7 +16,12 @@ import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
-type Comment = { id: string; user_id: string; user_name: string; user_picture?: string | null; content: string; created_at: string; parent_id?: string | null; like_count?: number; liked?: boolean };
+type Comment = {
+  id: string; user_id: string; user_name: string; user_picture?: string | null; content: string;
+  created_at: string; edited_at?: string | null; parent_id?: string | null;
+  reply_to_user_id?: string | null; reply_to_user_name?: string | null;
+  like_count?: number; liked?: boolean;
+};
 
 type CommentSort = 'likes' | 'newest' | 'oldest';
 
@@ -165,7 +170,7 @@ function TechnicalSheet(
 }
 
 export default function RecipeDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: tabParam, highlightComment } = useLocalSearchParams<{ id: string; tab?: string; highlightComment?: string }>();
   const router = useRouter();
   const { start, startSequence } = useTimer();
   const [recipe, setRecipe] = useState<any>(null);
@@ -178,8 +183,17 @@ export default function RecipeDetail() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentSort, setCommentSort] = useState<CommentSort>('likes');
   const [commentText, setCommentText] = useState('');
-  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
+  // parentId : toujours la racine (profondeur 2 maximum, comme côté serveur) ;
+  // toUserId/toName : l'auteur visé, racine ou réponse — sert à la fois au
+  // placeholder "Répondre à X…" et au reply_to_user_id envoyé au serveur.
+  const [replyTo, setReplyTo] = useState<{ parentId: string; toUserId: string; toName: string } | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [expandedRoots, setExpandedRoots] = useState<Set<string>>(new Set());
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const commentRefs = useRef<Record<string, View | null>>({});
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -215,6 +229,43 @@ export default function RecipeDetail() {
     })();
   }, [id, loadCommunity]);
 
+  // Arrivée depuis "Mes commentaires" : bascule sur l'onglet Communauté et
+  // repère le commentaire visé, une fois qu'il a une chance d'être chargé.
+  useEffect(() => {
+    if (tabParam === 'community') setTab('community');
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (!highlightComment || tab !== 'community' || comments.length === 0) return;
+    setExpandedRoots(prev => {
+      const target = comments.find(c => c.id === highlightComment);
+      const rootId = target?.parent_id || target?.id;
+      if (!rootId || prev.has(rootId)) return prev;
+      return new Set(prev).add(rootId);
+    });
+    const timeout = setTimeout(() => {
+      const node = commentRefs.current[highlightComment];
+      // measureLayout n'existe que sur les vues natives (pas sur `Text`), et le
+      // ciblage est du meilleur effort : un échec ne doit rien casser.
+      if (node && scrollRef.current) {
+        // @ts-ignore - measureLayout existe à l'exécution même si absent du type RN
+        node.measureLayout?.(
+          // @ts-ignore
+          scrollRef.current.getInnerViewNode?.() ?? scrollRef.current,
+          (_x: number, y: number) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true }),
+          () => {},
+        );
+      }
+      setHighlightedCommentId(highlightComment);
+      setTimeout(() => setHighlightedCommentId(null), 2000);
+    }, 300);
+    return () => clearTimeout(timeout);
+    // `comments` volontairement absent : seule sa longueur doit redéclencher ce
+    // repérage (un like qui change la référence du tableau ne doit pas rejouer
+    // le défilement/surbrillance).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightComment, tab, comments.length]);
+
   const toggleFav = async () => {
     try { const res = await api(`/recipes/${id}/favorite`, { method: 'POST' }); setFavorited(res.favorited); } catch {}
   };
@@ -248,11 +299,37 @@ export default function RecipeDetail() {
     if (!txt) return;
     setCommentText('');
     setCommentError(null);
-    const parent = replyTo?.id || null;
+    const parent = replyTo?.parentId || null;
+    const replyToUserId = replyTo?.toUserId || null;
     setReplyTo(null);
     try {
-      const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt, parent_id: parent }) });
+      const c = await api(`/recipes/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content: txt, parent_id: parent, reply_to_user_id: replyToUserId }),
+      });
       setComments(prev => [...prev, { ...c, like_count: 0, liked: false }]);
+      if (parent) setExpandedRoots(prev => new Set(prev).add(parent));
+    } catch (e: any) {
+      setCommentError(e.message || 'Erreur');
+    }
+  };
+
+  const startEditComment = (c: Comment) => {
+    setCommentError(null);
+    setEditingId(c.id);
+    setEditText(c.content);
+  };
+
+  const saveEditComment = async () => {
+    if (!editingId) return;
+    const txt = editText.trim();
+    if (!txt) return;
+    setCommentError(null);
+    try {
+      const updated = await api(`/recipes/${id}/comments/${editingId}`, { method: 'PUT', body: JSON.stringify({ content: txt }) });
+      setComments(prev => prev.map(c => c.id === editingId ? { ...c, content: updated.content, edited_at: updated.edited_at } : c));
+      setEditingId(null);
+      setEditText('');
     } catch (e: any) {
       setCommentError(e.message || 'Erreur');
     }
@@ -322,7 +399,7 @@ export default function RecipeDetail() {
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
         <View style={styles.heroWrap}>
           {photo ? (
             <Image source={{ uri: photo }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
@@ -506,7 +583,7 @@ export default function RecipeDetail() {
               <Text style={styles.commentsTitle}>Avis de la communauté</Text>
               {replyTo && (
                 <View style={styles.replyBanner} testID="reply-banner">
-                  <Text style={styles.replyBannerText}>Réponse à {replyTo.name}</Text>
+                  <Text style={styles.replyBannerText}>Réponse à {replyTo.toName}</Text>
                   <Pressable testID="cancel-reply" onPress={() => setReplyTo(null)}>
                     <Feather name="x" size={16} color={theme.color.muted} />
                   </Pressable>
@@ -517,7 +594,7 @@ export default function RecipeDetail() {
                   testID="comment-input"
                   value={commentText}
                   onChangeText={setCommentText}
-                  placeholder={replyTo ? `Répondre à ${replyTo.name}…` : 'Partagez votre avis…'}
+                  placeholder={replyTo ? `Répondre à ${replyTo.toName}…` : 'Partagez votre avis…'}
                   placeholderTextColor={theme.color.muted}
                   style={styles.commentInput}
                   multiline
@@ -552,64 +629,125 @@ export default function RecipeDetail() {
                   return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
                 });
                 if (sortedRoots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
-                return sortedRoots.map((c) => (
-                  <View key={c.id} testID={`comment-${c.id}`}>
-                    <View style={styles.commentCard}>
-                      <View style={styles.commentAvatar}>
-                        {avatarUrl(c.user_picture, API_BASE) ? (
-                          <Image source={{ uri: avatarUrl(c.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                        ) : (
-                          <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.commentName}>{c.user_name}</Text>
-                        <Text style={styles.commentBody}>{c.content}</Text>
-                        <View style={styles.commentActionsRow}>
-                          <Pressable testID={`comment-like-btn-${c.id}`} onPress={() => toggleCommentLike(c.id)} style={styles.replyBtn}>
-                            <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? theme.color.error : theme.color.brand} />
-                            <Text style={styles.replyBtnText}>{c.like_count || 0}</Text>
-                          </Pressable>
-                          <Pressable testID={`reply-btn-${c.id}`} onPress={() => setReplyTo({ id: c.id, name: c.user_name })} style={styles.replyBtn}>
-                            <Feather name="corner-up-left" size={13} color={theme.color.brand} />
-                            <Text style={styles.replyBtnText}>Répondre</Text>
-                          </Pressable>
-                          {user?.user_id === c.user_id && (
-                            <Pressable testID={`comment-delete-btn-${c.id}`} onPress={() => deleteComment(c)} style={styles.replyBtn}>
-                              <Feather name="trash-2" size={13} color={theme.color.muted} />
-                            </Pressable>
-                          )}
-                        </View>
-                      </View>
+
+                const renderActions = (c: Comment, rootId: string) => (
+                  <View style={styles.commentActionsRow}>
+                    <Pressable testID={`comment-like-btn-${c.id}`} onPress={() => toggleCommentLike(c.id)} style={styles.replyBtn}>
+                      <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? theme.color.error : theme.color.brand} />
+                      <Text style={styles.replyBtnText}>{c.like_count || 0}</Text>
+                    </Pressable>
+                    <Pressable
+                      testID={`reply-btn-${c.id}`}
+                      onPress={() => setReplyTo({ parentId: rootId, toUserId: c.user_id, toName: c.user_name })}
+                      style={styles.replyBtn}
+                    >
+                      <Feather name="corner-up-left" size={13} color={theme.color.brand} />
+                      <Text style={styles.replyBtnText}>Répondre</Text>
+                    </Pressable>
+                    {user?.user_id === c.user_id && (
+                      <>
+                        <Pressable testID={`comment-edit-btn-${c.id}`} onPress={() => startEditComment(c)} style={styles.replyBtn}>
+                          <Feather name="edit-2" size={13} color={theme.color.muted} />
+                        </Pressable>
+                        <Pressable testID={`comment-delete-btn-${c.id}`} onPress={() => deleteComment(c)} style={styles.replyBtn}>
+                          <Feather name="trash-2" size={13} color={theme.color.muted} />
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                );
+
+                const renderBody = (c: Comment) => editingId === c.id ? (
+                  <View>
+                    <TextInput
+                      testID={`comment-edit-input-${c.id}`}
+                      value={editText}
+                      onChangeText={setEditText}
+                      style={styles.commentEditInput}
+                      multiline
+                      autoFocus
+                    />
+                    <View style={styles.editActionsRow}>
+                      <Pressable testID={`comment-edit-cancel-${c.id}`} onPress={() => { setEditingId(null); setEditText(''); }} style={styles.editActionBtn}>
+                        <Text style={styles.editActionText}>Annuler</Text>
+                      </Pressable>
+                      <Pressable testID={`comment-edit-save-${c.id}`} onPress={saveEditComment} disabled={!editText.trim()} style={[styles.editActionBtn, !editText.trim() && { opacity: 0.4 }]}>
+                        <Text style={[styles.editActionText, { color: theme.color.brand, fontWeight: '700' }]}>Enregistrer</Text>
+                      </Pressable>
                     </View>
-                    {repliesFor(c.id).map((r) => (
-                      <View key={r.id} style={styles.replyCard} testID={`comment-${r.id}`}>
-                        <View style={styles.replyAvatar}>
-                          {avatarUrl(r.user_picture, API_BASE) ? (
-                            <Image source={{ uri: avatarUrl(r.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  </View>
+                ) : (
+                  <Text style={styles.commentBody}>
+                    {c.content}
+                    {c.edited_at ? <Text style={styles.editedBadge}> (modifié)</Text> : null}
+                  </Text>
+                );
+
+                return sortedRoots.map((c) => {
+                  const replies = repliesFor(c.id);
+                  const isExpanded = expandedRoots.has(c.id);
+                  const shownReplies = replies.length <= 2 || isExpanded ? replies : [];
+                  return (
+                    <View key={c.id} testID={`comment-${c.id}`}>
+                      <View
+                        ref={(node) => { commentRefs.current[c.id] = node; }}
+                        style={[styles.commentCard, highlightedCommentId === c.id && styles.commentHighlighted]}
+                      >
+                        <View style={styles.commentAvatar}>
+                          {avatarUrl(c.user_picture, API_BASE) ? (
+                            <Image source={{ uri: avatarUrl(c.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                           ) : (
-                            <Text style={styles.replyAvatarText}>{(r.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                            <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
                           )}
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.commentName}>{r.user_name}</Text>
-                          <Text style={styles.commentBody}>{r.content}</Text>
-                          <View style={styles.commentActionsRow}>
-                            <Pressable testID={`comment-like-btn-${r.id}`} onPress={() => toggleCommentLike(r.id)} style={styles.replyBtn}>
-                              <Ionicons name={r.liked ? 'heart' : 'heart-outline'} size={13} color={r.liked ? theme.color.error : theme.color.brand} />
-                              <Text style={styles.replyBtnText}>{r.like_count || 0}</Text>
-                            </Pressable>
-                            {user?.user_id === r.user_id && (
-                              <Pressable testID={`comment-delete-btn-${r.id}`} onPress={() => deleteComment(r)} style={styles.replyBtn}>
-                                <Feather name="trash-2" size={13} color={theme.color.muted} />
-                              </Pressable>
-                            )}
-                          </View>
+                          <Text style={styles.commentName}>{c.user_name}</Text>
+                          {renderBody(c)}
+                          {renderActions(c, c.id)}
                         </View>
                       </View>
-                    ))}
-                  </View>
-                ));
+                      {shownReplies.map((r) => (
+                        <View
+                          key={r.id}
+                          ref={(node) => { commentRefs.current[r.id] = node; }}
+                          style={[styles.replyCard, highlightedCommentId === r.id && styles.commentHighlighted]}
+                          testID={`comment-${r.id}`}
+                        >
+                          <View style={styles.replyAvatar}>
+                            {avatarUrl(r.user_picture, API_BASE) ? (
+                              <Image source={{ uri: avatarUrl(r.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                            ) : (
+                              <Text style={styles.replyAvatarText}>{(r.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                            )}
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.commentName}>{r.user_name}</Text>
+                            {r.reply_to_user_name && r.reply_to_user_name !== c.user_name && (
+                              <Text style={styles.replyToLabel}>↳ Réponse à {r.reply_to_user_name}</Text>
+                            )}
+                            {renderBody(r)}
+                            {renderActions(r, c.id)}
+                          </View>
+                        </View>
+                      ))}
+                      {replies.length > 2 && (
+                        <Pressable
+                          testID={`toggle-replies-${c.id}`}
+                          onPress={() => setExpandedRoots(prev => {
+                            const next = new Set(prev);
+                            if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+                            return next;
+                          })}
+                          style={styles.toggleRepliesBtn}
+                        >
+                          <Text style={styles.toggleRepliesText}>
+                            {isExpanded ? 'Masquer les réponses' : `Voir les ${replies.length} réponses`}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                });
               })()}
             </View>
           )}
@@ -720,4 +858,13 @@ const styles = StyleSheet.create({
   commentAvatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
   commentName: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface, marginBottom: 2 },
   commentBody: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20 },
+  editedBadge: { fontSize: 12, color: theme.color.muted, fontStyle: 'italic' },
+  commentHighlighted: { backgroundColor: theme.color.brandTertiary, borderRadius: 8, padding: 8, margin: -8 },
+  replyToLabel: { fontSize: 12, color: theme.color.brand, fontWeight: '500', marginBottom: 2 },
+  toggleRepliesBtn: { marginLeft: 34, marginBottom: 16, marginTop: -6 },
+  toggleRepliesText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
+  commentEditInput: { fontSize: 14, color: theme.color.onSurface, lineHeight: 20, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 10, minHeight: 44, textAlignVertical: 'top' },
+  editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16, marginTop: 8 },
+  editActionBtn: { paddingVertical: 4 },
+  editActionText: { fontSize: 13, color: theme.color.muted, fontWeight: '600' },
 });

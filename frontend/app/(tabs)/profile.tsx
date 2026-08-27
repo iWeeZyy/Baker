@@ -11,14 +11,22 @@ import { ActionSheet } from '@/src/ActionSheet';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
 import { recipeImageSource } from '@/src/products';
+import { formatRelativeDate } from '@/src/relativeDate';
 import { theme } from '@/src/theme';
 
 type PendingImage = { uri: string; name: string };
 
+type MyComment = {
+  id: string; recipe_id: string; recipe_title: string; recipe_product?: string | null;
+  recipe_image_path?: string | null; recipe_image_url?: string | null;
+  content: string; created_at: string; edited_at?: string | null; like_count: number;
+  parent_id?: string | null; reply_to_user_name?: string | null;
+};
+
 export default function Profile() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'mine' | 'favorites'>('mine');
+  const [tab, setTab] = useState<'mine' | 'favorites' | 'comments'>('mine');
   const [mine, setMine] = useState<any[]>([]);
   const [favs, setFavs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +34,10 @@ export default function Profile() {
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [uploading, setUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [myComments, setMyComments] = useState<MyComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,7 +50,32 @@ export default function Profile() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const items = tab === 'mine' ? mine : favs;
+  const loadComments = useCallback(async () => {
+    try {
+      const res = await api('/comments/mine');
+      setMyComments(res.comments);
+      setCommentsHasMore(res.has_more);
+    } catch (e) { console.warn(e); }
+    finally { setCommentsLoaded(true); }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'comments' && !commentsLoaded) loadComments();
+  }, [tab, commentsLoaded, loadComments]);
+
+  const loadMoreComments = async () => {
+    if (commentsLoadingMore || myComments.length === 0) return;
+    setCommentsLoadingMore(true);
+    try {
+      const before = encodeURIComponent(myComments[myComments.length - 1].created_at);
+      const res = await api(`/comments/mine?before=${before}`);
+      setMyComments(prev => [...prev, ...res.comments]);
+      setCommentsHasMore(res.has_more);
+    } catch (e) { console.warn(e); }
+    finally { setCommentsLoadingMore(false); }
+  };
+
+  const items = tab === 'favorites' ? favs : mine;
   const initial = (user?.name || user?.email || '?').slice(0, 1).toUpperCase();
 
   const pickAvatar = async (kind: 'camera' | 'library') => {
@@ -145,10 +182,67 @@ export default function Profile() {
           <Pressable testID="tab-favs" onPress={() => setTab('favorites')} style={[styles.tab, tab === 'favorites' && styles.tabActive]}>
             <Text style={[styles.tabText, tab === 'favorites' && styles.tabTextActive]}>Sauvegardées</Text>
           </Pressable>
+          <Pressable testID="tab-comments" onPress={() => setTab('comments')} style={[styles.tab, tab === 'comments' && styles.tabActive]}>
+            <Text style={[styles.tabText, tab === 'comments' && styles.tabTextActive]}>Mes commentaires</Text>
+          </Pressable>
         </View>
       </View>
 
-      {loading ? (
+      {tab === 'comments' ? (
+        !commentsLoaded ? (
+          <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        ) : (
+          <FlatList
+            data={myComments}
+            keyExtractor={c => c.id}
+            contentContainerStyle={{ gap: 16, padding: 24, paddingBottom: 40 }}
+            renderItem={({ item }) => {
+              const isReply = !!item.parent_id;
+              return (
+                <Pressable
+                  testID={`profile-comment-${item.id}`}
+                  onPress={() => router.push(`/recipe/${item.recipe_id}?tab=community&highlightComment=${item.id}`)}
+                  style={styles.commentCard}
+                >
+                  <Image
+                    source={recipeImageSource({ image_path: item.recipe_image_path, image_url: item.recipe_image_url, product: item.recipe_product }, API_BASE)}
+                    style={styles.commentThumb}
+                    contentFit="cover"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.commentCardKind}>
+                      {isReply ? 'Réponse sur' : 'Commentaire sur'} {item.recipe_title}
+                    </Text>
+                    {isReply && item.reply_to_user_name && (
+                      <Text style={styles.commentCardReplyTo}>Réponse à {item.reply_to_user_name}</Text>
+                    )}
+                    <Text style={styles.commentCardBody} numberOfLines={3}>{item.content}</Text>
+                    <View style={styles.commentCardFooter}>
+                      <Text style={styles.commentCardMeta}>{formatRelativeDate(item.created_at)}</Text>
+                      <Text style={styles.commentCardMeta}>❤ {item.like_count}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Feather name="message-circle" size={40} color={theme.color.muted} />
+                <Text style={styles.emptyTitle}>Aucun commentaire</Text>
+                <Text style={styles.emptySubtitle}>Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes.</Text>
+                <Pressable testID="empty-comments-btn" onPress={() => router.push('/(tabs)/recipes' as any)} style={styles.emptyBtn}>
+                  <Text style={styles.emptyBtnText}>Découvrir des recettes</Text>
+                </Pressable>
+              </View>
+            }
+            ListFooterComponent={commentsHasMore ? (
+              <Pressable testID="comments-load-more" onPress={loadMoreComments} disabled={commentsLoadingMore} style={styles.loadMoreBtn}>
+                {commentsLoadingMore ? <ActivityIndicator size="small" color={theme.color.brand} /> : <Text style={styles.loadMoreText}>Charger plus</Text>}
+              </Pressable>
+            ) : null}
+          />
+        )
+      ) : loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
       ) : (
         <FlatList
@@ -235,8 +329,18 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyTitle: { fontSize: 14, color: theme.color.muted, textAlign: 'center', paddingHorizontal: 40 },
+  emptySubtitle: { fontSize: 13, color: theme.color.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
   emptyBtn: { marginTop: 16, backgroundColor: theme.color.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
   emptyBtnText: { color: '#fff', fontWeight: '600' },
+  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 14 },
+  commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: theme.color.surfaceTertiary },
+  commentCardKind: { fontSize: 13, fontWeight: '600', color: theme.color.onSurface },
+  commentCardReplyTo: { fontSize: 12, color: theme.color.brand, fontWeight: '500', marginTop: 2 },
+  commentCardBody: { fontSize: 13, color: theme.color.onSurfaceSecondary, lineHeight: 18, marginTop: 4 },
+  commentCardFooter: { flexDirection: 'row', gap: 16, marginTop: 8 },
+  commentCardMeta: { fontSize: 12, color: theme.color.muted },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: 14 },
+  loadMoreText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
   avatarLinksRow: { flexDirection: 'row', gap: 20, marginTop: 10 },
   avatarLink: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
   avatarError: { fontSize: 13, color: theme.color.error, marginTop: 8 },
