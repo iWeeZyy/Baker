@@ -15,6 +15,13 @@ services:
         generateValue: true
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Sightengine API user/secret for message-photo moderation
+      # (https://sightengine.com/). Left unset, photos still send but always
+      # fall back to MODERATION_FALLBACK (see backend/.env.example).
+      - key: SIGHTENGINE_API_USER
+        sync: false
+      - key: SIGHTENGINE_API_SECRET
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       # Emails granted Baker Pro (no billing provider yet); set in the dashboard.
