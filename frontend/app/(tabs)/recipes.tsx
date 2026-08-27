@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -25,6 +25,7 @@ export default function Recipes() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [category, setCategory] = useState('Tous');
   const [loading, setLoading] = useState(true);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function Recipes() {
             <Text style={styles.brandLabel}>LA BIBLIOTHÈQUE</Text>
             <Text style={styles.title}>Recettes</Text>
           </View>
-          <Pressable testID="share-recipe-btn" onPress={() => router.push('/share')} style={styles.shareBtn}>
+          <Pressable testID="share-recipe-btn" onPress={() => setCreateMenuOpen(true)} style={styles.shareBtn}>
             <Feather name="plus" size={20} color="#fff" />
           </Pressable>
         </View>
@@ -111,6 +112,33 @@ export default function Recipes() {
           ListEmptyComponent={<Text style={styles.empty}>Aucune famille dans cette catégorie.</Text>}
         />
       )}
+
+      <Modal visible={createMenuOpen} transparent animationType="fade" onRequestClose={() => setCreateMenuOpen(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setCreateMenuOpen(false)}>
+          <View style={styles.menuSheet}>
+            <Text style={styles.menuTitle}>Nouvelle recette</Text>
+            <Pressable
+              testID="create-menu-scan"
+              onPress={() => { setCreateMenuOpen(false); router.push('/scan'); }}
+              style={styles.menuOption}
+            >
+              <Text style={styles.menuOptionEmoji}>📷</Text>
+              <Text style={styles.menuOptionText}>Scanner une recette</Text>
+            </Pressable>
+            <Pressable
+              testID="create-menu-manual"
+              onPress={() => { setCreateMenuOpen(false); router.push('/share'); }}
+              style={styles.menuOption}
+            >
+              <Text style={styles.menuOptionEmoji}>✏️</Text>
+              <Text style={styles.menuOptionText}>Créer manuellement</Text>
+            </Pressable>
+            <Pressable testID="create-menu-cancel" onPress={() => setCreateMenuOpen(false)} style={styles.menuCancel}>
+              <Text style={styles.menuCancelText}>Annuler</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -139,4 +167,12 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
   empty: { textAlign: 'center', color: theme.color.muted, marginTop: 60 },
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.5)', justifyContent: 'flex-end' },
+  menuSheet: { backgroundColor: theme.color.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40, gap: 4 },
+  menuTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, marginBottom: 12 },
+  menuOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  menuOptionEmoji: { fontSize: 22 },
+  menuOptionText: { fontSize: 16, color: theme.color.onSurface, fontWeight: '500' },
+  menuCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+  menuCancelText: { fontSize: 15, color: theme.color.muted, fontWeight: '500' },
 });

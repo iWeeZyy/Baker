@@ -104,6 +104,7 @@ BAN_WORDS = {
     "enfoiré",
     "enfoirée",
     "étron",
+    "fdp",
     "fille de pute",
     "fils de pute",
     "folle",

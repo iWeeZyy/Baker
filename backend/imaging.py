@@ -18,13 +18,20 @@ d'être floutée.
 import io
 from typing import Tuple
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 
 MAX_DISPLAY_DIM = 1600   # px, le plus grand côté de la photo stockée/affichée
 JPEG_QUALITY = 82
 BLUR_SOURCE_DIM = 24     # px, le plus grand côté de la source utilisée pour le flou
 BLUR_RADIUS = 12
 BLUR_JPEG_QUALITY = 60   # un aperçu flouté se compresse davantage sans perte visible
+
+# Une fiche recette scannée doit rester lisible pour l'extraction — une
+# résolution plus généreuse que l'affichage d'une photo de message, où
+# seul le rendu visuel compte.
+SCAN_MAX_DIM = 2200
+SCAN_JPEG_QUALITY = 90
+SCAN_CONTRAST_FACTOR = 1.15  # léger renfort, pas une détection de contours
 
 
 def _load_rgb(image_bytes: bytes) -> Image.Image:
@@ -55,6 +62,21 @@ def prepare_display(image_bytes: bytes) -> bytes:
     im = _load_rgb(image_bytes)
     im.thumbnail(display_size(*im.size), Image.LANCZOS)
     return _encode_jpeg(im, JPEG_QUALITY)
+
+
+def prepare_for_analysis(image_bytes: bytes) -> bytes:
+    """Prépare une page de fiche recette avant envoi à l'analyse : même
+    principe que prepare_display (redimensionner/recompresser, jamais
+    conserver l'original tel quel), avec une résolution plus haute pour
+    garder le texte lisible, et un léger renfort de contraste — pas de
+    détection de contours ni de correction de perspective, qui
+    nécessiteraient une dépendance native absente du projet."""
+    im = _load_rgb(image_bytes)
+    if max(im.size) > SCAN_MAX_DIM:
+        ratio = SCAN_MAX_DIM / max(im.size)
+        im = im.resize((max(1, round(im.width * ratio)), max(1, round(im.height * ratio))), Image.LANCZOS)
+    im = ImageEnhance.Contrast(im).enhance(SCAN_CONTRAST_FACTOR)
+    return _encode_jpeg(im, SCAN_JPEG_QUALITY)
 
 
 def make_blur_preview(image_bytes: bytes) -> bytes:
