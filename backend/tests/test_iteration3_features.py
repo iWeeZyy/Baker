@@ -175,6 +175,105 @@ class TestComments:
         found = next(x for x in lst if x["id"] == c["id"])
         assert found["user_name"] == TEST_NAME
 
+    def test_comment_carries_a_like_count_publicly(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 like_count"}, headers=h(token), timeout=30).json()
+        lst = requests.get(f"{API}/recipes/{recipe_id}/comments", timeout=30).json()
+        found = next(x for x in lst if x["id"] == c["id"])
+        assert found["like_count"] == 0
+
+
+# ---- COMMENT LIKES ----
+class TestCommentLikes:
+    def test_like_requires_auth(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 cl auth"}, headers=h(token), timeout=30).json()
+        r = requests.post(f"{API}/comments/{c['id']}/like", timeout=30)
+        assert r.status_code == 401
+
+    def test_like_unknown_comment_404s(self, token):
+        r = requests.post(f"{API}/comments/does-not-exist/like", headers=h(token), timeout=30)
+        assert r.status_code == 404
+
+    def test_toggle_updates_public_count(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 cl toggle"}, headers=h(token), timeout=30).json()
+        r = requests.post(f"{API}/comments/{c['id']}/like", headers=h(token), timeout=30)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["liked"] is True and d["count"] == 1
+        lst = requests.get(f"{API}/recipes/{recipe_id}/comments", timeout=30).json()
+        assert next(x for x in lst if x["id"] == c["id"])["like_count"] == 1
+
+        r2 = requests.post(f"{API}/comments/{c['id']}/like", headers=h(token), timeout=30).json()
+        assert r2["liked"] is False and r2["count"] == 0
+
+    def test_two_users_liking_the_same_comment_are_both_counted(self, token, token_b, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 cl two users"}, headers=h(token), timeout=30).json()
+        requests.post(f"{API}/comments/{c['id']}/like", headers=h(token), timeout=30)
+        r_b = requests.post(f"{API}/comments/{c['id']}/like", headers=h(token_b), timeout=30).json()
+        assert r_b["liked"] is True and r_b["count"] == 2
+
+    def test_mine_endpoint_reports_only_my_likes(self, token, token_b, recipe_id):
+        c1 = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 cl mine 1"}, headers=h(token), timeout=30).json()
+        c2 = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 cl mine 2"}, headers=h(token), timeout=30).json()
+        requests.post(f"{API}/comments/{c1['id']}/like", headers=h(token), timeout=30)
+        requests.post(f"{API}/comments/{c2['id']}/like", headers=h(token_b), timeout=30)
+
+        mine_a = requests.get(f"{API}/recipes/{recipe_id}/comments/likes/mine", headers=h(token), timeout=30).json()
+        mine_b = requests.get(f"{API}/recipes/{recipe_id}/comments/likes/mine", headers=h(token_b), timeout=30).json()
+        assert c1["id"] in mine_a["liked_comment_ids"] and c2["id"] not in mine_a["liked_comment_ids"]
+        assert c2["id"] in mine_b["liked_comment_ids"] and c1["id"] not in mine_b["liked_comment_ids"]
+
+    def test_mine_endpoint_requires_auth(self, recipe_id):
+        r = requests.get(f"{API}/recipes/{recipe_id}/comments/likes/mine", timeout=30)
+        assert r.status_code == 401
+
+
+# ---- COMMENT DELETION ----
+class TestDeleteComment:
+    def test_delete_requires_auth(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 del auth"}, headers=h(token), timeout=30).json()
+        r = requests.delete(f"{API}/recipes/{recipe_id}/comments/{c['id']}", timeout=30)
+        assert r.status_code == 401
+
+    def test_cannot_delete_someone_elses_comment(self, token, token_b, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 del other"}, headers=h(token), timeout=30).json()
+        r = requests.delete(f"{API}/recipes/{recipe_id}/comments/{c['id']}", headers=h(token_b), timeout=30)
+        assert r.status_code == 403
+        # toujours là
+        lst = requests.get(f"{API}/recipes/{recipe_id}/comments", timeout=30).json()
+        assert any(x["id"] == c["id"] for x in lst)
+
+    def test_delete_unknown_comment_404s(self, token, recipe_id):
+        r = requests.delete(f"{API}/recipes/{recipe_id}/comments/does-not-exist", headers=h(token), timeout=30)
+        assert r.status_code == 404
+
+    def test_delete_own_comment_removes_it(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 del own"}, headers=h(token), timeout=30).json()
+        r = requests.delete(f"{API}/recipes/{recipe_id}/comments/{c['id']}", headers=h(token), timeout=30)
+        assert r.status_code == 200
+        assert c["id"] in r.json()["deleted_ids"]
+        lst = requests.get(f"{API}/recipes/{recipe_id}/comments", timeout=30).json()
+        assert not any(x["id"] == c["id"] for x in lst)
+
+    def test_deleting_a_comment_cascades_to_its_replies(self, token, token_b, recipe_id):
+        root = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 del cascade root"}, headers=h(token), timeout=30).json()
+        reply = requests.post(
+            f"{API}/recipes/{recipe_id}/comments",
+            json={"content": "TEST_iter3 del cascade reply", "parent_id": root["id"]},
+            headers=h(token_b), timeout=30,
+        ).json()
+        r = requests.delete(f"{API}/recipes/{recipe_id}/comments/{root['id']}", headers=h(token), timeout=30)
+        assert r.status_code == 200
+        assert set(r.json()["deleted_ids"]) == {root["id"], reply["id"]}
+        lst = requests.get(f"{API}/recipes/{recipe_id}/comments", timeout=30).json()
+        assert not any(x["id"] in (root["id"], reply["id"]) for x in lst)
+
+    def test_deleting_a_comment_removes_its_likes(self, token, recipe_id):
+        c = requests.post(f"{API}/recipes/{recipe_id}/comments", json={"content": "TEST_iter3 del likes"}, headers=h(token), timeout=30).json()
+        requests.post(f"{API}/comments/{c['id']}/like", headers=h(token), timeout=30)
+        requests.delete(f"{API}/recipes/{recipe_id}/comments/{c['id']}", headers=h(token), timeout=30)
+        mine = requests.get(f"{API}/recipes/{recipe_id}/comments/likes/mine", headers=h(token), timeout=30).json()
+        assert c["id"] not in mine["liked_comment_ids"]
+
 
 # ---- NOTES ----
 class TestNotes:

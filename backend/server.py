@@ -507,10 +507,67 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
     return {"liked": liked, "count": count}
 
 # ---------- Comments ----------
+async def _comment_like_counts(comment_ids):
+    # Même forme que _like_counts (recettes) : un seul aller-retour groupé,
+    # jamais une requête par commentaire affiché.
+    counts = {}
+    if not comment_ids:
+        return counts
+    pipeline = [
+        {"$match": {"comment_id": {"$in": comment_ids}}},
+        {"$group": {"_id": "$comment_id", "c": {"$sum": 1}}},
+    ]
+    async for row in db.comment_likes.aggregate(pipeline):
+        counts[row["_id"]] = row["c"]
+    return counts
+
 @api_router.get("/recipes/{recipe_id}/comments")
 async def get_comments(recipe_id: str):
     cursor = db.comments.find({"recipe_id": recipe_id}, {"_id": 0}).sort("created_at", 1)
-    return await cursor.to_list(500)
+    docs = await cursor.to_list(500)
+    counts = await _comment_like_counts([d["id"] for d in docs])
+    for d in docs:
+        d["like_count"] = counts.get(d["id"], 0)
+    return docs
+
+@api_router.get("/recipes/{recipe_id}/comments/likes/mine")
+async def my_comment_likes(recipe_id: str, user: dict = Depends(get_current_user)):
+    # Un seul aller-retour pour tous les commentaires de la recette plutôt
+    # qu'un par commentaire — c'est ce qui permet à /comments de rester
+    # public (aucune notion d'utilisateur courant) tout en donnant au
+    # client de quoi savoir, en un coup, lesquels il a déjà likés.
+    comment_ids = await db.comments.find({"recipe_id": recipe_id}, {"_id": 0, "id": 1}).to_list(500)
+    ids = [c["id"] for c in comment_ids]
+    if not ids:
+        return {"liked_comment_ids": []}
+    liked = await db.comment_likes.find({"user_id": user["user_id"], "comment_id": {"$in": ids}}, {"_id": 0, "comment_id": 1}).to_list(500)
+    return {"liked_comment_ids": [l["comment_id"] for l in liked]}
+
+@api_router.post("/comments/{comment_id}/like")
+async def toggle_comment_like(comment_id: str, user: dict = Depends(get_current_user)):
+    comment = await db.comments.find_one({"id": comment_id})
+    if not comment:
+        raise HTTPException(404, "Commentaire introuvable")
+    existing = await db.comment_likes.find_one({"user_id": user["user_id"], "comment_id": comment_id})
+    if existing:
+        await db.comment_likes.delete_one({"user_id": user["user_id"], "comment_id": comment_id})
+        liked = False
+    else:
+        try:
+            # recipe_id est dénormalisé ici pour que retire_built_ins (voir
+            # plus bas) puisse purger ces likes exactement comme les autres
+            # dépendances d'une recette, par un simple filtre sur recipe_id.
+            await db.comment_likes.insert_one({
+                "user_id": user["user_id"],
+                "comment_id": comment_id,
+                "recipe_id": comment["recipe_id"],
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            pass
+        liked = True
+    count = await db.comment_likes.count_documents({"comment_id": comment_id})
+    return {"liked": liked, "count": count}
 
 @api_router.post("/recipes/{recipe_id}/comments")
 async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(get_current_user)):
@@ -529,6 +586,22 @@ async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(ge
     await db.comments.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+@api_router.delete("/recipes/{recipe_id}/comments/{comment_id}")
+async def delete_comment(recipe_id: str, comment_id: str, user: dict = Depends(get_current_user)):
+    comment = await db.comments.find_one({"id": comment_id, "recipe_id": recipe_id})
+    if not comment:
+        raise HTTPException(404, "Commentaire introuvable")
+    if comment["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Vous ne pouvez supprimer que vos propres commentaires")
+    # Un commentaire n'a qu'un seul niveau de réponses (pas de réponse à une
+    # réponse dans ce modèle) : supprimer une réponse à sa place les emporte
+    # avec lui, comme la suppression d'une recette emporte déjà ses avis.
+    replies = await db.comments.find({"parent_id": comment_id}, {"_id": 0, "id": 1}).to_list(500)
+    ids_to_delete = [comment_id] + [r["id"] for r in replies]
+    await db.comments.delete_many({"id": {"$in": ids_to_delete}})
+    await db.comment_likes.delete_many({"comment_id": {"$in": ids_to_delete}})
+    return {"deleted_ids": ids_to_delete}
 
 # ---------- Personal Notes ----------
 @api_router.get("/recipes/{recipe_id}/note")
@@ -1710,8 +1783,9 @@ async def retire_built_ins(recipes, dependents, keep_titles) -> list:
     Two rules make this safe to run on every boot:
       - only `is_user_submitted: False` documents are considered, so a deploy
         can never remove a recipe a member of the community wrote;
-      - the likes, comments, notes and favourites of a deleted recipe go with
-        it, since rows pointing at nothing would still be counted.
+      - the likes, comments, comment likes, notes and favourites of a deleted
+        recipe go with it, since rows pointing at nothing would still be
+        counted.
 
     Returns the titles removed, for the log.
     """
@@ -1739,6 +1813,10 @@ async def startup():
     await db.likes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
     await db.likes.create_index("recipe_id")
     await db.comments.create_index("recipe_id")
+    await db.comments.create_index("parent_id")
+    await db.comment_likes.create_index([("user_id", 1), ("comment_id", 1)], unique=True)
+    await db.comment_likes.create_index("comment_id")
+    await db.comment_likes.create_index("recipe_id")
     await db.notes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
 
     # Backfill pair_key on any friendship docs predating this field, so the
@@ -1793,7 +1871,7 @@ async def startup():
 
     retired = await retire_built_ins(
         db.recipes,
-        [db.likes, db.comments, db.notes, db.favorites],
+        [db.likes, db.comments, db.notes, db.favorites, db.comment_likes],
         {r["title"] for r in RECIPES_SEED},
     )
     if retired:

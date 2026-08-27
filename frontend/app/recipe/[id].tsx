@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useAuth } from '@/src/auth';
+import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
 import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
@@ -13,7 +15,15 @@ import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
-type Comment = { id: string; user_name: string; content: string; created_at: string; parent_id?: string | null };
+type Comment = { id: string; user_id: string; user_name: string; content: string; created_at: string; parent_id?: string | null; like_count?: number; liked?: boolean };
+
+type CommentSort = 'likes' | 'newest' | 'oldest';
+
+const COMMENT_SORT_OPTIONS: { key: CommentSort; label: string }[] = [
+  { key: 'likes', label: '+ likés' },
+  { key: 'newest', label: '+ récents' },
+  { key: 'oldest', label: '+ anciens' },
+];
 
 // Parse a duration mentioned in a step text -> seconds (first match)
 // Longest alternative first: "heures" must win over "h" so that "2 heures 30"
@@ -161,6 +171,7 @@ export default function RecipeDetail() {
   const [likePending, setLikePending] = useState(false);
   const likeScale = useRef(new Animated.Value(1)).current;
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentSort, setCommentSort] = useState<CommentSort>('likes');
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
@@ -168,15 +179,20 @@ export default function RecipeDetail() {
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
   const [costInfo, setCostInfo] = useState<{ available: boolean; cost_per_piece?: number } | null>(null);
+  const { user } = useAuth();
 
   const loadCommunity = useCallback(async () => {
     try {
-      const [l, c, n] = await Promise.all([
+      const [l, c, n, mine] = await Promise.all([
         api(`/recipes/${id}/likes`),
         api(`/recipes/${id}/comments`),
         api(`/recipes/${id}/note`),
+        api(`/recipes/${id}/comments/likes/mine`).catch(() => ({ liked_comment_ids: [] })),
       ]);
-      setLikes(l); setComments(c); setNote(n.content || '');
+      const likedIds = new Set(mine.liked_comment_ids || []);
+      setLikes(l);
+      setComments(c.map((cm: Comment) => ({ ...cm, liked: likedIds.has(cm.id) })));
+      setNote(n.content || '');
     } catch (e) { console.warn(e); }
   }, [id]);
 
@@ -231,8 +247,36 @@ export default function RecipeDetail() {
     setReplyTo(null);
     try {
       const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt, parent_id: parent }) });
-      setComments(prev => [...prev, c]);
+      setComments(prev => [...prev, { ...c, like_count: 0, liked: false }]);
     } catch (e: any) {
+      setCommentError(e.message || 'Erreur');
+    }
+  };
+
+  const toggleCommentLike = async (commentId: string) => {
+    const previous = comments;
+    setComments(prev => prev.map(c => c.id === commentId
+      ? { ...c, liked: !c.liked, like_count: (c.like_count || 0) + (c.liked ? -1 : 1) }
+      : c));
+    try {
+      const res = await api(`/comments/${commentId}/like`, { method: 'POST' });
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, liked: res.liked, like_count: res.count } : c));
+    } catch (e: any) {
+      setComments(previous);
+      setCommentError(e.message || 'Erreur');
+    }
+  };
+
+  const deleteComment = async (comment: Comment) => {
+    const ok = await confirmAsync('Supprimer ce commentaire', 'Les réponses qu\'il a reçues seront supprimées avec lui.', 'Supprimer', true);
+    if (!ok) return;
+    const previous = comments;
+    try {
+      const res = await api(`/recipes/${id}/comments/${comment.id}`, { method: 'DELETE' });
+      const deletedIds: string[] = res.deleted_ids || [comment.id];
+      setComments(prev => prev.filter(c => !deletedIds.includes(c.id)));
+    } catch (e: any) {
+      setComments(previous);
       setCommentError(e.message || 'Erreur');
     }
   };
@@ -468,11 +512,31 @@ export default function RecipeDetail() {
               </View>
               {commentError && <Text style={styles.commentError} testID="comment-error">{commentError}</Text>}
 
+              {comments.length > 0 && (
+                <View style={styles.sortRow}>
+                  {COMMENT_SORT_OPTIONS.map(opt => (
+                    <Pressable
+                      key={opt.key}
+                      testID={`comment-sort-${opt.key}`}
+                      onPress={() => setCommentSort(opt.key)}
+                      style={[styles.sortChip, commentSort === opt.key && styles.sortChipActive]}
+                    >
+                      <Text style={[styles.sortChipText, commentSort === opt.key && styles.sortChipTextActive]}>{opt.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
               {(() => {
                 const roots = comments.filter(c => !c.parent_id);
                 const repliesFor = (pid: string) => comments.filter(c => c.parent_id === pid);
-                if (roots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
-                return roots.map((c) => (
+                const sortedRoots = [...roots].sort((a, b) => {
+                  if (commentSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                  if (commentSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                  return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                });
+                if (sortedRoots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
+                return sortedRoots.map((c) => (
                   <View key={c.id} testID={`comment-${c.id}`}>
                     <View style={styles.commentCard}>
                       <View style={styles.commentAvatar}>
@@ -481,10 +545,21 @@ export default function RecipeDetail() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.commentName}>{c.user_name}</Text>
                         <Text style={styles.commentBody}>{c.content}</Text>
-                        <Pressable testID={`reply-btn-${c.id}`} onPress={() => setReplyTo({ id: c.id, name: c.user_name })} style={styles.replyBtn}>
-                          <Feather name="corner-up-left" size={13} color={theme.color.brand} />
-                          <Text style={styles.replyBtnText}>Répondre</Text>
-                        </Pressable>
+                        <View style={styles.commentActionsRow}>
+                          <Pressable testID={`comment-like-btn-${c.id}`} onPress={() => toggleCommentLike(c.id)} style={styles.replyBtn}>
+                            <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? theme.color.error : theme.color.brand} />
+                            <Text style={styles.replyBtnText}>{c.like_count || 0}</Text>
+                          </Pressable>
+                          <Pressable testID={`reply-btn-${c.id}`} onPress={() => setReplyTo({ id: c.id, name: c.user_name })} style={styles.replyBtn}>
+                            <Feather name="corner-up-left" size={13} color={theme.color.brand} />
+                            <Text style={styles.replyBtnText}>Répondre</Text>
+                          </Pressable>
+                          {user?.user_id === c.user_id && (
+                            <Pressable testID={`comment-delete-btn-${c.id}`} onPress={() => deleteComment(c)} style={styles.replyBtn}>
+                              <Feather name="trash-2" size={13} color={theme.color.muted} />
+                            </Pressable>
+                          )}
+                        </View>
                       </View>
                     </View>
                     {repliesFor(c.id).map((r) => (
@@ -495,6 +570,17 @@ export default function RecipeDetail() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.commentName}>{r.user_name}</Text>
                           <Text style={styles.commentBody}>{r.content}</Text>
+                          <View style={styles.commentActionsRow}>
+                            <Pressable testID={`comment-like-btn-${r.id}`} onPress={() => toggleCommentLike(r.id)} style={styles.replyBtn}>
+                              <Ionicons name={r.liked ? 'heart' : 'heart-outline'} size={13} color={r.liked ? theme.color.error : theme.color.brand} />
+                              <Text style={styles.replyBtnText}>{r.like_count || 0}</Text>
+                            </Pressable>
+                            {user?.user_id === r.user_id && (
+                              <Pressable testID={`comment-delete-btn-${r.id}`} onPress={() => deleteComment(r)} style={styles.replyBtn}>
+                                <Feather name="trash-2" size={13} color={theme.color.muted} />
+                              </Pressable>
+                            )}
+                          </View>
                         </View>
                       </View>
                     ))}
@@ -593,6 +679,12 @@ const styles = StyleSheet.create({
   replyBannerText: { fontSize: 13, color: theme.color.onBrandTertiary, fontWeight: '500' },
   replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
   replyBtnText: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  commentActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  sortRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  sortChip: { paddingHorizontal: 14, height: 32, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  sortChipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
+  sortChipText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
+  sortChipTextActive: { color: theme.color.onSurfaceInverse },
   replyCard: { flexDirection: 'row', gap: 10, marginBottom: 16, marginLeft: 34, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: theme.color.border },
   replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: theme.color.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
   replyAvatarText: { color: theme.color.onSurfaceTertiary, fontFamily: theme.serif, fontSize: 14 },
