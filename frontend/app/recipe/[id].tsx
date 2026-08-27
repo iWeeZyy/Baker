@@ -160,6 +160,7 @@ export default function RecipeDetail() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -202,12 +203,15 @@ export default function RecipeDetail() {
     const txt = commentText.trim();
     if (!txt) return;
     setCommentText('');
+    setCommentError(null);
     const parent = replyTo?.id || null;
     setReplyTo(null);
     try {
       const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt, parent_id: parent }) });
       setComments(prev => [...prev, c]);
-    } catch {}
+    } catch (e: any) {
+      setCommentError(e.message || 'Erreur');
+    }
   };
 
   const saveNote = async () => {
@@ -436,6 +440,7 @@ export default function RecipeDetail() {
                   <Feather name="send" size={18} color="#fff" />
                 </Pressable>
               </View>
+              {commentError && <Text style={styles.commentError} testID="comment-error">{commentError}</Text>}
 
               {(() => {
                 const roots = comments.filter(c => !c.parent_id);
@@ -552,9 +557,10 @@ const styles = StyleSheet.create({
   saveNoteBtn: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: theme.color.brand, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 4 },
   saveNoteText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 16 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 24 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 8 },
   commentInput: { flex: 1, backgroundColor: theme.color.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface, minHeight: 44, maxHeight: 120 },
   commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
+  commentError: { color: theme.color.error, fontSize: 13, marginBottom: 16 },
   noComments: { color: theme.color.muted, fontSize: 14, fontStyle: 'italic' },
   replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
   replyBannerText: { fontSize: 13, color: theme.color.onBrandTertiary, fontWeight: '500' },
