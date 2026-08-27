@@ -125,7 +125,7 @@ export default function Home() {
               <Pressable key={r.id} testID={`classic-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
                 <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
                 <Text style={styles.classicTitle}>{r.title}</Text>
-                <Text style={styles.classicMeta}>{r.difficulty}</Text>
+                <Text style={styles.classicMeta}>{r.difficulty} · {(r as any).like_count} {"j'aime"}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -144,7 +144,7 @@ export default function Home() {
                     {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>}
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
-                  <Text style={styles.classicMeta}>par {r.author_name || 'Anonyme'}</Text>
+                  <Text style={styles.classicMeta}>par {r.author_name || 'Anonyme'} · {(r as any).like_count} {"j'aime"}</Text>
                 </Pressable>
               ))}
             </ScrollView>

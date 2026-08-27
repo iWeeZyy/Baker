@@ -494,7 +494,14 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
         await db.likes.delete_one({"user_id": user["user_id"], "recipe_id": recipe_id})
         liked = False
     else:
-        await db.likes.insert_one({"user_id": user["user_id"], "recipe_id": recipe_id, "created_at": datetime.now(timezone.utc)})
+        # L'index unique (user_id, recipe_id) protège déjà la donnée ; ce
+        # try/except évite qu'une course (deux requêtes concurrentes pour le
+        # même utilisateur) ne remonte une 500 au lieu de retomber
+        # proprement sur l'état "liké" — même idiome que _create_friendship.
+        try:
+            await db.likes.insert_one({"user_id": user["user_id"], "recipe_id": recipe_id, "created_at": datetime.now(timezone.utc)})
+        except DuplicateKeyError:
+            pass
         liked = True
     count = await db.likes.count_documents({"recipe_id": recipe_id})
     return {"liked": liked, "count": count}

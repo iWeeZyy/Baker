@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Linking, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
@@ -157,6 +157,9 @@ export default function RecipeDetail() {
   const [tab, setTab] = useState<'ingredients' | 'steps' | 'community'>('ingredients');
   const [favorited, setFavorited] = useState(false);
   const [likes, setLikes] = useState({ count: 0, liked: false });
+  const [likeError, setLikeError] = useState<string | null>(null);
+  const [likePending, setLikePending] = useState(false);
+  const likeScale = useRef(new Animated.Value(1)).current;
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
@@ -196,7 +199,27 @@ export default function RecipeDetail() {
   };
 
   const toggleLike = async () => {
-    try { const res = await api(`/recipes/${id}/like`, { method: 'POST' }); setLikes(res); } catch {}
+    if (likePending) return;
+    setLikeError(null);
+    const previous = likes;
+    const optimistic = { liked: !previous.liked, count: previous.count + (previous.liked ? -1 : 1) };
+    setLikes(optimistic);
+    setLikePending(true);
+    if (optimistic.liked) {
+      Animated.sequence([
+        Animated.timing(likeScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+        Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
+      ]).start();
+    }
+    try {
+      const res = await api(`/recipes/${id}/like`, { method: 'POST' });
+      setLikes(res);
+    } catch (e: any) {
+      setLikes(previous);
+      setLikeError(e.message || 'Erreur');
+    } finally {
+      setLikePending(false);
+    }
   };
 
   const sendComment = async () => {
@@ -312,7 +335,9 @@ export default function RecipeDetail() {
 
         <View style={styles.likeRow}>
           <Pressable testID="like-btn" onPress={toggleLike} style={styles.likeBtn}>
-            <Feather name="heart" size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+              <Ionicons name={likes.liked ? 'heart' : 'heart-outline'} size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            </Animated.View>
             <Text style={styles.likeText}>{likes.count} j'aime</Text>
           </Pressable>
           <Pressable testID="comment-jump" onPress={() => setTab('community')} style={styles.likeBtn}>
@@ -320,6 +345,7 @@ export default function RecipeDetail() {
             <Text style={styles.likeText}>{comments.length} avis</Text>
           </Pressable>
         </View>
+        {likeError && <Text style={styles.likeError} testID="like-error">{likeError}</Text>}
 
         <Text style={styles.description}>{recipe.description}</Text>
 
@@ -512,6 +538,7 @@ const styles = StyleSheet.create({
   likeRow: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, gap: 24 },
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
+  likeError: { color: theme.color.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 6 },
   description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
   costBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

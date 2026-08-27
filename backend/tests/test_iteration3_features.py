@@ -10,6 +10,10 @@ TEST_EMAIL = "test.baker@bakers.app"
 TEST_PASS = "TestBaker2026!"
 TEST_NAME = "Chef Test"
 
+TEST_EMAIL_B = "test.baker.b@bakers.app"
+TEST_PASS_B = "TestBakerB2026!"
+TEST_NAME_B = "Chef Test B"
+
 
 @pytest.fixture(scope="module")
 def token():
@@ -17,6 +21,19 @@ def token():
     if r.status_code == 200:
         return r.json()["token"]
     r = requests.post(f"{API}/auth/register", json={"email": TEST_EMAIL, "password": TEST_PASS, "name": TEST_NAME}, timeout=30)
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
+@pytest.fixture(scope="module")
+def token_b():
+    # Deuxième compte, dédié aux tests de likes multi-utilisateurs (le
+    # compteur doit refléter plusieurs utilisateurs, et le like de l'un ne
+    # doit jamais affecter celui de l'autre).
+    r = requests.post(f"{API}/auth/login", json={"email": TEST_EMAIL_B, "password": TEST_PASS_B}, timeout=30)
+    if r.status_code == 200:
+        return r.json()["token"]
+    r = requests.post(f"{API}/auth/register", json={"email": TEST_EMAIL_B, "password": TEST_PASS_B, "name": TEST_NAME_B}, timeout=30)
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
@@ -75,6 +92,60 @@ class TestLikes:
         d = r.json()
         assert d["liked"] is False
         assert d["count"] == before["count"] - 1
+
+    def test_post_like_requires_auth(self, recipe_id):
+        r = requests.post(f"{API}/recipes/{recipe_id}/like", timeout=30)
+        assert r.status_code == 401
+
+    def test_state_persists_across_a_fresh_fetch(self, token, recipe_id):
+        # Simule une fermeture/réouverture de l'app : l'état vient
+        # uniquement de la base, pas d'un état en mémoire côté serveur.
+        _ensure_liked(token, recipe_id, True)
+        after = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()
+        assert after["liked"] is True
+        again = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()
+        assert again == after
+
+    def test_two_users_liking_same_recipe_are_both_counted(self, token, token_b, recipe_id):
+        _ensure_liked(token, recipe_id, False)
+        _ensure_liked(token_b, recipe_id, False)
+        base = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()["count"]
+
+        r_a = requests.post(f"{API}/recipes/{recipe_id}/like", headers=h(token), timeout=30).json()
+        assert r_a["liked"] is True
+        assert r_a["count"] == base + 1
+
+        r_b = requests.post(f"{API}/recipes/{recipe_id}/like", headers=h(token_b), timeout=30).json()
+        assert r_b["liked"] is True
+        assert r_b["count"] == base + 2
+
+        # Chacun voit son propre état, indépendamment de l'autre.
+        seen_by_a = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()
+        seen_by_b = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token_b), timeout=30).json()
+        assert seen_by_a["liked"] is True and seen_by_a["count"] == base + 2
+        assert seen_by_b["liked"] is True and seen_by_b["count"] == base + 2
+
+    def test_one_users_like_is_unaffected_by_another_users_toggle(self, token, token_b, recipe_id):
+        # Aucune route ne prend un user_id en paramètre pour cette action :
+        # le toggle agit toujours sur l'utilisateur du JWT. On vérifie ici
+        # qu'un utilisateur ne peut pas, même involontairement, changer
+        # l'état de like d'un autre.
+        _ensure_liked(token, recipe_id, True)
+        _ensure_liked(token_b, recipe_id, True)
+
+        requests.post(f"{API}/recipes/{recipe_id}/like", headers=h(token_b), timeout=30)  # B se retire
+
+        state_a = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()
+        assert state_a["liked"] is True  # le like de A est intact
+
+        state_b = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token_b), timeout=30).json()
+        assert state_b["liked"] is False
+
+
+def _ensure_liked(token, recipe_id, want_liked):
+    cur = requests.get(f"{API}/recipes/{recipe_id}/likes", headers=h(token), timeout=30).json()
+    if cur["liked"] != want_liked:
+        requests.post(f"{API}/recipes/{recipe_id}/like", headers=h(token), timeout=30)
 
 
 # ---- COMMENTS ----

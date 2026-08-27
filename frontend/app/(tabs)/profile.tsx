@@ -72,7 +72,7 @@ export default function Profile() {
             <Pressable testID={`profile-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.card}>
               <Image source={recipeImageSource(item, API_BASE)} style={styles.cardImage} contentFit="cover" />
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.cardMeta}>{item.difficulty}</Text>
+              <Text style={styles.cardMeta}>{item.difficulty} · {item.like_count ?? 0} {"j'aime"}</Text>
             </Pressable>
           )}
           ListEmptyComponent={
