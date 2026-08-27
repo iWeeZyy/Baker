@@ -32,6 +32,7 @@ import staff
 import costing
 import imaging
 import moderation
+import text_moderation
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -425,6 +426,26 @@ async def get_recipe(recipe_id: str):
     (r,) = await enrich_recipes([r])
     return r
 
+async def _moderate_and_flag(result: "text_moderation.TextModerationResult", content_type: str, content_id: str, author_id: str) -> None:
+    """Applique une décision de modération de texte à un contenu qui va être
+    publié : refuse les BLOCKED avant l'insertion (aucun terme exact n'est
+    renvoyé au client, pour ne pas apprendre à contourner le filtre) ; les
+    REVIEW sont publiés normalement mais consignés dans `flagged_content`
+    pour une relecture ultérieure — aucune interface d'admin n'existe
+    aujourd'hui, ce n'est qu'un journal à consulter directement en base.
+    """
+    if result.level == text_moderation.BLOCKED:
+        raise HTTPException(422, "Ce contenu contient un terme non autorisé. Merci de le reformuler.")
+    if result.level == text_moderation.REVIEW:
+        await db.flagged_content.insert_one({
+            "id": str(uuid.uuid4()),
+            "content_type": content_type,
+            "content_id": content_id,
+            "author_id": author_id,
+            "matched_terms": [{"term": m.term, "tier": m.tier, "reason": m.reason} for m in result.matches],
+            "created_at": datetime.now(timezone.utc),
+        })
+
 @api_router.post("/recipes")
 async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current_user)):
     fields = inp.dict()
@@ -438,6 +459,8 @@ async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current
         author_name=user.get("name"),
         is_user_submitted=True,
     )
+    moderation_result = text_moderation.classify_recipe(r.title, r.description, r.ingredients, r.steps)
+    await _moderate_and_flag(moderation_result, "recipe", r.id, user["user_id"])
     doc = r.dict()
     await db.recipes.insert_one(doc)
     doc.pop("_id", None)
@@ -471,7 +494,14 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
         await db.likes.delete_one({"user_id": user["user_id"], "recipe_id": recipe_id})
         liked = False
     else:
-        await db.likes.insert_one({"user_id": user["user_id"], "recipe_id": recipe_id, "created_at": datetime.now(timezone.utc)})
+        # L'index unique (user_id, recipe_id) protège déjà la donnée ; ce
+        # try/except évite qu'une course (deux requêtes concurrentes pour le
+        # même utilisateur) ne remonte une 500 au lieu de retomber
+        # proprement sur l'état "liké" — même idiome que _create_friendship.
+        try:
+            await db.likes.insert_one({"user_id": user["user_id"], "recipe_id": recipe_id, "created_at": datetime.now(timezone.utc)})
+        except DuplicateKeyError:
+            pass
         liked = True
     count = await db.likes.count_documents({"recipe_id": recipe_id})
     return {"liked": liked, "count": count}
@@ -494,6 +524,8 @@ async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(ge
         "content": inp.content.strip(),
         "created_at": datetime.now(timezone.utc),
     }
+    moderation_result = text_moderation.classify_comment(doc["content"])
+    await _moderate_and_flag(moderation_result, "comment", doc["id"], user["user_id"])
     await db.comments.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -1725,6 +1757,8 @@ async def startup():
     await db.messages.create_index("id", unique=True)
     await db.reports.create_index("message_id")
     await db.reports.create_index("reported_user_id")
+    await db.flagged_content.create_index([("content_type", 1), ("content_id", 1)])
+    await db.flagged_content.create_index("created_at")
     await db.productions.create_index([("user_id", 1), ("date", -1)])
     # Backs the monthly Free-plan count.
     await db.productions.create_index([("user_id", 1), ("created_at", -1)])

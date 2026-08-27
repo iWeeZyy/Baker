@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Linking, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
@@ -157,9 +157,13 @@ export default function RecipeDetail() {
   const [tab, setTab] = useState<'ingredients' | 'steps' | 'community'>('ingredients');
   const [favorited, setFavorited] = useState(false);
   const [likes, setLikes] = useState({ count: 0, liked: false });
+  const [likeError, setLikeError] = useState<string | null>(null);
+  const [likePending, setLikePending] = useState(false);
+  const likeScale = useRef(new Animated.Value(1)).current;
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -195,19 +199,42 @@ export default function RecipeDetail() {
   };
 
   const toggleLike = async () => {
-    try { const res = await api(`/recipes/${id}/like`, { method: 'POST' }); setLikes(res); } catch {}
+    if (likePending) return;
+    setLikeError(null);
+    const previous = likes;
+    const optimistic = { liked: !previous.liked, count: previous.count + (previous.liked ? -1 : 1) };
+    setLikes(optimistic);
+    setLikePending(true);
+    if (optimistic.liked) {
+      Animated.sequence([
+        Animated.timing(likeScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+        Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
+      ]).start();
+    }
+    try {
+      const res = await api(`/recipes/${id}/like`, { method: 'POST' });
+      setLikes(res);
+    } catch (e: any) {
+      setLikes(previous);
+      setLikeError(e.message || 'Erreur');
+    } finally {
+      setLikePending(false);
+    }
   };
 
   const sendComment = async () => {
     const txt = commentText.trim();
     if (!txt) return;
     setCommentText('');
+    setCommentError(null);
     const parent = replyTo?.id || null;
     setReplyTo(null);
     try {
       const c = await api(`/recipes/${id}/comments`, { method: 'POST', body: JSON.stringify({ content: txt, parent_id: parent }) });
       setComments(prev => [...prev, c]);
-    } catch {}
+    } catch (e: any) {
+      setCommentError(e.message || 'Erreur');
+    }
   };
 
   const saveNote = async () => {
@@ -308,7 +335,9 @@ export default function RecipeDetail() {
 
         <View style={styles.likeRow}>
           <Pressable testID="like-btn" onPress={toggleLike} style={styles.likeBtn}>
-            <Feather name="heart" size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+              <Ionicons name={likes.liked ? 'heart' : 'heart-outline'} size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            </Animated.View>
             <Text style={styles.likeText}>{likes.count} j'aime</Text>
           </Pressable>
           <Pressable testID="comment-jump" onPress={() => setTab('community')} style={styles.likeBtn}>
@@ -316,6 +345,7 @@ export default function RecipeDetail() {
             <Text style={styles.likeText}>{comments.length} avis</Text>
           </Pressable>
         </View>
+        {likeError && <Text style={styles.likeError} testID="like-error">{likeError}</Text>}
 
         <Text style={styles.description}>{recipe.description}</Text>
 
@@ -436,6 +466,7 @@ export default function RecipeDetail() {
                   <Feather name="send" size={18} color="#fff" />
                 </Pressable>
               </View>
+              {commentError && <Text style={styles.commentError} testID="comment-error">{commentError}</Text>}
 
               {(() => {
                 const roots = comments.filter(c => !c.parent_id);
@@ -507,6 +538,7 @@ const styles = StyleSheet.create({
   likeRow: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, gap: 24 },
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
+  likeError: { color: theme.color.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 6 },
   description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
   costBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -552,9 +584,10 @@ const styles = StyleSheet.create({
   saveNoteBtn: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: theme.color.brand, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 4 },
   saveNoteText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 16 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 24 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 8 },
   commentInput: { flex: 1, backgroundColor: theme.color.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface, minHeight: 44, maxHeight: 120 },
   commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
+  commentError: { color: theme.color.error, fontSize: 13, marginBottom: 16 },
   noComments: { color: theme.color.muted, fontSize: 14, fontStyle: 'italic' },
   replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
   replyBannerText: { fontSize: 13, color: theme.color.onBrandTertiary, fontWeight: '500' },

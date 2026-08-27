@@ -9,7 +9,7 @@ import { type Family } from '@/src/families';
 import { formatDuration } from '@/src/format';
 import { theme } from '@/src/theme';
 
-type Recipe = { id: string; title: string; difficulty: string; time_minutes: number; coup_de_coeur?: boolean };
+type Recipe = { id: string; title: string; difficulty: string; time_minutes: number; coup_de_coeur?: boolean; like_count?: number };
 
 /**
  * Une famille et ses recettes.
@@ -90,7 +90,7 @@ export default function FamilyScreen() {
                   >
                     <View style={styles.rowText}>
                       <Text style={styles.rowTitle}>{item.title}</Text>
-                      <Text style={styles.rowMeta}>{item.difficulty} · {formatDuration(item.time_minutes)}</Text>
+                      <Text style={styles.rowMeta}>{item.difficulty} · {formatDuration(item.time_minutes)} · {item.like_count ?? 0} {"j'aime"}</Text>
                     </View>
                     {item.coup_de_coeur && <Feather name="award" size={16} color={theme.color.brand} />}
                     <Feather name="chevron-right" size={18} color={theme.color.muted} />
