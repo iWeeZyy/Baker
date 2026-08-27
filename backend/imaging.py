@@ -33,6 +33,11 @@ SCAN_MAX_DIM = 2200
 SCAN_JPEG_QUALITY = 90
 SCAN_CONTRAST_FACTOR = 1.15  # léger renfort, pas une détection de contours
 
+# Un avatar est toujours affiché petit et rond — inutile de conserver une
+# grande résolution rectangulaire.
+AVATAR_MAX_DIM = 512
+AVATAR_JPEG_QUALITY = 85
+
 
 def _load_rgb(image_bytes: bytes) -> Image.Image:
     im = Image.open(io.BytesIO(image_bytes))
@@ -77,6 +82,23 @@ def prepare_for_analysis(image_bytes: bytes) -> bytes:
         im = im.resize((max(1, round(im.width * ratio)), max(1, round(im.height * ratio))), Image.LANCZOS)
     im = ImageEnhance.Contrast(im).enhance(SCAN_CONTRAST_FACTOR)
     return _encode_jpeg(im, SCAN_JPEG_QUALITY)
+
+
+def prepare_avatar(image_bytes: bytes) -> bytes:
+    """Prépare une photo de profil : recadrée au carré centré, puis
+    redimensionnée/recompressée. Le recadrage carré est refait ici plutôt
+    que de compter uniquement sur l'éditeur natif du sélecteur d'image
+    côté client — celui-ci n'existe pas sur le web (react-native-web
+    ignore silencieusement `allowsEditing`/`aspect`), donc sans ce filet
+    serveur une photo prise depuis un navigateur ne serait jamais carrée."""
+    im = _load_rgb(image_bytes)
+    side = min(im.size)
+    left = (im.width - side) // 2
+    top = (im.height - side) // 2
+    im = im.crop((left, top, left + side, top + side))
+    if side > AVATAR_MAX_DIM:
+        im = im.resize((AVATAR_MAX_DIM, AVATAR_MAX_DIM), Image.LANCZOS)
+    return _encode_jpeg(im, AVATAR_JPEG_QUALITY)
 
 
 def make_blur_preview(image_bytes: bytes) -> bytes:

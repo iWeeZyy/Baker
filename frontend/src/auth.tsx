@@ -15,6 +15,7 @@ type AuthCtx = {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -67,8 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  // Relit le compte depuis le serveur plutôt que de corriger l'état local
+  // à la main — une seule source de vérité, réutilisée après un
+  // changement de photo de profil pour que le nouvel avatar apparaisse
+  // immédiatement partout où `user` est lu.
+  const refreshUser = async () => {
+    const me = await api('/auth/me');
+    setUser(me);
+  };
+
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout }}>
+    <Ctx.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </Ctx.Provider>
   );

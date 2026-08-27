@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
@@ -15,7 +16,7 @@ import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme } from '@/src/theme';
 
-type Comment = { id: string; user_id: string; user_name: string; content: string; created_at: string; parent_id?: string | null; like_count?: number; liked?: boolean };
+type Comment = { id: string; user_id: string; user_name: string; user_picture?: string | null; content: string; created_at: string; parent_id?: string | null; like_count?: number; liked?: boolean };
 
 type CommentSort = 'likes' | 'newest' | 'oldest';
 
@@ -369,7 +370,18 @@ export default function RecipeDetail() {
               )}
             </View>
             <Text style={styles.title}>{recipe.title}</Text>
-            {recipe.author_name && <Text style={styles.author}>par {recipe.author_name}</Text>}
+            {recipe.author_name && (
+              <View style={styles.authorRow}>
+                <View style={styles.authorAvatar}>
+                  {avatarUrl(recipe.author_picture, API_BASE) ? (
+                    <Image source={{ uri: avatarUrl(recipe.author_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  ) : (
+                    <Text style={styles.authorAvatarText}>{recipe.author_name.slice(0, 1).toUpperCase()}</Text>
+                  )}
+                </View>
+                <Text style={styles.author}>{recipe.author_name}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -544,7 +556,11 @@ export default function RecipeDetail() {
                   <View key={c.id} testID={`comment-${c.id}`}>
                     <View style={styles.commentCard}>
                       <View style={styles.commentAvatar}>
-                        <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                        {avatarUrl(c.user_picture, API_BASE) ? (
+                          <Image source={{ uri: avatarUrl(c.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                        ) : (
+                          <Text style={styles.commentAvatarText}>{(c.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                        )}
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.commentName}>{c.user_name}</Text>
@@ -569,7 +585,11 @@ export default function RecipeDetail() {
                     {repliesFor(c.id).map((r) => (
                       <View key={r.id} style={styles.replyCard} testID={`comment-${r.id}`}>
                         <View style={styles.replyAvatar}>
-                          <Text style={styles.replyAvatarText}>{(r.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                          {avatarUrl(r.user_picture, API_BASE) ? (
+                            <Image source={{ uri: avatarUrl(r.user_picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                          ) : (
+                            <Text style={styles.replyAvatarText}>{(r.user_name || '?').slice(0, 1).toUpperCase()}</Text>
+                          )}
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.commentName}>{r.user_name}</Text>
@@ -614,7 +634,10 @@ const styles = StyleSheet.create({
   cdcText: { color: theme.color.onBrandPrimary, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   category: { color: theme.color.brandSecondary, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: '#fff', marginTop: 6, lineHeight: 36 },
-  author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 6, fontStyle: 'italic' },
+  author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontStyle: 'italic' },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  authorAvatar: { width: 22, height: 22, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  authorAvatarText: { fontSize: 11, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
   photoCredit: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 24, paddingTop: 10,
@@ -690,10 +713,10 @@ const styles = StyleSheet.create({
   sortChipText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
   sortChipTextActive: { color: theme.color.onSurfaceInverse },
   replyCard: { flexDirection: 'row', gap: 10, marginBottom: 16, marginLeft: 34, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: theme.color.border },
-  replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: theme.color.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+  replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: theme.color.surfaceTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   replyAvatarText: { color: theme.color.onSurfaceTertiary, fontFamily: theme.serif, fontSize: 14 },
   commentCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   commentAvatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
   commentName: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface, marginBottom: 2 },
   commentBody: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20 },

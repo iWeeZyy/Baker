@@ -4,7 +4,8 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { api } from '@/src/api';
+import { api, API_BASE } from '@/src/api';
+import { avatarUrl } from '@/src/avatar';
 import { subscribeRealtime } from '@/src/realtime';
 import { theme } from '@/src/theme';
 
@@ -17,10 +18,11 @@ type FriendRow = UserRow & { last_message?: { content: string; from_me: boolean;
 type RequestRow = { id: string; from_user: UserRow };
 
 function Avatar({ user, size = 44 }: { user: UserRow; size?: number }) {
+  const uri = avatarUrl(user.picture, API_BASE);
   return (
     <View style={[styles.avatar, { width: size, height: size }]}>
-      {user.picture ? (
-        <Image source={{ uri: user.picture }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+      {uri ? (
+        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
       ) : (
         <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{(user.name || '?').slice(0, 1).toUpperCase()}</Text>
       )}
