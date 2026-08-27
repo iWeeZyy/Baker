@@ -138,6 +138,15 @@ def get_object(path: str):
     content_type = meta_file.read_text().strip() if meta_file.is_file() else "application/octet-stream"
     return src.read_bytes(), content_type
 
+def delete_object(path: str) -> None:
+    """Supprime un fichier déjà stocké et son .meta — silencieux si absent,
+    pour remplacer/retirer un avatar sans jamais accumuler d'anciens
+    fichiers inutilisés. Aucun autre code n'avait encore besoin de
+    supprimer un objet stocké."""
+    dest = _resolve_upload_path(path)
+    dest.unlink(missing_ok=True)
+    dest.with_suffix(dest.suffix + ".meta").unlink(missing_ok=True)
+
 # ---------- Storage Helpers (private — message photos only) ----------
 def _resolve_private_path(path: str) -> Path:
     resolved = (PRIVATE_DIR / path).resolve()
@@ -354,6 +363,48 @@ async def logout():
     # JWT is stateless: the client discards the token. Nothing to invalidate server-side.
     return {"ok": True}
 
+# ---------- Profile picture ----------
+@api_router.post("/auth/me/picture")
+async def set_profile_picture(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Ajoute ou remplace la photo de profil de l'utilisateur connecté —
+    jamais celle d'un autre : le chemin de stockage vient toujours de
+    user['user_id'] (le JWT), jamais d'un paramètre client. Mêmes
+    garde-fous que l'envoi d'une photo de message (taille, image
+    réellement décodable, modération) ; seul un résultat BLOCKED est
+    refusé — une photo de profil n'a pas de mécanisme de flou/révélation,
+    donc rien à gagner à bloquer une simple ambiguïté (SENSITIVE)."""
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(400, "Fichier vide")
+    if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
+        raise HTTPException(413, "Image trop volumineuse (12 Mo max)")
+
+    try:
+        avatar_bytes = await run_in_threadpool(imaging.prepare_avatar, raw_bytes)
+    except Exception:
+        raise HTTPException(400, "Fichier image invalide")
+
+    result = await run_in_threadpool(moderation.analyze, avatar_bytes)
+    if result.level == moderation.BLOCKED:
+        raise HTTPException(422, "Cette photo ne peut pas être utilisée comme photo de profil.")
+
+    old_picture = user.get("picture")
+    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.jpg"
+    await run_in_threadpool(put_object, path, avatar_bytes, "image/jpeg")
+    if old_picture:
+        await run_in_threadpool(delete_object, old_picture)
+
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": path}})
+    return {"user_id": user["user_id"], "name": user.get("name"), "picture": path}
+
+@api_router.delete("/auth/me/picture")
+async def remove_profile_picture(user: dict = Depends(get_current_user)):
+    old_picture = user.get("picture")
+    if old_picture:
+        await run_in_threadpool(delete_object, old_picture)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": None}})
+    return {"user_id": user["user_id"], "name": user.get("name"), "picture": None}
+
 # ---------- Recipes ----------
 COUP_DE_COEUR_TOP_N = 5
 
@@ -381,13 +432,28 @@ async def _global_top_liked():
             ids.add(row["_id"])
     return ids
 
+async def _pictures_by_user_id(user_ids):
+    """Photo de profil courante pour un ensemble d'utilisateurs, en un seul
+    aller-retour — jamais stockée sur un document recette/commentaire, pour
+    que le changement de photo d'un auteur soit visible partout
+    immédiatement plutôt que de figer une copie au moment de la création."""
+    pictures = {}
+    ids = [uid for uid in set(user_ids) if uid]
+    if not ids:
+        return pictures
+    async for u in db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "picture": 1}):
+        pictures[u["user_id"]] = u.get("picture")
+    return pictures
+
 async def enrich_recipes(docs):
     ids = [d["id"] for d in docs]
     counts = await _like_counts(ids)
     top = await _global_top_liked()
+    pictures = await _pictures_by_user_id([d.get("author_id") for d in docs])
     for d in docs:
         d["like_count"] = counts.get(d["id"], 0)
         d["coup_de_coeur"] = d["id"] in top
+        d["author_picture"] = pictures.get(d.get("author_id"))
     return docs
 
 @api_router.get("/recipes")
@@ -683,8 +749,13 @@ async def get_comments(recipe_id: str):
     cursor = db.comments.find({"recipe_id": recipe_id}, {"_id": 0}).sort("created_at", 1)
     docs = await cursor.to_list(500)
     counts = await _comment_like_counts([d["id"] for d in docs])
+    # La photo affichée est celle de l'auteur aujourd'hui, jamais celle
+    # figée sur le document au moment du commentaire (user_picture) — sinon
+    # un commentaire garderait à vie l'ancienne photo de son auteur.
+    pictures = await _pictures_by_user_id([d.get("user_id") for d in docs])
     for d in docs:
         d["like_count"] = counts.get(d["id"], 0)
+        d["user_picture"] = pictures.get(d.get("user_id"))
     return docs
 
 @api_router.get("/recipes/{recipe_id}/comments/likes/mine")

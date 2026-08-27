@@ -89,3 +89,46 @@ class TestMakeBlurPreview:
     def test_invalid_bytes_raise(self):
         with pytest.raises(Exception):
             imaging.make_blur_preview(b"ceci n'est pas une image")
+
+
+class TestPrepareAvatar:
+    def test_rectangular_image_becomes_square(self):
+        raw = _jpeg_bytes(1200, 800)
+        out = imaging.prepare_avatar(raw)
+        with Image.open(io.BytesIO(out)) as im:
+            assert im.width == im.height
+
+    def test_crop_is_centered_not_stretched(self):
+        # Une bande verticale centrée d'une couleur distincte : le
+        # recadrage carré centré doit la conserver entière, une mise à
+        # l'échelle non centrée la couperait ou la déformerait.
+        w, h = 300, 100
+        im = Image.new("RGB", (w, h), (255, 255, 255))
+        px = im.load()
+        for x in range(w // 2 - 20, w // 2 + 20):
+            for y in range(h):
+                px[x, y] = (255, 0, 0)
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG")
+        out = imaging.prepare_avatar(buf.getvalue())
+        with Image.open(io.BytesIO(out)) as result:
+            cx, cy = result.width // 2, result.height // 2
+            r, g, b = result.convert("RGB").getpixel((cx, cy))
+        assert r > 200 and g < 60 and b < 60
+
+    def test_large_image_is_capped_to_avatar_max_dim(self):
+        raw = _jpeg_bytes(3000, 3000)
+        out = imaging.prepare_avatar(raw)
+        with Image.open(io.BytesIO(out)) as im:
+            assert im.width == imaging.AVATAR_MAX_DIM
+            assert im.height == imaging.AVATAR_MAX_DIM
+
+    def test_small_image_is_not_upscaled(self):
+        raw = _jpeg_bytes(100, 100)
+        out = imaging.prepare_avatar(raw)
+        with Image.open(io.BytesIO(out)) as im:
+            assert im.size == (100, 100)
+
+    def test_invalid_bytes_raise(self):
+        with pytest.raises(Exception):
+            imaging.prepare_avatar(b"ceci n'est pas une image")

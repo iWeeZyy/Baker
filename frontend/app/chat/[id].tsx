@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
+import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
 import { subscribeRealtime } from '@/src/realtime';
 import { isPhotoRevealed, markPhotoRevealed } from '@/src/revealedPhotos';
@@ -135,6 +136,7 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [pendingPhoto, setPendingPhoto] = useState<{ uri: string; name: string } | null>(null);
   const [sendingPhoto, setSendingPhoto] = useState(false);
+  const [peerPicture, setPeerPicture] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const didInitialScroll = useRef(false);
 
@@ -164,6 +166,13 @@ export default function Chat() {
       setLoadingMore(false);
     }
   };
+
+  useEffect(() => {
+    // Source unique du profil (nom déjà passé par la navigation, mais pas
+    // toujours la photo) — un seul appel léger, jamais répété tant que la
+    // conversation reste ouverte.
+    api(`/users/${id}/profile`).then(p => setPeerPicture(p.user?.picture ?? null)).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
@@ -255,9 +264,18 @@ export default function Chat() {
         <Pressable testID="chat-back" onPress={() => router.back()} style={styles.iconBtn}>
           <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
         </Pressable>
-        <Pressable onPress={() => router.push(`/baker/${id}`)} style={{ flex: 1 }}>
-          <Text style={styles.headerName}>{name || 'Discussion'}</Text>
-          <Text style={styles.headerSub}>Voir le profil</Text>
+        <Pressable onPress={() => router.push(`/baker/${id}`)} style={styles.headerNameRow}>
+          <View style={styles.headerAvatar}>
+            {avatarUrl(peerPicture, API_BASE) ? (
+              <Image source={{ uri: avatarUrl(peerPicture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+            ) : (
+              <Text style={styles.headerAvatarText}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
+            )}
+          </View>
+          <View>
+            <Text style={styles.headerName}>{name || 'Discussion'}</Text>
+            <Text style={styles.headerSub}>Voir le profil</Text>
+          </View>
         </Pressable>
       </View>
 
@@ -362,6 +380,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerNameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerAvatar: { width: 36, height: 36, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  headerAvatarText: { fontSize: 15, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
   headerName: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface },
   headerSub: { fontSize: 11, color: theme.color.muted },
   bubbleRow: { flexDirection: 'row' },

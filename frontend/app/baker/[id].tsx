@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
 import { recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
@@ -114,8 +115,8 @@ export default function BakerProfile() {
               <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
             </Pressable>
             <View style={styles.avatar}>
-              {user.picture ? (
-                <Image source={{ uri: user.picture }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+              {avatarUrl(user.picture, API_BASE) ? (
+                <Image source={{ uri: avatarUrl(user.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
               ) : (
                 <Text style={styles.avatarText}>{initial}</Text>
               )}

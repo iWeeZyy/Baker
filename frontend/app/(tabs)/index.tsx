@@ -7,11 +7,25 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { AdSlot } from '@/src/ads';
+import { avatarUrl } from '@/src/avatar';
 import { formatDuration } from '@/src/format';
 import { recipeImage, recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
 
-type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
+type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
+
+function AuthorAvatar({ name, picture }: { name?: string; picture?: string | null }) {
+  const uri = avatarUrl(picture, API_BASE);
+  return (
+    <View style={styles.authorAvatar}>
+      {uri ? (
+        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+      ) : (
+        <Text style={styles.authorAvatarText}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
+      )}
+    </View>
+  );
+}
 
 export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -151,7 +165,10 @@ export default function Home() {
                     {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>}
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
-                  <Text style={styles.classicMeta}>par {r.author_name || 'Anonyme'} · {(r as any).like_count} {"j'aime"}</Text>
+                  <View style={styles.authorRow}>
+                    <AuthorAvatar name={r.author_name} picture={r.author_picture} />
+                    <Text style={styles.classicMeta}>{r.author_name || 'Anonyme'} · {(r as any).like_count} {"j'aime"}</Text>
+                  </View>
                 </Pressable>
               ))}
             </ScrollView>
@@ -186,4 +203,7 @@ const styles = StyleSheet.create({
   classicImage: { width: 180, height: 180, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
   classicTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },
   classicMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  authorAvatar: { width: 18, height: 18, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  authorAvatarText: { fontSize: 10, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
 });
