@@ -90,3 +90,4 @@ credentials.json
 
 # Local file storage (user-uploaded photos)
 backend/uploads/
+backend/private_uploads/

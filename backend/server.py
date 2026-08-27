@@ -30,6 +30,8 @@ from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
 import staff
 import costing
+import imaging
+import moderation
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -47,6 +49,20 @@ anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY) if ANTHRO
 
 UPLOADS_DIR = ROOT_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+# A separate directory tree for message photos, never reachable through the
+# public /files/{path} route below (which is rooted at UPLOADS_DIR and
+# refuses to resolve outside it). Message photos are private: they are only
+# ever served through /messages/photos/{message_id}, which checks auth and
+# conversation membership on every request. Two roots — not a filename
+# prefix check on the shared one — so a bug in that check can never expose
+# a private photo through the public route.
+PRIVATE_DIR = ROOT_DIR / "private_uploads"
+PRIVATE_DIR.mkdir(exist_ok=True)
+
+# A raw upload above this is rejected before any processing (spec point 12).
+# Generous for a phone photo; not a streaming limit, just a sanity cap.
+MAX_PHOTO_UPLOAD_BYTES = 12 * 1024 * 1024
 
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
 
@@ -112,6 +128,28 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
 
 def get_object(path: str):
     src = _resolve_upload_path(path)
+    if not src.is_file():
+        raise FileNotFoundError(path)
+    meta_file = src.with_suffix(src.suffix + ".meta")
+    content_type = meta_file.read_text().strip() if meta_file.is_file() else "application/octet-stream"
+    return src.read_bytes(), content_type
+
+# ---------- Storage Helpers (private — message photos only) ----------
+def _resolve_private_path(path: str) -> Path:
+    resolved = (PRIVATE_DIR / path).resolve()
+    if resolved != PRIVATE_DIR.resolve() and PRIVATE_DIR.resolve() not in resolved.parents:
+        raise HTTPException(400, "Invalid path")
+    return resolved
+
+def put_private_object(path: str, data: bytes, content_type: str) -> dict:
+    dest = _resolve_private_path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    dest.with_suffix(dest.suffix + ".meta").write_text(content_type)
+    return {"path": path}
+
+def get_private_object(path: str):
+    src = _resolve_private_path(path)
     if not src.is_file():
         raise FileNotFoundError(path)
     meta_file = src.with_suffix(src.suffix + ".meta")
@@ -209,6 +247,12 @@ class RespondInput(BaseModel):
 
 class MessageInput(BaseModel):
     content: str
+
+REPORT_REASONS = {"sexual", "illegal", "violence", "harassment", "spam", "other"}
+
+class MessageReportInput(BaseModel):
+    reason: str
+    note: Optional[str] = None
 
 class ProductionLineInput(BaseModel):
     recipe_id: str
@@ -653,16 +697,23 @@ async def get_messages(friend_id: str, before: Optional[str] = None, user: dict 
         await db.messages.update_many({"pair": pk, "to_user_id": me, "read": False}, {"$set": {"read": True}})
     return {"messages": msgs, "has_more": has_more}
 
-async def _deliver_message(from_id: str, to_id: str, content: str) -> dict:
-    """Persist a message and push it to the recipient's live sockets."""
+async def _deliver_message(from_id: str, to_id: str, content: str, extra: Optional[dict] = None) -> dict:
+    """Persist a message and push it to the recipient's live sockets.
+
+    `extra` carries the fields a photo message needs on top of a text one
+    (type, photo_path, photo_blur_path, moderation) without giving photo
+    messages a separate collection or a separate delivery/push path.
+    """
     doc = {
         "id": str(uuid.uuid4()),
         "pair": _pair_key(from_id, to_id),
         "from_user_id": from_id,
         "to_user_id": to_id,
         "content": content,
+        "type": "text",
         "read": False,
         "created_at": datetime.now(timezone.utc),
+        **(extra or {}),
     }
     await db.messages.insert_one(doc)
     doc.pop("_id", None)
@@ -689,6 +740,126 @@ async def send_message(
         # the reply reaches them over the WebSocket a moment later.
         background_tasks.add_task(_bot_reply, recipient, me, content)
     return doc
+
+@api_router.post("/messages/{friend_id}/photo")
+async def send_photo_message(
+    friend_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Sends a photo in a conversation. The photo is always sent — a
+    "sensitive" classification changes how it is later shown to the
+    recipient (blurred, behind a warning), never whether it is sent.
+    Only a classification of "blocked" (unambiguously explicit) is refused
+    outright, before anything is written to storage.
+    """
+    me = user["user_id"]
+    if not await _are_friends(me, friend_id):
+        raise HTTPException(403, "Vous devez être amis pour discuter")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(400, "Fichier vide")
+    if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
+        raise HTTPException(413, "Image trop volumineuse (12 Mo max)")
+
+    try:
+        display_bytes = await run_in_threadpool(imaging.prepare_display, raw_bytes)
+    except Exception:
+        raise HTTPException(400, "Fichier image invalide")
+
+    # The (already resized) display image is what gets analyzed, not the raw
+    # upload — smaller payload to the provider, and nothing bigger than what
+    # will actually be shown ever leaves the server (spec point 10).
+    result = await run_in_threadpool(moderation.analyze, display_bytes)
+
+    if result.level == moderation.BLOCKED:
+        raise HTTPException(
+            422,
+            "Cette image ne peut pas être envoyée : elle a été détectée comme un contenu manifestement interdit.",
+        )
+
+    pk = _pair_key(me, friend_id)
+    photo_id = uuid.uuid4().hex
+    photo_path = f"{APP_NAME}/messages/{pk}/{photo_id}.jpg"
+    await run_in_threadpool(put_private_object, photo_path, display_bytes, "image/jpeg")
+
+    photo_blur_path = None
+    if result.level == moderation.SENSITIVE:
+        blur_bytes = await run_in_threadpool(imaging.make_blur_preview, raw_bytes)
+        photo_blur_path = f"{APP_NAME}/messages/{pk}/{photo_id}_blur.jpg"
+        await run_in_threadpool(put_private_object, photo_blur_path, blur_bytes, "image/jpeg")
+
+    doc = await _deliver_message(me, friend_id, "", extra={
+        "type": "photo",
+        "photo_path": photo_path,
+        "photo_blur_path": photo_blur_path,
+        "moderation": {
+            "level": result.level,
+            "score": result.score,
+            "provider": result.provider,
+            "status": result.status,
+            "checked_at": datetime.now(timezone.utc),
+        },
+    })
+    # No bot auto-reply to a photo — the bot's reply flow is text-only
+    # (see _bot_reply), and teaching it to react to images is out of scope.
+    return doc
+
+@api_router.get("/messages/photos/{message_id}")
+async def get_message_photo(message_id: str, variant: str = "display", user: dict = Depends(get_current_user)):
+    """Serves a message photo. Requires being one of the two parties to
+    that exact message AND still being friends with the other one — the
+    same rule GET /messages/{friend_id} already enforces for text history,
+    kept identical here rather than invented anew. Guessing another
+    message's id only ever proves you aren't a party to it (403/404); it
+    can never be used to reach someone else's photo.
+    """
+    me = user["user_id"]
+    msg = await db.messages.find_one({"id": message_id, "type": "photo"}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Photo introuvable")
+    other = msg["to_user_id"] if msg["from_user_id"] == me else msg["from_user_id"] if msg["to_user_id"] == me else None
+    if other is None:
+        raise HTTPException(403, "Accès refusé")
+    if not await _are_friends(me, other):
+        raise HTTPException(403, "Vous devez être amis pour voir cette photo")
+
+    if variant == "blur":
+        path = msg.get("photo_blur_path")
+        if not path:
+            raise HTTPException(404, "Pas d'aperçu flouté pour cette photo")
+    else:
+        path = msg.get("photo_path")
+
+    try:
+        content, ctype = await run_in_threadpool(get_private_object, path)
+    except Exception:
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(content=content, media_type=ctype)
+
+@api_router.post("/messages/{message_id}/report")
+async def report_message(message_id: str, inp: MessageReportInput, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    if inp.reason not in REPORT_REASONS:
+        raise HTTPException(400, f"Motif invalide. Attendu: {', '.join(sorted(REPORT_REASONS))}")
+    msg = await db.messages.find_one({"id": message_id}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Message introuvable")
+    if me not in (msg["from_user_id"], msg["to_user_id"]):
+        raise HTTPException(403, "Vous ne faites pas partie de cette conversation")
+    reported_user_id = msg["to_user_id"] if msg["from_user_id"] == me else msg["from_user_id"]
+    doc = {
+        "id": str(uuid.uuid4()),
+        "message_id": message_id,
+        "reporter_id": me,
+        "reported_user_id": reported_user_id,
+        "reason": inp.reason,
+        "note": (inp.note or "").strip()[:1000] or None,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.reports.insert_one(doc)
+    return {"status": "reported"}
 
 # ---------- Realtime (WebSocket) ----------
 ws_connections: dict = defaultdict(set)
@@ -1544,6 +1715,9 @@ async def startup():
     await db.friend_requests.create_index([("to_user_id", 1), ("status", 1)])
     await db.friend_requests.create_index([("from_user_id", 1), ("status", 1)])
     await db.messages.create_index([("pair", 1), ("created_at", 1)])
+    await db.messages.create_index("id", unique=True)
+    await db.reports.create_index("message_id")
+    await db.reports.create_index("reported_user_id")
     await db.productions.create_index([("user_id", 1), ("date", -1)])
     # Backs the monthly Free-plan count.
     await db.productions.create_index([("user_id", 1), ("created_at", -1)])
