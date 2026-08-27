@@ -12,6 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import text_moderation as tm  # noqa: E402
 
+# BAN_WORDS porte la vraie liste d'exploitation depuis le module — la
+# plupart des tests ci-dessous la remplacent temporairement par un jeu de
+# mots contrôlé, puis la restaurent ici plutôt que de la vider : sinon,
+# selon l'ordre d'exécution, un test pourrait laisser BAN_WORDS vide pour
+# le suivant.
+_DEFAULT_BAN_WORDS = frozenset(tm.BAN_WORDS)
+
 
 class TestWhitelistPriority:
     """Les exemples donnés dans la demande : la whitelist doit gagner dès
@@ -22,7 +29,7 @@ class TestWhitelistPriority:
         tm.BAN_WORDS = {"batard"}
 
     def teardown_method(self):
-        tm.BAN_WORDS = set()
+        tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
     def test_pain_batard_au_levain_is_safe(self):
         result = tm.classify_text("Pain bâtard au levain")
@@ -65,7 +72,7 @@ class TestWhitelistTermsAlwaysSafe:
             result = tm.classify_text("Fougasse")
             assert result.level == tm.SAFE
         finally:
-            tm.BAN_WORDS = set()
+            tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
     def test_miche_alone_is_safe(self):
         tm.BAN_WORDS = {"miche"}
@@ -73,7 +80,7 @@ class TestWhitelistTermsAlwaysSafe:
             result = tm.classify_text("Une belle miche")
             assert result.level == tm.SAFE
         finally:
-            tm.BAN_WORDS = set()
+            tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
 
 class TestNonWhitelistedBanWords:
@@ -84,7 +91,7 @@ class TestNonWhitelistedBanWords:
         tm.BAN_WORDS = {"connard"}
 
     def teardown_method(self):
-        tm.BAN_WORDS = set()
+        tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
     def test_ban_word_without_whitelist_entry_is_blocked(self):
         result = tm.classify_text("Ce commentaire contient connard")
@@ -114,7 +121,7 @@ class TestCombinedTerms:
             assert tiers["connard"] == tm.BLOCKED
             assert tiers["batard"] == tm.REVIEW
         finally:
-            tm.BAN_WORDS = set()
+            tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
     def test_review_alone_without_blocked(self):
         tm.BAN_WORDS = {"batard", "boule"}
@@ -122,18 +129,23 @@ class TestCombinedTerms:
             result = tm.classify_text("Bâtard et boule, sans aucun contexte")
             assert result.level == tm.REVIEW
         finally:
-            tm.BAN_WORDS = set()
+            tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
 
 class TestEmptyBanWordsIsAlwaysSafe:
-    """Tant que BAN_WORDS est vide (placeholder livré par défaut), rien
-    n'est jamais bloqué ni mis en revue — le module ne doit rien inventer."""
+    """Si BAN_WORDS est vide (le module ne doit rien inventer par lui-même
+    quand il n'a pas de liste), rien n'est jamais bloqué ni mis en revue —
+    indépendant de la vraie liste fournie par l'exploitant, testé en la
+    vidant explicitement ici."""
 
     def test_empty_ban_words_never_flags_anything(self):
-        assert tm.BAN_WORDS == set()
-        result = tm.classify_text("N'importe quel texte, même injurieux comme connard")
-        assert result.level == tm.SAFE
-        assert result.matches == []
+        tm.BAN_WORDS = set()
+        try:
+            result = tm.classify_text("N'importe quel texte, même injurieux comme connard")
+            assert result.level == tm.SAFE
+            assert result.matches == []
+        finally:
+            tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
 
 class TestRecipeAndCommentWrappers:
@@ -141,7 +153,7 @@ class TestRecipeAndCommentWrappers:
         tm.BAN_WORDS = {"batard"}
 
     def teardown_method(self):
-        tm.BAN_WORDS = set()
+        tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
 
     def test_recipe_context_can_come_from_another_field(self):
         # Le titre seul est ambigu, mais une étape mentionne "façonner" :
@@ -165,6 +177,70 @@ class TestRecipeAndCommentWrappers:
 
     def test_comment_wrapper_delegates_to_classify_text(self):
         result = tm.classify_comment("Façonner un bâtard bien serré")
+        assert result.level == tm.SAFE
+
+
+class TestMultiWordBanPhrases:
+    """BAN_WORDS peut contenir des expressions de plusieurs mots, pas
+    seulement des mots isolés — vérifié indépendamment de la vraie liste
+    d'exploitation, avec des mots de test."""
+
+    def setup_method(self):
+        tm.BAN_WORDS = {"gros mot compose"}
+
+    def teardown_method(self):
+        tm.BAN_WORDS = set(_DEFAULT_BAN_WORDS)
+
+    def test_phrase_matches_contiguous_occurrence(self):
+        result = tm.classify_text("Quel gros mot composé, vraiment")
+        assert result.level == tm.BLOCKED
+
+    def test_phrase_words_present_but_not_contiguous_does_not_match(self):
+        # Les mots existent dans le texte mais pas dans le bon ordre /
+        # pas côte à côte : ne doit pas déclencher un faux positif.
+        result = tm.classify_text("Ce mot est gros, mais pas composé comme ça")
+        assert result.level == tm.SAFE
+
+
+class TestGueuleAndGerbeWhitelist:
+    """« la gueule du four » et « une gerbe de blé » sont de vrais termes
+    du métier, ajoutés à la whitelist après vérification qu'ils
+    apparaissent dans BAN_WORDS (voir CLAUDE.md)."""
+
+    def test_gueule_du_four_is_safe(self):
+        result = tm.classify_text("Surveiller la gueule du four pendant la cuisson")
+        assert result.level == tm.SAFE
+
+    def test_bare_gueule_is_review_not_blocked(self):
+        result = tm.classify_text("ferme ta gueule")
+        assert result.level == tm.REVIEW
+
+    def test_gerbe_de_ble_is_safe(self):
+        result = tm.classify_text("Décorer le pain avec une gerbe de blé")
+        assert result.level == tm.SAFE
+
+    def test_bare_gerbe_is_review_not_blocked(self):
+        result = tm.classify_text("une gerbe")
+        assert result.level == tm.REVIEW
+
+
+class TestRealBanWordsList:
+    """Quelques vérifications directes sur la vraie liste d'exploitation
+    (module-level BAN_WORDS, non modifiée ici) : les expressions de
+    plusieurs mots sont bien détectées, et le vocabulaire des recettes
+    n'est jamais accidentellement dedans."""
+
+    def test_multi_word_insult_phrase_is_blocked(self):
+        result = tm.classify_text("nique ta mère")
+        assert result.level == tm.BLOCKED
+
+    def test_ordinary_recipe_text_is_safe(self):
+        result = tm.classify_recipe(
+            title="Tarte aux pommes",
+            description="Une tarte simple et gourmande.",
+            ingredients=["pâte brisée", "pommes", "sucre", "beurre"],
+            steps=["Éplucher les pommes.", "Garnir la pâte.", "Cuire 35 minutes à 180°C."],
+        )
         assert result.level == tm.SAFE
 
 

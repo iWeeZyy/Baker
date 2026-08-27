@@ -50,12 +50,112 @@ WHITELIST_TERMS = {
     "tourte": None,
     "pave": ["pain", "boulangerie", "farine"],
     "meule": ["pain", "farine", "boulangerie"],
+    # Pas des formes de pain, mais des expressions techniques réelles du
+    # métier ("la gueule du four" = son ouverture, "une gerbe de blé" = un
+    # décor de pain) — sans quoi la liste de mots interdits les bloquerait
+    # à tort dans une vraie recette.
+    "gueule": ["four", "pain", "boulangerie", "cuisson", "enfourner"],
+    "gerbe": ["ble", "pain", "boulangerie", "decor", "decorer", "farine"],
 }
 
-# À fournir : la vraie liste appartient à qui exploite l'application, pas à
-# un choix arbitraire fait ici. Vide par défaut — tant qu'elle l'est, aucun
-# contenu n'est jamais bloqué ni mis en revue par ce module.
-BAN_WORDS = set()
+# Fournie par Lucas (exploitant de l'application) — pas une liste inventée
+# ici. Mots isolés et expressions de plusieurs mots mélangés : les deux
+# sont recherchés de la même façon (voir _contains_phrase).
+BAN_WORDS = {
+    "baiser",
+    "bander",
+    "bigornette",
+    "bite",
+    "bitte",
+    "bloblos",
+    "bordel",
+    "bourré",
+    "bourrée",
+    "brackmard",
+    "branlage",
+    "branler",
+    "branlette",
+    "branleur",
+    "branleuse",
+    "brouter le cresson",
+    "caca",
+    "chatte",
+    "chiasse",
+    "chier",
+    "chiottes",
+    "clito",
+    "clitoris",
+    "con",
+    "connard",
+    "connasse",
+    "conne",
+    "couilles",
+    "cramouille",
+    "déconne",
+    "déconner",
+    "emmerdant",
+    "emmerder",
+    "emmerdeur",
+    "emmerdeuse",
+    "enculé",
+    "enculée",
+    "enculeur",
+    "enculeurs",
+    "enfoiré",
+    "enfoirée",
+    "étron",
+    "fille de pute",
+    "fils de pute",
+    "folle",
+    "foutre",
+    "gerbe",
+    "gerber",
+    "gouine",
+    "grande folle",
+    "grogniasse",
+    "gueule",
+    "jouir",
+    "hitler",
+    "la putain de ta mère",
+    "malpt",
+    "ménage à trois",
+    "merde",
+    "merdeuse",
+    "merdeux",
+    "meuf",
+    "nègre",
+    "negro",
+    "nique ta mère",
+    "nique ta race",
+    "nazi",
+    "palucher",
+    "pédale",
+    "pédé",
+    "péter",
+    "pipi",
+    "pisser",
+    "pouffiasse",
+    "pousse-crotte",
+    "putain",
+    "pute",
+    "ramoner",
+    "reich",
+    "sac à foutre",
+    "sac à merde",
+    "salaud",
+    "salope",
+    "suce",
+    "tapette",
+    "tanche",
+    "teuch",
+    "tringler",
+    "trique",
+    "troncher",
+    "trou du cul",
+    "turlute",
+    "zigounette",
+    "zizi",
+}
 
 # Test/dev UNIQUEMENT — jamais en production : quelques mots interdits
 # chargés depuis l'environnement pour permettre à la suite HTTP
@@ -80,6 +180,18 @@ def _tokens(text: str) -> List[str]:
     return [_normalize(w) for w in _WORD_RE.findall(text or "")]
 
 
+def _contains_phrase(text_tokens: List[str], phrase_tokens: List[str]) -> bool:
+    """Vrai si la séquence de mots `phrase_tokens` apparaît telle quelle,
+    dans l'ordre et contiguë, dans `text_tokens` — nécessaire dès que
+    BAN_WORDS contient une expression ("nique ta mère", "trou du cul"...)
+    et pas seulement des mots isolés : une simple intersection d'ensembles
+    ne verrait jamais une expression de plusieurs mots."""
+    n, m = len(text_tokens), len(phrase_tokens)
+    if m == 0 or m > n:
+        return False
+    return any(text_tokens[i:i + m] == phrase_tokens for i in range(n - m + 1))
+
+
 @dataclass
 class TermMatch:
     term: str       # le terme déclencheur, normalisé
@@ -95,14 +207,25 @@ class TextModerationResult:
 
 def classify_text(text: str) -> TextModerationResult:
     """Classe un texte libre. Ne lève jamais d'exception, ne dépend d'aucun
-    service externe — un simple passage sur les mots du texte."""
-    token_set = set(_tokens(text))
-    if not token_set or not BAN_WORDS:
+    service externe — un simple passage sur les mots du texte. Chaque
+    entrée de BAN_WORDS peut être un mot isolé ou une expression de
+    plusieurs mots ; les deux sont recherchés sur les mêmes mots normalisés
+    du texte, dans l'ordre et de façon contiguë."""
+    text_tokens = _tokens(text)
+    if not text_tokens or not BAN_WORDS:
         return TextModerationResult(level=SAFE)
+    token_set = set(text_tokens)
 
-    ban_hits = token_set & {_normalize(w) for w in BAN_WORDS}
     matches: List[TermMatch] = []
-    for term in sorted(ban_hits):
+    seen_terms = set()
+    for raw_word in BAN_WORDS:
+        phrase_tokens = _tokens(raw_word)
+        if not phrase_tokens:
+            continue
+        term = " ".join(phrase_tokens)
+        if term in seen_terms or not _contains_phrase(text_tokens, phrase_tokens):
+            continue
+        seen_terms.add(term)
         markers = WHITELIST_TERMS.get(term, "absent")
         if markers != "absent":
             if markers is None or any(_normalize(m) in token_set for m in markers):
@@ -111,6 +234,7 @@ def classify_text(text: str) -> TextModerationResult:
         else:
             matches.append(TermMatch(term=term, tier=BLOCKED, reason="terme interdit, aucune entrée whitelist"))
 
+    matches.sort(key=lambda m: m.term)
     if any(m.tier == BLOCKED for m in matches):
         level = BLOCKED
     elif matches:
