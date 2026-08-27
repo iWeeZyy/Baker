@@ -4,8 +4,9 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { api } from '@/src/api';
+import { api, API_BASE } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
+import { recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
 
 export default function BakerProfile() {
@@ -142,7 +143,7 @@ export default function BakerProfile() {
         renderItem={({ item }) => (
           <Pressable testID={`baker-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.card}>
             <View>
-              <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
+              <Image source={recipeImageSource(item, API_BASE)} style={styles.cardImage} contentFit="cover" />
               {item.coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={12} color="#fff" /></View>}
             </View>
             <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, alignSelf: 'flex-start', marginTop: 32, marginBottom: 8 },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4 },
+  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
   empty: { textAlign: 'center', color: theme.color.muted, marginTop: 30, fontStyle: 'italic' },

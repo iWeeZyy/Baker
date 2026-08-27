@@ -5,12 +5,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { api } from '@/src/api';
+import { api, API_BASE } from '@/src/api';
 import { AdSlot } from '@/src/ads';
 import { formatDuration } from '@/src/format';
+import { recipeImage, recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
 
-type Recipe = { id: string; title: string; category: string; image_url: string; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
+type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; is_user_submitted?: boolean };
 
 export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -70,7 +71,15 @@ export default function Home() {
 
         {featured && (
           <Pressable testID={`hero-recipe-${featured.id}`} onPress={() => router.push(`/recipe/${featured.id}`)} style={styles.hero}>
-            <Image source={{ uri: featured.image_url }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+            {/* Une photo se recadre, un dessin se lit entier ou pas du tout —
+                même règle que sur la fiche recette, d'où le `contain` quand
+                l'image est une illustration. Les vignettes carrées plus bas
+                restent en `cover` : le cercle du dessin y tient déjà. */}
+            <Image
+              source={recipeImageSource(featured, API_BASE)}
+              style={StyleSheet.absoluteFillObject}
+              contentFit={recipeImage(featured, API_BASE).kind === 'drawing' ? 'contain' : 'cover'}
+            />
             <LinearGradient colors={['transparent', 'rgba(42,31,26,0.9)']} style={StyleSheet.absoluteFillObject} />
             <View style={styles.heroContent}>
               <Text style={styles.heroBadge}>À LA UNE</Text>
@@ -92,7 +101,7 @@ export default function Home() {
               {coupsDeCoeur.map(r => (
                 <Pressable key={r.id} testID={`cdc-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
                   <View>
-                    <Image source={{ uri: r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.classicImage} contentFit="cover" />
+                    <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
                     <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
@@ -114,7 +123,7 @@ export default function Home() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
             {classics.map(r => (
               <Pressable key={r.id} testID={`classic-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
-                <Image source={{ uri: r.image_url }} style={styles.classicImage} contentFit="cover" />
+                <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
                 <Text style={styles.classicTitle}>{r.title}</Text>
                 <Text style={styles.classicMeta}>{r.difficulty}</Text>
               </Pressable>
@@ -131,7 +140,7 @@ export default function Home() {
               {community.map(r => (
                 <Pressable key={r.id} testID={`community-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
                   <View>
-                    <Image source={{ uri: r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.classicImage} contentFit="cover" />
+                    <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
                     {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>}
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
@@ -156,7 +165,7 @@ const styles = StyleSheet.create({
   calcIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   calcTitle: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
   calcSub: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
-  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4 },
+  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
   heroContent: { position: 'absolute', bottom: 20, left: 20, right: 20 },
   heroBadge: { color: theme.color.brandSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '600', marginBottom: 6 },
   heroTitle: { fontFamily: theme.serif, fontSize: 28, color: '#fff', lineHeight: 32 },
@@ -167,7 +176,7 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: theme.color.onSurface },
   classicCard: { width: 180 },
-  classicImage: { width: 180, height: 180, borderRadius: 4 },
+  classicImage: { width: 180, height: 180, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
   classicTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },
   classicMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
 });

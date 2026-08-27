@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/src/auth';
-import { api } from '@/src/api';
+import { api, API_BASE } from '@/src/api';
+import { recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
 
 export default function Profile() {
@@ -69,7 +70,7 @@ export default function Profile() {
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
           renderItem={({ item }) => (
             <Pressable testID={`profile-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.card}>
-              <Image source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600' }} style={styles.cardImage} contentFit="cover" />
+              <Image source={recipeImageSource(item, API_BASE)} style={styles.cardImage} contentFit="cover" />
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
               <Text style={styles.cardMeta}>{item.difficulty}</Text>
             </Pressable>
@@ -107,7 +108,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, color: theme.color.muted, fontWeight: '500' },
   tabTextActive: { color: theme.color.onSurface },
   card: { flex: 1 },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4 },
+  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 12 },

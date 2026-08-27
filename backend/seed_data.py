@@ -17,6 +17,7 @@ retiring content is a deploy and not a manual cleanup.
 """
 from families import FAMILY_BY_TITLE, family_of
 from products import product_of
+from recipe_photos import credit_of, photo_of
 from seed_books import BOOK_RECIPES
 from tips_seed import build_tips_library
 
@@ -86,11 +87,25 @@ if _UNASSIGNED:
 # d'exhaustivité : contrairement à la famille, il a le droit d'être absent
 # (`products.py` explique pourquoi). Une fiche sans archétype garde l'absence
 # d'image, que l'écran gère déjà.
+def _with_photo(recipe: dict) -> dict:
+    """Appose la photo et son crédit, ou laisse la fiche sans image.
+
+    `image_url` reste la chaîne vide quand aucune photo ne montre le bon
+    produit : la fiche affiche alors son dessin d'archétype. On n'invente pas
+    d'URL, et on ne recopie pas une photo approchante.
+    """
+    photo = photo_of(recipe["title"])
+    if not photo:
+        return {"image_url": "", "image_credit": None}
+    return {"image_url": photo["url"], "image_credit": credit_of(recipe["title"])}
+
+
 RECIPES_SEED = [
     {
         **r,
         "family": family_of(r["title"], r["category"]),
         "product": product_of(r["title"]),
+        **_with_photo(r),
     }
     for r in BOOK_RECIPES
 ]

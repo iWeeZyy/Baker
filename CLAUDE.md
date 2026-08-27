@@ -74,17 +74,35 @@ The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), 
 - Tiles are **drawn, not photographed**: `frontend/assets/images/families/*.svg` rendered to PNG by `frontend/scripts/build-tiles.mjs` (Chromium via Playwright, run by hand, not part of the build; it renders the `products/` tiles too). Only `src/theme.ts` colours are used. `FAMILY_TILES` in `src/families.ts` is a `Record<FamilyKey, …>`, so a family without a tile fails `tsc` rather than showing an empty box.
 - Recipe cards inside a family carry **no image** on purpose: the imported sheets have no photo, and one generic picture repeated over nineteen tarts would read as a photo of each. (The recipe *screen* does carry a drawn illustration — see the next section for why a drawing is allowed to repeat where a photo isn't.)
 
-### Recipe illustrations — `backend/products.py`, `frontend/src/products.ts`
+### Recipe images — `backend/recipe_photos.py`, `backend/products.py`, `frontend/src/products.ts`
 
-None of the 194 imported sheets has a photo, and none will: the books' photographs are not reproduced (the data is taken, the images are not), and free-licence photo banks are documentary archives whose culinary quality is below the rest of the app. So a recipe screen shows a **drawing of its archetype** — the shape, not the dish.
+None of the 194 imported sheets carries a photo of its own: the books' photographs are not reproduced (the data is taken, the images are not). Images therefore come from outside, and one function decides which — `recipeImage(recipe, apiBase)` in `src/products.ts`, used by the recipe screen, the home screen, the profile and the baker page so they cannot diverge. Four steps, in order:
 
-A drawing reads as an **emblem** rather than as a picture of that particular piece, which is exactly what makes repetition acceptable where a photo would lie: nineteen tarts sharing one drawing say "a tart"; nineteen copies of one photo would say "here is *that* tart".
+1. the **upload** of a community recipe (`image_path`);
+2. a **photograph of the product**, when one exists that really shows *that* product (`image_url`, from `recipe_photos.py`);
+3. the **drawing of its archetype** — the shape, not the dish (`products.py`);
+4. nothing, and the screen paints a plain warm band (never a grey one, which reads as a failed image load).
+
+A drawing reads as an **emblem** rather than as a picture of that particular piece, which is exactly what makes repetition acceptable where a photo would lie: nineteen tarts sharing one drawing say "a tart"; nineteen copies of one photo would say "here is *that* tart". A photograph earns its place only by being of the right product — which is why step 2 sits above step 3 but is much harder to fill.
+
+#### Photographs — `backend/recipe_photos.py`
+
+Photos come from **Pexels** (Pexels License, commercial use, no royalty). Wikimedia Commons was tried first and abandoned: it is a documentary archive, not a culinary photo library — a "croissant" search returned an *oranais*, a "bretzel" search a branded sandwich on a cafeteria tray. Both had a perfect title.
+
+That failure is the whole design of this table:
+
+- **A photo is never chosen on its title.** It is *looked at*. Every entry carries a `vu` field recording, in French, what was actually seen in the image; `tests/test_recipe_photos.py` rejects an entry without it. `tools/harvest_pexels.py` exists to make that review possible at scale — it queries Pexels and builds one **contact sheet** of candidates per recipe, and deliberately chooses nothing itself.
+- **Nothing rather than roughly right.** A recipe whose product has no honest photo gets none and keeps its drawing. The table does not cover the whole catalogue, and that is deliberate.
+- **The credit is not optional.** Pexels' *API Guidelines* go further than the licence and require naming the photographer with a link to their profile plus a link back to Pexels. That is what `image_credit` renders under the photo, in the style of the existing "D'après …". An entry with no author or no source page is rejected by the tests: you cannot credit what you did not record.
+- `url` points at the Pexels CDN, which permits hotlinking; nothing is copied into the repo. The search happens once, at harvest time — the app never talks to Pexels.
+- Harvesting needs `PEXELS_API_KEY` **and** `api.pexels.com` / `images.pexels.com` allowed by the environment's network policy. Without both, the table stays empty and every sheet keeps its drawing, which is a valid state rather than a failure.
 
 - `backend/products.py` is the single source, same shape as `families.py`: an ordered `PRODUCTS` list of archetype keys and an `_ASSIGNMENTS` table mapping recipe titles to them. `seed_data.py` stamps `product` on each seeded recipe via `product_of`.
 - Unlike `family`, `product` is **allowed to be absent**, and the table deliberately does not cover the whole catalogue (150/194). A kouglof, a braid or a palmier gets no archetype because no drawing renders that shape honestly — a pain de mie illustrated by a boule would be worse than nothing. `app/recipe/[id].tsx` then shows a plain warm band (not a grey one, which would read as a failed image load).
 - Tiles come from the same pipeline as the family tiles: SVG in `frontend/assets/images/{families,products}/`, rendered to PNG by `frontend/scripts/build-tiles.mjs` (now walks both directories). Sixteen archetypes reuse a family tile that already draws exactly that shape; six are drawn for the products. Only `src/theme.ts` colours are used.
 - `PRODUCT_TILES` in `src/products.ts` is a `Record<ProductKey, …>`, so an archetype without a tile fails `tsc`. `backend/tests/test_products.py` covers what `tsc` can't see: an unknown title, an archetype nobody uses, a `require` pointing at a missing PNG, a PNG with no SVG source.
 - The short list of archetypes is the point, not a to-do: drawings that didn't read (a spiral overflowing its frame, a braid that looked like a chain of beads) were thrown away rather than shipped.
+- There is **no hardcoded remote image left in the app**. Six render sites used to fall back to a single Unsplash URL (`photo-1509440159596-…`, a scaffold leftover of unverified licence) or to nothing at all — the home hero and its "Grands classiques" cards rendered empty white boxes for all 194 recipes. They all go through `recipeImage` now. If you add a screen that shows a recipe, use it rather than reaching for `image_url` directly.
 
 ### Recipe content — `backend/seed_data.py`, `backend/seed_books.py`
 

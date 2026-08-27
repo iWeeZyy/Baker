@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/src/auth';
+import { FAMILY_TILES } from '@/src/families';
 import { theme } from '@/src/theme';
 
 export default function AuthScreen() {
@@ -34,7 +35,11 @@ export default function AuthScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
-          <Image source={{ uri: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=1200&q=85' }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          {/* Un dessin embarqué plutôt qu'une photo distante : c'est le premier
+              écran de l'application, et il s'affichait jusqu'ici depuis une URL
+              Unsplash codée en dur, dont la licence n'avait jamais été vérifiée
+              et qui laissait un fond vide hors ligne. */}
+          <Image source={FAMILY_TILES['pains-classiques']} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={['transparent', 'rgba(42,31,26,0.85)']} style={StyleSheet.absoluteFillObject} />
           <View style={styles.heroContent}>
             <Text style={styles.brandLabel}>BAKERS</Text>
@@ -80,7 +85,7 @@ export default function AuthScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 1, backgroundColor: theme.color.surface },
-  hero: { height: 320, position: 'relative' },
+  hero: { height: 320, position: 'relative', backgroundColor: theme.color.surfaceSecondary },
   heroContent: { position: 'absolute', bottom: 24, left: 24, right: 24 },
   brandLabel: { fontSize: 12, letterSpacing: 4, color: theme.color.onSurfaceInverse, marginBottom: 8, fontWeight: '500' },
   heroTitle: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurfaceInverse, lineHeight: 36 },
