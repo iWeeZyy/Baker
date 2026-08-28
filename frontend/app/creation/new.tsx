@@ -20,16 +20,20 @@ const MAX_PHOTOS = 6;
 type PhotoItem = { key: string; uri: string; path: string | null; uploading?: boolean };
 type Recipe = { id: string; title: string };
 
-export default function CreationForm() {
+function Field({ label, children }: { label: string; children: any }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const Field = ({ label, children }: { label: string; children: any }) => (
+  return (
     <View style={{ marginBottom: 20 }}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
   );
+}
+
+export default function CreationForm() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();

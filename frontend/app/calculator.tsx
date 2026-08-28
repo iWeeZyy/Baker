@@ -6,16 +6,20 @@ import { Feather } from '@expo/vector-icons';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
-export default function Calculator() {
+function Row({ label, value, onChange, testID }: { label: string; value: string; onChange: (v: string) => void; testID: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const Row = ({ label, value, onChange, testID }: any) => (
+  return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput testID={testID} value={value} onChangeText={onChange} keyboardType="numeric" style={styles.input} placeholderTextColor={colors.muted} />
     </View>
   );
+}
+
+export default function Calculator() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const ResultRow = ({ label, value, strong }: any) => (
     <View style={styles.resultRow}>

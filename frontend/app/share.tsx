@@ -13,16 +13,20 @@ import { useTheme } from '@/src/ThemeContext';
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
 
-export default function ShareRecipe() {
+function Field({ label, children }: { label: string; children: any }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const Field = ({ label, children }: { label: string; children: any }) => (
+  return (
     <View style={{ marginBottom: 20 }}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
   );
+}
+
+export default function ShareRecipe() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
   const params = useLocalSearchParams<{ prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string }>();
