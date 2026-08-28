@@ -8,6 +8,8 @@ export type User = {
   email: string;
   name?: string;
   picture?: string;
+  bio?: string | null;
+  instagram_username?: string | null;
 };
 
 type AuthCtx = {
@@ -17,6 +19,7 @@ type AuthCtx = {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfile: (fields: { bio?: string; instagram_username?: string }) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -85,8 +88,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me);
   };
 
+  // Même séquence que l'upload d'avatar : on écrit, puis on relit la source
+  // de vérité serveur plutôt que de corriger l'état local à la main.
+  const updateProfile = async (fields: { bio?: string; instagram_username?: string }) => {
+    await api('/auth/me', { method: 'PUT', body: JSON.stringify(fields) });
+    await refreshUser();
+  };
+
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <Ctx.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfile }}>
       {children}
     </Ctx.Provider>
   );
