@@ -91,6 +91,7 @@ export default function Recipes() {
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={rows}
           keyExtractor={(row) => row.map(f => f.key).join('+')}
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}

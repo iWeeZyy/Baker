@@ -43,6 +43,7 @@ export default function CreationsGallery() {
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={items}
           keyExtractor={c => c.id}
           numColumns={3}
