@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator,
   ScrollView, KeyboardAvoidingView, Platform,
@@ -10,7 +10,8 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { isPlanLimitError } from '@/src/plan';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { syncWidgetData } from '@/src/widgetData';
 
 type Recipe = { id: string; title: string; category: string; yield_pieces?: number | null };
@@ -22,6 +23,8 @@ function todayISO() {
 }
 
 export default function ProductionForm() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { user } = useAuth();
   // Same screen for both: `id` present means we are editing.
@@ -128,14 +131,14 @@ export default function ProductionForm() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+    return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="prod-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>{isEdit ? 'Modifier' : 'Nouvelle production'}</Text>
         <View style={{ width: 40 }} />
@@ -148,14 +151,14 @@ export default function ProductionForm() {
               <Text style={styles.label}>DATE</Text>
               <TextInput
                 testID="prod-date" value={date} onChangeText={setDate}
-                placeholder="AAAA-MM-JJ" placeholderTextColor={theme.color.muted} style={styles.input}
+                placeholder="AAAA-MM-JJ" placeholderTextColor={colors.muted} style={styles.input}
               />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>PRÊT À</Text>
               <TextInput
                 testID="prod-time" value={targetTime} onChangeText={setTargetTime}
-                placeholder="06:00" placeholderTextColor={theme.color.muted} style={styles.input}
+                placeholder="06:00" placeholderTextColor={colors.muted} style={styles.input}
               />
             </View>
           </View>
@@ -176,7 +179,7 @@ export default function ProductionForm() {
                 <View style={styles.lineTop}>
                   <Text style={styles.lineTitle} numberOfLines={1}>{r?.title || 'Recette'}</Text>
                   <Pressable testID={`remove-${line.recipe_id}`} onPress={() => removeLine(line.key)} style={styles.removeBtn}>
-                    <Feather name="x" size={18} color={theme.color.muted} />
+                    <Feather name="x" size={18} color={colors.muted} />
                   </Pressable>
                 </View>
 
@@ -216,7 +219,7 @@ export default function ProductionForm() {
           })}
 
           <Pressable testID="add-recipe" onPress={() => setPicking(v => !v)} style={styles.addBtn}>
-            <Feather name={picking ? 'x' : 'plus'} size={16} color={theme.color.brand} />
+            <Feather name={picking ? 'x' : 'plus'} size={16} color={colors.brand} />
             <Text style={styles.addBtnText}>{picking ? 'Fermer' : 'Ajouter une recette'}</Text>
           </Pressable>
 
@@ -225,7 +228,7 @@ export default function ProductionForm() {
               {recipes.map(r => (
                 <Pressable key={r.id} testID={`pick-${r.id}`} onPress={() => addRecipe(r)} style={styles.pickRow}>
                   <Text style={styles.pickTitle} numberOfLines={1}>{r.title}</Text>
-                  <Feather name="plus-circle" size={18} color={theme.color.brand} />
+                  <Feather name="plus-circle" size={18} color={colors.brand} />
                 </Pressable>
               ))}
             </View>
@@ -234,7 +237,7 @@ export default function ProductionForm() {
           <Text style={[styles.label, { marginTop: 26 }]}>NOTES</Text>
           <TextInput
             testID="prod-notes" value={notes} onChangeText={setNotes} multiline
-            placeholder="Livraison, client, remarques…" placeholderTextColor={theme.color.muted}
+            placeholder="Livraison, client, remarques…" placeholderTextColor={colors.muted}
             style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
           />
 
@@ -244,9 +247,9 @@ export default function ProductionForm() {
             testID="prod-save" onPress={save} disabled={saving}
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
           >
-            {saving ? <ActivityIndicator color="#fff" /> : (
+            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
               <>
-                <Feather name="check" size={17} color="#fff" />
+                <Feather name="check" size={17} color={colors.onBrandPrimary} />
                 <Text style={styles.saveText}>{isEdit ? 'Enregistrer' : 'Créer la production'}</Text>
               </>
             )}
@@ -263,38 +266,38 @@ export default function ProductionForm() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface },
+  headerTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
   body: { padding: 24, paddingBottom: 60 },
   row: { flexDirection: 'row', gap: 14 },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: 6 },
-  input: { fontSize: 16, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 9 },
-  hint: { fontSize: 12, color: theme.color.muted, marginTop: 8, lineHeight: 17 },
-  emptyLines: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic', marginBottom: 4 },
-  lineCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: 6 },
+  input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 9 },
+  hint: { fontSize: 12, color: colors.muted, marginTop: 8, lineHeight: 17 },
+  emptyLines: { fontSize: 13, color: colors.muted, fontStyle: 'italic', marginBottom: 4 },
+  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineTitle: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface },
+  lineTitle: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
   removeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   lineControls: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 },
-  qtyInput: { width: 78, fontSize: 20, fontFamily: theme.serif, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12, textAlign: 'center' },
-  modeSwitch: { flexDirection: 'row', backgroundColor: theme.color.surface, borderRadius: 6, padding: 3 },
+  qtyInput: { width: 78, fontSize: 20, fontFamily: theme.serif, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12, textAlign: 'center' },
+  modeSwitch: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 6, padding: 3 },
   modeBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 5 },
-  modeBtnOn: { backgroundColor: theme.color.brand },
-  modeText: { fontSize: 13, color: theme.color.muted, fontWeight: '600' },
-  modeTextOn: { color: '#fff' },
-  lineHint: { fontSize: 11, color: theme.color.muted, marginTop: 9, lineHeight: 16 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: theme.color.borderStrong, marginTop: 4 },
-  addBtnText: { fontSize: 14, color: theme.color.brand, fontWeight: '600' },
-  picker: { marginTop: 10, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, overflow: 'hidden' },
-  pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.color.border },
-  pickTitle: { flex: 1, fontSize: 15, color: theme.color.onSurface },
-  error: { color: theme.color.error, fontSize: 13, marginTop: 16, lineHeight: 18 },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 16, borderRadius: 8, marginTop: 26 },
-  saveText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  modeBtnOn: { backgroundColor: colors.brand },
+  modeText: { fontSize: 13, color: colors.muted, fontWeight: '600' },
+  modeTextOn: { color: colors.onBrandPrimary },
+  lineHint: { fontSize: 11, color: colors.muted, marginTop: 9, lineHeight: 16 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, marginTop: 4 },
+  addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
+  picker: { marginTop: 10, backgroundColor: colors.surfaceSecondary, borderRadius: 8, overflow: 'hidden' },
+  pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickTitle: { flex: 1, fontSize: 15, color: colors.onSurface },
+  error: { color: colors.error, fontSize: 13, marginTop: 16, lineHeight: 18 },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: 8, marginTop: 26 },
+  saveText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '700' },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
-  deleteText: { color: theme.color.error, fontSize: 13, fontWeight: '600' },
+  deleteText: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

@@ -7,7 +7,8 @@ import { api } from '@/src/api';
 import { AdSlot, buildListRows, useAds } from '@/src/ads';
 import { type Family } from '@/src/families';
 import { formatDuration } from '@/src/format';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type Recipe = { id: string; title: string; difficulty: string; time_minutes: number; coup_de_coeur?: boolean; like_count?: number };
 
@@ -21,6 +22,8 @@ type Recipe = { id: string; title: string; difficulty: string; time_minutes: num
  * largeur au lieu d'être hachés en deux colonnes.
  */
 export default function FamilyScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { key } = useLocalSearchParams<{ key: string }>();
   const router = useRouter();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -55,7 +58,7 @@ export default function FamilyScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={20} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.brandLabel}>FAMILLE</Text>
@@ -69,7 +72,7 @@ export default function FamilyScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
           data={rows}
@@ -92,8 +95,8 @@ export default function FamilyScreen() {
                       <Text style={styles.rowTitle}>{item.title}</Text>
                       <Text style={styles.rowMeta}>{item.difficulty} · {formatDuration(item.time_minutes)} · {item.like_count ?? 0} {"j'aime"}</Text>
                     </View>
-                    {item.coup_de_coeur && <Feather name="award" size={16} color={theme.color.brand} />}
-                    <Feather name="chevron-right" size={18} color={theme.color.muted} />
+                    {item.coup_de_coeur && <Feather name="award" size={16} color={colors.brand} />}
+                    <Feather name="chevron-right" size={18} color={colors.muted} />
                   </Pressable>
                 ))}
               </>
@@ -106,30 +109,30 @@ export default function FamilyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xl,
-    borderBottomWidth: 1, borderBottomColor: theme.color.border,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   backBtn: {
     width: 44, height: 44, borderRadius: 999, marginTop: 4,
-    backgroundColor: theme.color.surfaceSecondary, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center',
   },
   headerText: { flex: 1 },
-  brandLabel: { fontSize: 11, letterSpacing: 3, color: theme.color.muted, fontWeight: '500' },
-  title: { fontFamily: theme.serif, fontSize: 28, color: theme.color.onSurface, marginTop: 4 },
-  count: { fontSize: 13, color: theme.color.muted, marginTop: 4 },
+  brandLabel: { fontSize: 11, letterSpacing: 3, color: colors.muted, fontWeight: '500' },
+  title: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 4 },
+  count: { fontSize: 13, color: colors.muted, marginTop: 4 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.lg,
-    borderBottomWidth: 1, borderBottomColor: theme.color.border,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   rowText: { flex: 1 },
-  rowTitle: { fontFamily: theme.serif, fontSize: 19, color: theme.color.onSurface },
-  rowMeta: { fontSize: 12, color: theme.color.muted, marginTop: 4 },
+  rowTitle: { fontFamily: theme.serif, fontSize: 19, color: colors.onSurface },
+  rowMeta: { fontSize: 12, color: colors.muted, marginTop: 4 },
   adRow: { paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.lg },
-  empty: { textAlign: 'center', color: theme.color.muted, marginTop: 60 },
+  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

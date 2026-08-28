@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator,
   ScrollView, KeyboardAvoidingView, Platform, Alert, Linking,
@@ -10,7 +10,8 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
 import { ActionSheet } from '@/src/ActionSheet';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 const CREATION_CATEGORIES = ['Pain', 'Viennoiserie', 'Pâtisserie', 'Traiteur', 'Autre'];
 const DESCRIPTION_MAX_LENGTH = 500;
@@ -19,16 +20,17 @@ const MAX_PHOTOS = 6;
 type PhotoItem = { key: string; uri: string; path: string | null; uploading?: boolean };
 type Recipe = { id: string; title: string };
 
-function Field({ label, children }: { label: string; children: any }) {
-  return (
+export default function CreationForm() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Field = ({ label, children }: { label: string; children: any }) => (
     <View style={{ marginBottom: 20 }}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
   );
-}
 
-export default function CreationForm() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
@@ -169,14 +171,14 @@ export default function CreationForm() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+    return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="creation-form-close" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="x" size={22} color={theme.color.onSurface} />
+          <Feather name="x" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{isEdit ? 'Modifier' : 'Nouvelle création'}</Text>
         <View style={{ width: 40 }} />
@@ -190,28 +192,28 @@ export default function CreationForm() {
               <View key={p.key} style={styles.photoThumbWrap} testID={`creation-photo-${p.key}`}>
                 <Image source={{ uri: p.uri }} style={styles.photoThumb} contentFit="cover" />
                 {p.uploading && (
-                  <View style={styles.uploadOverlay}><ActivityIndicator color="#fff" size="small" /></View>
+                  <View style={styles.uploadOverlay}><ActivityIndicator color={colors.onBrandPrimary} size="small" /></View>
                 )}
                 <Pressable testID={`remove-photo-${p.key}`} onPress={() => removePhoto(p.key)} style={styles.removePhotoBtn}>
-                  <Feather name="x" size={12} color="#fff" />
+                  <Feather name="x" size={12} color={colors.onBrandPrimary} />
                 </Pressable>
               </View>
             ))}
             {photos.length < MAX_PHOTOS && (
               <Pressable testID="add-photos-btn" onPress={() => setPhotoMenuOpen(true)} style={styles.addPhotoTile}>
-                <Feather name="plus" size={22} color={theme.color.muted} />
+                <Feather name="plus" size={22} color={colors.muted} />
               </Pressable>
             )}
           </View>
 
           <Field label="Nom de la création *">
-            <TextInput testID="creation-title" value={title} onChangeText={setTitle} placeholder="Ex : Pain au levain" placeholderTextColor={theme.color.muted} style={styles.input} />
+            <TextInput testID="creation-title" value={title} onChangeText={setTitle} placeholder="Ex : Pain au levain" placeholderTextColor={colors.muted} style={styles.input} />
           </Field>
 
           <Field label="Description">
             <TextInput
               testID="creation-description" value={description} onChangeText={setDescription}
-              placeholder="T80, levain liquide, fermentation 18 h, cuisson sur sole." placeholderTextColor={theme.color.muted}
+              placeholder="T80, levain liquide, fermentation 18 h, cuisson sur sole." placeholderTextColor={colors.muted}
               style={[styles.input, styles.textArea]} multiline maxLength={DESCRIPTION_MAX_LENGTH}
             />
             <Text style={styles.charCount}>{description.length} / {DESCRIPTION_MAX_LENGTH}</Text>
@@ -232,12 +234,12 @@ export default function CreationForm() {
               <View style={styles.recipeChosenRow}>
                 <Text style={styles.recipeChosenText} numberOfLines={1}>{recipeTitle}</Text>
                 <Pressable testID="clear-recipe" onPress={() => { setRecipeId(null); setRecipeTitle(null); }}>
-                  <Feather name="x" size={16} color={theme.color.muted} />
+                  <Feather name="x" size={16} color={colors.muted} />
                 </Pressable>
               </View>
             ) : (
               <Pressable testID="pick-recipe-toggle" onPress={() => setPickingRecipe(v => !v)} style={styles.addBtn}>
-                <Feather name={pickingRecipe ? 'x' : 'plus'} size={16} color={theme.color.brand} />
+                <Feather name={pickingRecipe ? 'x' : 'plus'} size={16} color={colors.brand} />
                 <Text style={styles.addBtnText}>{pickingRecipe ? 'Fermer' : 'Associer une recette'}</Text>
               </Pressable>
             )}
@@ -245,7 +247,7 @@ export default function CreationForm() {
               <View style={styles.picker}>
                 <TextInput
                   testID="recipe-search" value={recipeSearch} onChangeText={setRecipeSearch}
-                  placeholder="Rechercher une recette…" placeholderTextColor={theme.color.muted}
+                  placeholder="Rechercher une recette…" placeholderTextColor={colors.muted}
                   style={[styles.input, { marginBottom: 8 }]}
                 />
                 <ScrollView style={{ maxHeight: 220 }}>
@@ -256,7 +258,7 @@ export default function CreationForm() {
                       style={styles.pickRow}
                     >
                       <Text style={styles.pickTitle} numberOfLines={1}>{r.title}</Text>
-                      <Feather name="plus-circle" size={18} color={theme.color.brand} />
+                      <Feather name="plus-circle" size={18} color={colors.brand} />
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -270,7 +272,7 @@ export default function CreationForm() {
             testID="publish-creation-btn" onPress={save} disabled={saving || stillUploading}
             style={[styles.publishBtn, (saving || stillUploading) && { opacity: 0.6 }]}
           >
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishText}>{isEdit ? 'Enregistrer' : 'Publier'}</Text>}
+            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.publishText}>{isEdit ? 'Enregistrer' : 'Publier'}</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -288,36 +290,36 @@ export default function CreationForm() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
+  title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   form: { padding: 24, paddingBottom: 40 },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, marginBottom: 8, fontWeight: '600' },
-  input: { fontSize: 15, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 10 },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, marginBottom: 8, fontWeight: '600' },
+  input: { fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10 },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
-  charCount: { fontSize: 11, color: theme.color.muted, textAlign: 'right', marginTop: 4 },
+  charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong },
-  chipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
-  chipText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: theme.color.onSurfaceInverse },
-  error: { color: theme.color.error, fontSize: 13, marginBottom: 12 },
-  publishBtn: { backgroundColor: theme.color.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
-  publishText: { color: '#fff', fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
+  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  chipTextActive: { color: colors.onSurfaceInverse },
+  error: { color: colors.error, fontSize: 13, marginBottom: 12 },
+  publishBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
+  publishText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
-  photoThumbWrap: { width: 84, height: 84, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: theme.color.surfaceSecondary },
+  photoThumbWrap: { width: 84, height: 84, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: colors.surfaceSecondary },
   photoThumb: { width: '100%', height: '100%' },
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   removePhotoBtn: { position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.7)', alignItems: 'center', justifyContent: 'center' },
-  addPhotoTile: { width: 84, height: 84, borderRadius: 8, borderWidth: 1, borderColor: theme.color.borderStrong, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  addPhotoTile: { width: 84, height: 84, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
-  addBtnText: { color: theme.color.brand, fontWeight: '600', fontSize: 14 },
-  recipeChosenRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
-  recipeChosenText: { flex: 1, fontSize: 14, color: theme.color.onSurface, fontWeight: '500' },
-  picker: { marginTop: 12, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 10 },
+  addBtnText: { color: colors.brand, fontWeight: '600', fontSize: 14 },
+  recipeChosenRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
+  recipeChosenText: { flex: 1, fontSize: 14, color: colors.onSurface, fontWeight: '500' },
+  picker: { marginTop: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 10 },
   pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 6 },
-  pickTitle: { flex: 1, fontSize: 14, color: theme.color.onSurface },
+  pickTitle: { flex: 1, fontSize: 14, color: colors.onSurface },
 });

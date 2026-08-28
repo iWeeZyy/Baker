@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import {
   QUANTITY_MAX, QUANTITY_MIN, formatMultiplierForInput, resolveManualQuantity, stepDown, stepUp,
 } from '@/src/ingredientScale';
@@ -23,6 +24,8 @@ type Props = {
  * caractère sans se faire corriger avant d'avoir fini.
  */
 export function QuantitySelector({ value, onChange, testID }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState(formatMultiplierForInput(value));
   const focused = useRef(false);
 
@@ -68,7 +71,7 @@ export function QuantitySelector({ value, onChange, testID }: Props) {
           disabled={!canDec}
           style={[styles.btn, !canDec && styles.btnDisabled]}
         >
-          <Feather name="minus" size={18} color={canDec ? theme.color.brand : theme.color.muted} />
+          <Feather name="minus" size={18} color={canDec ? colors.brand : colors.muted} />
         </Pressable>
         <TextInput
           testID="qty-input"
@@ -86,26 +89,26 @@ export function QuantitySelector({ value, onChange, testID }: Props) {
           disabled={!canInc}
           style={[styles.btn, !canInc && styles.btnDisabled]}
         >
-          <Feather name="plus" size={18} color={canInc ? theme.color.brand : theme.color.muted} />
+          <Feather name="plus" size={18} color={canInc ? colors.brand : colors.muted} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
-    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
     alignItems: 'center',
   },
-  label: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: theme.spacing.md },
+  label: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: theme.spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg },
-  btn: { width: 40, height: 40, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
-  btnDisabled: { backgroundColor: theme.color.border },
+  btn: { width: 40, height: 40, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  btnDisabled: { backgroundColor: colors.border },
   input: {
     minWidth: 64, textAlign: 'center', fontFamily: theme.serif,
-    fontSize: theme.fontSize.xxl, color: theme.color.onSurface, paddingVertical: 4,
+    fontSize: theme.fontSize.xxl, color: colors.onSurface, paddingVertical: 4,
   },
 });

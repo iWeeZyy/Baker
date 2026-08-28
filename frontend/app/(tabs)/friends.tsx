@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { subscribeRealtime } from '@/src/realtime';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 // Fallback poll in case the realtime socket is down; the socket refreshes
 // this list near-instantly when a message arrives while connected.
@@ -17,20 +18,23 @@ type UserRow = { user_id: string; name: string; picture?: string; friend_status?
 type FriendRow = UserRow & { last_message?: { content: string; from_me: boolean; created_at: string } | null; unread: number };
 type RequestRow = { id: string; from_user: UserRow };
 
-function Avatar({ user, size = 44 }: { user: UserRow; size?: number }) {
-  const uri = avatarUrl(user.picture, API_BASE);
-  return (
-    <View style={[styles.avatar, { width: size, height: size }]}>
-      {uri ? (
-        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-      ) : (
-        <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{(user.name || '?').slice(0, 1).toUpperCase()}</Text>
-      )}
-    </View>
-  );
-}
-
 export default function Friends() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Avatar = ({ user, size = 44 }: { user: UserRow; size?: number }) => {
+    const uri = avatarUrl(user.picture, API_BASE);
+    return (
+      <View style={[styles.avatar, { width: size, height: size }]}>
+        {uri ? (
+          <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        ) : (
+          <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{(user.name || '?').slice(0, 1).toUpperCase()}</Text>
+        )}
+      </View>
+    );
+  };
+
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[]>([]);
@@ -87,11 +91,11 @@ export default function Friends() {
   };
 
   const SearchAction = ({ u }: { u: UserRow }) => {
-    if (u.friend_status === 'friends') return <Feather name="check-circle" size={20} color={theme.color.success} />;
+    if (u.friend_status === 'friends') return <Feather name="check-circle" size={20} color={colors.success} />;
     if (u.friend_status === 'pending_sent') return <Text style={styles.pendingText}>Envoyée</Text>;
     return (
       <Pressable testID={`add-friend-${u.user_id}`} onPress={() => sendRequest(u)} style={styles.addBtn}>
-        <Feather name="user-plus" size={15} color="#fff" />
+        <Feather name="user-plus" size={15} color={colors.onBrandPrimary} />
         <Text style={styles.addBtnText}>{u.friend_status === 'pending_received' ? 'Accepter' : 'Ajouter'}</Text>
       </Pressable>
     );
@@ -106,19 +110,19 @@ export default function Friends() {
         </View>
 
         <View style={styles.searchWrap}>
-          <Feather name="search" size={18} color={theme.color.muted} />
+          <Feather name="search" size={18} color={colors.muted} />
           <TextInput
             testID="friend-search-input"
             value={query}
             onChangeText={setQuery}
             placeholder="Rechercher un boulanger par nom…"
-            placeholderTextColor={theme.color.muted}
+            placeholderTextColor={colors.muted}
             style={styles.searchInput}
             autoCapitalize="none"
           />
           {query.length > 0 && (
             <Pressable testID="clear-search" onPress={() => setQuery('')}>
-              <Feather name="x" size={18} color={theme.color.muted} />
+              <Feather name="x" size={18} color={colors.muted} />
             </Pressable>
           )}
         </View>
@@ -127,7 +131,7 @@ export default function Friends() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Résultats</Text>
             {searching ? (
-              <ActivityIndicator color={theme.color.brand} style={{ marginTop: 12 }} />
+              <ActivityIndicator color={colors.brand} style={{ marginTop: 12 }} />
             ) : results.length === 0 ? (
               <Text style={styles.emptyText}>Aucun boulanger trouvé pour « {query.trim()} »</Text>
             ) : results.map(u => (
@@ -159,10 +163,10 @@ export default function Friends() {
                 </Pressable>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable testID={`accept-${r.id}`} onPress={() => respond(r, true)} style={styles.acceptBtn}>
-                    <Feather name="check" size={18} color="#fff" />
+                    <Feather name="check" size={18} color={colors.onBrandPrimary} />
                   </Pressable>
                   <Pressable testID={`decline-${r.id}`} onPress={() => respond(r, false)} style={styles.declineBtn}>
-                    <Feather name="x" size={18} color={theme.color.onSurfaceSecondary} />
+                    <Feather name="x" size={18} color={colors.onSurfaceSecondary} />
                   </Pressable>
                 </View>
               </View>
@@ -173,10 +177,10 @@ export default function Friends() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Mes amis</Text>
           {loading ? (
-            <ActivityIndicator color={theme.color.brand} style={{ marginTop: 12 }} />
+            <ActivityIndicator color={colors.brand} style={{ marginTop: 12 }} />
           ) : friends.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Feather name="users" size={36} color={theme.color.muted} />
+              <Feather name="users" size={36} color={colors.muted} />
               <Text style={styles.emptyText}>Vous n'avez pas encore d'amis.{'\n'}Recherchez un boulanger par son nom pour l'ajouter !</Text>
             </View>
           ) : friends.map(f => (
@@ -200,7 +204,7 @@ export default function Friends() {
                   <Text style={styles.unreadText}>{f.unread}</Text>
                 </View>
               ) : (
-                <Feather name="chevron-right" size={18} color={theme.color.muted} />
+                <Feather name="chevron-right" size={18} color={colors.muted} />
               )}
             </Pressable>
           ))}
@@ -210,32 +214,32 @@ export default function Friends() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 16, marginBottom: 16 },
-  brandLabel: { fontSize: 11, letterSpacing: 3, color: theme.color.muted, fontWeight: '500' },
-  title: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurface, marginTop: 4 },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 24, backgroundColor: theme.color.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 46 },
-  searchInput: { flex: 1, fontSize: 15, color: theme.color.onSurface },
+  brandLabel: { fontSize: 11, letterSpacing: 3, color: colors.muted, fontWeight: '500' },
+  title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 24, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 46 },
+  searchInput: { flex: 1, fontSize: 15, color: colors.onSurface },
   section: { paddingHorizontal: 24, marginTop: 28 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface },
-  countBadge: { backgroundColor: theme.color.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  countBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  sectionTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
+  countBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  countBadgeText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  rowName: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
-  rowSub: { fontSize: 13, color: theme.color.muted, marginTop: 2 },
-  rowSubUnread: { color: theme.color.onSurface, fontWeight: '600' },
-  avatar: { borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  pendingText: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic' },
-  acceptBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.success, alignItems: 'center', justifyContent: 'center' },
-  declineBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
-  unreadBadge: { backgroundColor: theme.color.brand, borderRadius: 999, minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  unreadText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  rowName: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
+  rowSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  rowSubUnread: { color: colors.onSurface, fontWeight: '600' },
+  avatar: { borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { color: colors.onBrandTertiary, fontFamily: theme.serif },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  addBtnText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '600' },
+  pendingText: { fontSize: 13, color: colors.muted, fontStyle: 'italic' },
+  acceptBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' },
+  declineBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  unreadBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  unreadText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: '700' },
   emptyBox: { alignItems: 'center', paddingVertical: 32, gap: 12 },
-  emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20, marginTop: 12 },
+  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20, marginTop: 12 },
 });

@@ -5,8 +5,10 @@
  * un `Modal` + `Pressable`, pas `Alert.alert`, dont `react-native-web` ne
  * fait rien du tout (no-op complet, déjà documenté dans `src/confirm.ts`).
  */
+import { useMemo } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 export type ActionSheetOption = {
   key: string;
@@ -27,6 +29,8 @@ export function ActionSheet({
   options: ActionSheetOption[];
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -40,7 +44,7 @@ export function ActionSheet({
               style={styles.option}
             >
               <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-              <Text style={[styles.optionText, opt.destructive && { color: theme.color.error }]}>{opt.label}</Text>
+              <Text style={[styles.optionText, opt.destructive && { color: colors.error }]}>{opt.label}</Text>
             </Pressable>
           ))}
           <Pressable testID="action-sheet-cancel" onPress={onClose} style={styles.cancel}>
@@ -52,13 +56,13 @@ export function ActionSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.color.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40, gap: 4 },
-  title: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, marginBottom: 12 },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40, gap: 4 },
+  title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, marginBottom: 12 },
   option: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
   optionEmoji: { fontSize: 22 },
-  optionText: { fontSize: 16, color: theme.color.onSurface, fontWeight: '500' },
+  optionText: { fontSize: 16, color: colors.onSurface, fontWeight: '500' },
   cancel: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
-  cancelText: { fontSize: 15, color: theme.color.muted, fontWeight: '500' },
+  cancelText: { fontSize: 15, color: colors.muted, fontWeight: '500' },
 });

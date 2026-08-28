@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,24 +7,28 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type UserRow = { user_id: string; name: string; picture?: string | null; profession?: string | null; team_status?: string };
 
-function Avatar({ user, size = 44 }: { user: UserRow; size?: number }) {
-  const uri = avatarUrl(user.picture, API_BASE);
-  return (
-    <View style={[styles.avatar, { width: size, height: size }]}>
-      {uri ? (
-        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-      ) : (
-        <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{(user.name || '?').slice(0, 1).toUpperCase()}</Text>
-      )}
-    </View>
-  );
-}
-
 export default function AddTeamMember() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Avatar = ({ user, size = 44 }: { user: UserRow; size?: number }) => {
+    const uri = avatarUrl(user.picture, API_BASE);
+    return (
+      <View style={[styles.avatar, { width: size, height: size }]}>
+        {uri ? (
+          <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        ) : (
+          <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{(user.name || '?').slice(0, 1).toUpperCase()}</Text>
+        )}
+      </View>
+    );
+  };
+
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[]>([]);
@@ -74,16 +78,16 @@ export default function AddTeamMember() {
   };
 
   const Action = ({ u }: { u: UserRow }) => {
-    if (u.team_status === 'team') return <Feather name="check-circle" size={20} color={theme.color.success} />;
+    if (u.team_status === 'team') return <Feather name="check-circle" size={20} color={colors.success} />;
     if (u.team_status === 'pending_sent') return <Text style={styles.pendingText}>Envoyée</Text>;
-    if (busyId === u.user_id) return <ActivityIndicator size="small" color={theme.color.brand} />;
+    if (busyId === u.user_id) return <ActivityIndicator size="small" color={colors.brand} />;
     return (
       <Pressable
         testID={`team-add-${u.user_id}`}
         onPress={() => (u.team_status === 'pending_received' ? acceptDirect(u) : invite(u))}
         style={styles.addBtn}
       >
-        <Feather name="user-plus" size={15} color="#fff" />
+        <Feather name="user-plus" size={15} color={colors.onBrandPrimary} />
         <Text style={styles.addBtnText}>{u.team_status === 'pending_received' ? 'Accepter' : 'Ajouter'}</Text>
       </Pressable>
     );
@@ -93,26 +97,26 @@ export default function AddTeamMember() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="team-add-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Ajouter à ma Team</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.searchWrap}>
-        <Feather name="search" size={18} color={theme.color.muted} />
+        <Feather name="search" size={18} color={colors.muted} />
         <TextInput
           testID="team-search-input"
           value={query}
           onChangeText={setQuery}
           placeholder="Rechercher par nom ou profession…"
-          placeholderTextColor={theme.color.muted}
+          placeholderTextColor={colors.muted}
           style={styles.searchInput}
           autoCapitalize="none"
         />
         {query.length > 0 && (
           <Pressable testID="team-clear-search" onPress={() => setQuery('')}>
-            <Feather name="x" size={18} color={theme.color.muted} />
+            <Feather name="x" size={18} color={colors.muted} />
           </Pressable>
         )}
       </View>
@@ -121,7 +125,7 @@ export default function AddTeamMember() {
         {query.trim().length < 2 ? (
           <Text style={styles.hint}>Recherchez un collègue par son nom ou sa profession.</Text>
         ) : searching ? (
-          <ActivityIndicator color={theme.color.brand} style={{ marginTop: 20 }} />
+          <ActivityIndicator color={colors.brand} style={{ marginTop: 20 }} />
         ) : results.length === 0 ? (
           <Text style={styles.hint}>Aucun boulanger trouvé pour « {query.trim()} »</Text>
         ) : results.map(u => (
@@ -141,21 +145,21 @@ export default function AddTeamMember() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, backgroundColor: theme.color.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 46 },
-  searchInput: { flex: 1, fontSize: 15, color: theme.color.onSurface },
-  hint: { fontSize: 13, color: theme.color.muted, textAlign: 'center', marginTop: 24, paddingHorizontal: 24 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 46 },
+  searchInput: { flex: 1, fontSize: 15, color: colors.onSurface },
+  hint: { fontSize: 13, color: colors.muted, textAlign: 'center', marginTop: 24, paddingHorizontal: 24 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  rowName: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
-  rowSub: { fontSize: 13, color: theme.color.muted, marginTop: 2 },
-  avatar: { borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  pendingText: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic' },
+  rowName: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
+  rowSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  avatar: { borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { color: colors.onBrandTertiary, fontFamily: theme.serif },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  addBtnText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '600' },
+  pendingText: { fontSize: 13, color: colors.muted, fontStyle: 'italic' },
 });

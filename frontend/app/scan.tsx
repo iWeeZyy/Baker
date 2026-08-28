@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,8 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
@@ -124,6 +125,22 @@ async function uploadImage(uri: string, name: string): Promise<string> {
 const ANALYSIS_MESSAGES = ['Analyse de votre fiche…', 'Extraction des ingrédients…', 'Vérification des données…'];
 
 export default function ScanRecipe() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const ConfidenceBadge = ({ confidence }: { confidence: Confidence }) => {
+    if (confidence === 'high') return null;
+    if (confidence === 'low') return <Text style={styles.badgeWarning}>⚠️ à vérifier</Text>;
+    return <Text style={styles.badgeAbsent}>non détecté</Text>;
+  };
+
+  const FieldLabel = ({ label, confidence }: { label: string; confidence: Confidence }) => (
+    <View style={styles.fieldLabelRow}>
+      <Text style={styles.label}>{label}</Text>
+      <ConfidenceBadge confidence={confidence} />
+    </View>
+  );
+
   const router = useRouter();
   const [phase, setPhase] = useState<'capture' | 'analyzing' | 'verify'>('capture');
   const [pages, setPages] = useState<Page[]>([]);
@@ -327,7 +344,7 @@ export default function ScanRecipe() {
   if (phase === 'analyzing') {
     return (
       <SafeAreaView style={styles.center} edges={['top']}>
-        <ActivityIndicator size="large" color={theme.color.brand} />
+        <ActivityIndicator size="large" color={colors.brand} />
         <Text style={styles.analysisText}>{ANALYSIS_MESSAGES[analysisMsgIndex]}</Text>
       </SafeAreaView>
     );
@@ -340,7 +357,7 @@ export default function ScanRecipe() {
           <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }}>
             <View style={styles.headerRow}>
               <Pressable testID="scan-back-to-capture" onPress={() => setPhase('capture')}>
-                <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+                <Feather name="arrow-left" size={22} color={colors.onSurface} />
               </Pressable>
               <Text style={styles.title}>Vérifiez votre recette</Text>
             </View>
@@ -412,14 +429,14 @@ export default function ScanRecipe() {
                   </View>
                 </View>
                 <View style={styles.rowActions}>
-                  <Pressable testID={`scan-ingredient-up-${i}`} onPress={() => moveIngredient(row.id, -1)}><Feather name="chevron-up" size={18} color={theme.color.muted} /></Pressable>
-                  <Pressable testID={`scan-ingredient-down-${i}`} onPress={() => moveIngredient(row.id, 1)}><Feather name="chevron-down" size={18} color={theme.color.muted} /></Pressable>
-                  <Pressable testID={`scan-ingredient-remove-${i}`} onPress={() => removeIngredient(row.id)}><Feather name="trash-2" size={18} color={theme.color.error} /></Pressable>
+                  <Pressable testID={`scan-ingredient-up-${i}`} onPress={() => moveIngredient(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`scan-ingredient-down-${i}`} onPress={() => moveIngredient(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`scan-ingredient-remove-${i}`} onPress={() => removeIngredient(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
                 </View>
               </View>
             ))}
             <Pressable testID="scan-add-ingredient" onPress={addIngredient} style={styles.addBtn}>
-              <Feather name="plus" size={16} color={theme.color.brand} />
+              <Feather name="plus" size={16} color={colors.brand} />
               <Text style={styles.addBtnText}>Ajouter un ingrédient</Text>
             </Pressable>
 
@@ -438,14 +455,14 @@ export default function ScanRecipe() {
                   {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
                 </View>
                 <View style={styles.rowActions}>
-                  <Pressable testID={`scan-step-up-${i}`} onPress={() => moveStep(row.id, -1)}><Feather name="chevron-up" size={18} color={theme.color.muted} /></Pressable>
-                  <Pressable testID={`scan-step-down-${i}`} onPress={() => moveStep(row.id, 1)}><Feather name="chevron-down" size={18} color={theme.color.muted} /></Pressable>
-                  <Pressable testID={`scan-step-remove-${i}`} onPress={() => removeStep(row.id)}><Feather name="trash-2" size={18} color={theme.color.error} /></Pressable>
+                  <Pressable testID={`scan-step-up-${i}`} onPress={() => moveStep(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`scan-step-down-${i}`} onPress={() => moveStep(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`scan-step-remove-${i}`} onPress={() => removeStep(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
                 </View>
               </View>
             ))}
             <Pressable testID="scan-add-step" onPress={addStep} style={styles.addBtn}>
-              <Feather name="plus" size={16} color={theme.color.brand} />
+              <Feather name="plus" size={16} color={colors.brand} />
               <Text style={styles.addBtnText}>Ajouter une étape</Text>
             </Pressable>
 
@@ -473,7 +490,7 @@ export default function ScanRecipe() {
                   {pages.map((p, i) => (
                     <Pressable key={i} testID={`scan-cover-${i}`} onPress={() => setCoverPageIndex(idx => (idx === i ? null : i))} style={styles.coverThumbWrap}>
                       <Image source={{ uri: p.uri }} style={[styles.coverThumb, coverPageIndex === i && styles.coverThumbSelected]} contentFit="cover" />
-                      {coverPageIndex === i && <View style={styles.coverCheck}><Feather name="check" size={14} color="#fff" /></View>}
+                      {coverPageIndex === i && <View style={styles.coverCheck}><Feather name="check" size={14} color={colors.onBrandPrimary} /></View>}
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -483,7 +500,7 @@ export default function ScanRecipe() {
             {submitError && <Text style={styles.error}>{submitError}</Text>}
 
             <Pressable testID="scan-submit" onPress={submit} disabled={submitting} style={[styles.submitBtn, submitting && { opacity: 0.6 }]}>
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Ajouter à mes recettes</Text>}
+              {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.submitBtnText}>Ajouter à mes recettes</Text>}
             </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -496,7 +513,7 @@ export default function ScanRecipe() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerRow}>
         <Pressable testID="scan-close" onPress={() => router.back()}>
-          <Feather name="x" size={22} color={theme.color.onSurface} />
+          <Feather name="x" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Scanner une recette</Text>
       </View>
@@ -509,9 +526,9 @@ export default function ScanRecipe() {
               <View key={i} style={styles.pageThumbWrap} testID={`scan-page-${i}`}>
                 <Image source={{ uri: p.uri }} style={styles.pageThumb} contentFit="cover" />
                 <View style={styles.pageThumbActions}>
-                  <Pressable testID={`scan-page-up-${i}`} onPress={() => movePage(i, -1)} style={styles.pageThumbBtn}><Feather name="chevron-left" size={14} color="#fff" /></Pressable>
-                  <Pressable testID={`scan-page-remove-${i}`} onPress={() => removePage(i)} style={styles.pageThumbBtn}><Feather name="x" size={14} color="#fff" /></Pressable>
-                  <Pressable testID={`scan-page-down-${i}`} onPress={() => movePage(i, 1)} style={styles.pageThumbBtn}><Feather name="chevron-right" size={14} color="#fff" /></Pressable>
+                  <Pressable testID={`scan-page-up-${i}`} onPress={() => movePage(i, -1)} style={styles.pageThumbBtn}><Feather name="chevron-left" size={14} color={colors.onBrandPrimary} /></Pressable>
+                  <Pressable testID={`scan-page-remove-${i}`} onPress={() => removePage(i)} style={styles.pageThumbBtn}><Feather name="x" size={14} color={colors.onBrandPrimary} /></Pressable>
+                  <Pressable testID={`scan-page-down-${i}`} onPress={() => movePage(i, 1)} style={styles.pageThumbBtn}><Feather name="chevron-right" size={14} color={colors.onBrandPrimary} /></Pressable>
                 </View>
               </View>
             ))}
@@ -519,12 +536,12 @@ export default function ScanRecipe() {
         )}
 
         <Pressable testID="scan-take-photo" onPress={() => requestAndPick('camera')} style={styles.actionBtn}>
-          <Feather name="camera" size={20} color="#fff" />
+          <Feather name="camera" size={20} color={colors.onBrandPrimary} />
           <Text style={styles.actionBtnText}>Prendre une photo</Text>
         </Pressable>
         <Pressable testID="scan-pick-library" onPress={() => requestAndPick('library')} style={[styles.actionBtn, styles.actionBtnSecondary]}>
-          <Feather name="image" size={20} color={theme.color.brand} />
-          <Text style={[styles.actionBtnText, { color: theme.color.brand }]}>Choisir depuis la photothèque</Text>
+          <Feather name="image" size={20} color={colors.brand} />
+          <Text style={[styles.actionBtnText, { color: colors.brand }]}>Choisir depuis la photothèque</Text>
         </Pressable>
 
         {captureError && <Text style={styles.error}>{captureError}</Text>}
@@ -542,63 +559,48 @@ export default function ScanRecipe() {
   );
 }
 
-function FieldLabel({ label, confidence }: { label: string; confidence: Confidence }) {
-  return (
-    <View style={styles.fieldLabelRow}>
-      <Text style={styles.label}>{label}</Text>
-      <ConfidenceBadge confidence={confidence} />
-    </View>
-  );
-}
-
-function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
-  if (confidence === 'high') return null;
-  if (confidence === 'low') return <Text style={styles.badgeWarning}>⚠️ à vérifier</Text>;
-  return <Text style={styles.badgeAbsent}>non détecté</Text>;
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface, gap: 16 },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, gap: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
-  title: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
-  subtitle: { fontSize: 14, color: theme.color.onSurfaceSecondary, marginBottom: 20 },
-  analysisText: { fontSize: 16, color: theme.color.onSurface, fontWeight: '500' },
-  label: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600', marginBottom: 6, marginTop: 14 },
+  title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
+  subtitle: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: 20 },
+  analysisText: { fontSize: 16, color: colors.onSurface, fontWeight: '500' },
+  label: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600', marginBottom: 6, marginTop: 14 },
   fieldLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, marginBottom: 6 },
-  sectionTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, marginTop: 28, marginBottom: 8 },
-  statLine: { fontSize: 13, color: theme.color.brand, fontWeight: '600', marginBottom: 10 },
-  input: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface },
+  sectionTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, marginTop: 28, marginBottom: 8 },
+  statLine: { fontSize: 13, color: colors.brand, fontWeight: '600', marginBottom: 10 },
+  input: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.onSurface },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
-  chip: { paddingHorizontal: 14, height: 34, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  chipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
-  chipText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: theme.color.onSurfaceInverse },
+  chip: { paddingHorizontal: 14, height: 34, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  chipTextActive: { color: colors.onSurfaceInverse },
   ingredientRow: { flexDirection: 'row', gap: 10, marginBottom: 12, alignItems: 'flex-start' },
   ingredientTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ingredientBottomRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyInput: { width: 70 },
   unitInput: { width: 60 },
-  percentText: { fontSize: 13, color: theme.color.muted, fontWeight: '600' },
+  percentText: { fontSize: 13, color: colors.muted, fontWeight: '600' },
   stepTextRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  stepNumber: { fontSize: 15, color: theme.color.muted, fontWeight: '600', paddingTop: 12 },
+  stepNumber: { fontSize: 15, color: colors.muted, fontWeight: '600', paddingTop: 12 },
   rowActions: { flexDirection: 'row', gap: 10, paddingTop: 10 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  addBtnText: { fontSize: 14, color: theme.color.brand, fontWeight: '600' },
-  badgeWarning: { fontSize: 11, color: theme.color.warning, fontWeight: '600' },
-  badgeAbsent: { fontSize: 11, color: theme.color.error, fontWeight: '600' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: theme.color.brand, borderRadius: 8, paddingVertical: 16, marginBottom: 12 },
-  actionBtnSecondary: { backgroundColor: theme.color.surfaceSecondary },
-  actionBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  submitBtn: { backgroundColor: theme.color.brand, borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
-  submitBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  error: { color: theme.color.error, fontSize: 13, marginTop: 8 },
+  addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
+  badgeWarning: { fontSize: 11, color: colors.warning, fontWeight: '600' },
+  badgeAbsent: { fontSize: 11, color: colors.error, fontWeight: '600' },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.brand, borderRadius: 8, paddingVertical: 16, marginBottom: 12 },
+  actionBtnSecondary: { backgroundColor: colors.surfaceSecondary },
+  actionBtnText: { fontSize: 15, fontWeight: '600', color: colors.onBrandPrimary },
+  submitBtn: { backgroundColor: colors.brand, borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
+  submitBtnText: { fontSize: 15, fontWeight: '600', color: colors.onBrandPrimary },
+  error: { color: colors.error, fontSize: 13, marginTop: 8 },
   pageThumbWrap: { marginRight: 12, alignItems: 'center' },
-  pageThumb: { width: 100, height: 130, borderRadius: 8, backgroundColor: theme.color.surfaceSecondary },
+  pageThumb: { width: 100, height: 130, borderRadius: 8, backgroundColor: colors.surfaceSecondary },
   pageThumbActions: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  pageThumbBtn: { width: 24, height: 24, borderRadius: 999, backgroundColor: theme.color.surfaceInverse, alignItems: 'center', justifyContent: 'center' },
+  pageThumbBtn: { width: 24, height: 24, borderRadius: 999, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' },
   coverThumbWrap: { marginRight: 12, position: 'relative' },
   coverThumb: { width: 70, height: 90, borderRadius: 6, borderWidth: 2, borderColor: 'transparent' },
-  coverThumbSelected: { borderColor: theme.color.brand },
-  coverCheck: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
+  coverThumbSelected: { borderColor: colors.brand },
+  coverCheck: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
 });

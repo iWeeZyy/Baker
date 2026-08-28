@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,8 @@ import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { formatRelativeDate } from '@/src/relativeDate';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type Creation = {
   id: string; user_id: string; user_name: string; user_picture?: string | null;
@@ -22,6 +23,8 @@ type Creation = {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CreationDetail() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
@@ -72,13 +75,13 @@ export default function CreationDetail() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   if (!data) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
-          <Feather name="alert-circle" size={34} color={theme.color.muted} />
+          <Feather name="alert-circle" size={34} color={colors.muted} />
           <Text style={styles.emptyText}>{error || 'Création introuvable'}</Text>
           <Pressable testID="creation-back" onPress={() => router.back()} style={styles.retryBtn}>
             <Text style={styles.retryText}>Retour</Text>
@@ -105,11 +108,11 @@ export default function CreationDetail() {
           )}
           <SafeAreaView edges={['top']} style={styles.heroTop}>
             <Pressable testID="creation-detail-back" onPress={() => router.back()} style={styles.iconBtn}>
-              <Feather name="arrow-left" size={20} color="#fff" />
+              <Feather name="arrow-left" size={20} color={colors.onBrandPrimary} />
             </Pressable>
             {isOwner && (
               <Pressable testID="creation-menu-btn" onPress={() => setMenuOpen(true)} style={styles.iconBtn}>
-                <Feather name="more-horizontal" size={20} color="#fff" />
+                <Feather name="more-horizontal" size={20} color={colors.onBrandPrimary} />
               </Pressable>
             )}
           </SafeAreaView>
@@ -134,7 +137,7 @@ export default function CreationDetail() {
           {!!data.description && <Text style={styles.description}>{data.description}</Text>}
 
           <Pressable testID="creation-like-btn" onPress={toggleLike} style={styles.likeRow}>
-            <Ionicons name={data.liked ? 'heart' : 'heart-outline'} size={22} color={data.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+            <Ionicons name={data.liked ? 'heart' : 'heart-outline'} size={22} color={data.liked ? colors.error : colors.onSurfaceSecondary} />
             <Text style={styles.likeCount}>{data.like_count}</Text>
           </Pressable>
 
@@ -144,7 +147,7 @@ export default function CreationDetail() {
               <Text style={styles.recipeCardTitle}>{data.recipe.title}</Text>
               <Pressable testID="see-recipe-btn" onPress={() => router.push(`/recipe/${data.recipe!.id}` as any)} style={styles.recipeCardBtn}>
                 <Text style={styles.recipeCardBtnText}>Voir la recette</Text>
-                <Feather name="chevron-right" size={16} color={theme.color.brand} />
+                <Feather name="chevron-right" size={16} color={colors.brand} />
               </Pressable>
             </View>
           )}
@@ -166,30 +169,30 @@ export default function CreationDetail() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  heroWrap: { height: 340, backgroundColor: theme.color.surfaceSecondary },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  heroWrap: { height: 340, backgroundColor: colors.surfaceSecondary },
   heroTop: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: 24, paddingTop: 20 },
-  categoryLabel: { fontSize: 11, letterSpacing: 3, color: theme.color.brand, fontWeight: '600' },
-  title: { fontFamily: theme.serif, fontSize: 28, color: theme.color.onSurface, marginTop: 6 },
+  categoryLabel: { fontSize: 11, letterSpacing: 3, color: colors.brand, fontWeight: '600' },
+  title: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 6 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
-  authorAvatar: { width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  authorAvatarText: { fontSize: 12, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  authorName: { fontSize: 14, color: theme.color.onSurface, fontWeight: '600' },
-  dateText: { fontSize: 13, color: theme.color.muted },
-  description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, marginTop: 18 },
+  authorAvatar: { width: 26, height: 26, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  authorAvatarText: { fontSize: 12, color: colors.onBrandTertiary, fontFamily: theme.serif },
+  authorName: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
+  dateText: { fontSize: 13, color: colors.muted },
+  description: { fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 22, marginTop: 18 },
   likeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22 },
-  likeCount: { fontSize: 16, color: theme.color.onSurface, fontWeight: '600' },
-  recipeCard: { marginTop: 24, backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 16 },
-  recipeCardLabel: { fontSize: 12, color: theme.color.muted, fontWeight: '600' },
-  recipeCardTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 4 },
+  likeCount: { fontSize: 16, color: colors.onSurface, fontWeight: '600' },
+  recipeCard: { marginTop: 24, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 16 },
+  recipeCardLabel: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  recipeCardTitle: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginTop: 4 },
   recipeCardBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12, alignSelf: 'flex-start' },
-  recipeCardBtnText: { color: theme.color.brand, fontWeight: '600', fontSize: 14 },
-  errorText: { color: theme.color.error, fontSize: 13, marginTop: 16 },
-  emptyText: { color: theme.color.muted, marginTop: 12, marginBottom: 16 },
-  retryBtn: { backgroundColor: theme.color.brand, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 4 },
-  retryText: { color: '#fff', fontWeight: '600' },
+  recipeCardBtnText: { color: colors.brand, fontWeight: '600', fontSize: 14 },
+  errorText: { color: colors.error, fontSize: 13, marginTop: 16 },
+  emptyText: { color: colors.muted, marginTop: 12, marginBottom: 16 },
+  retryBtn: { backgroundColor: colors.brand, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 4 },
+  retryText: { color: colors.onBrandPrimary, fontWeight: '600' },
 });

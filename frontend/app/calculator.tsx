@@ -3,9 +3,27 @@ import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoid
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 export default function Calculator() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Row = ({ label, value, onChange, testID }: any) => (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput testID={testID} value={value} onChangeText={onChange} keyboardType="numeric" style={styles.input} placeholderTextColor={colors.muted} />
+    </View>
+  );
+
+  const ResultRow = ({ label, value, strong }: any) => (
+    <View style={styles.resultRow}>
+      <Text style={[styles.resultLabel, strong && { color: colors.onSurface, fontWeight: '600' }]}>{label}</Text>
+      <Text style={[styles.resultValue, strong && { fontSize: 22, color: colors.brand }]}>{value}</Text>
+    </View>
+  );
+
   const router = useRouter();
   const [mode, setMode] = useState<'flour' | 'dough'>('flour');
   const [amount, setAmount] = useState('1000');
@@ -45,7 +63,7 @@ export default function Calculator() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="calc-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Calculateur</Text>
         <View style={{ width: 40 }} />
@@ -71,7 +89,7 @@ export default function Calculator() {
 
           <Pressable testID="toggle-levain" onPress={() => setUseLevain(v => !v)} style={styles.checkRow}>
             <View style={[styles.checkbox, useLevain && styles.checkboxOn]}>
-              {useLevain && <Feather name="check" size={14} color="#fff" />}
+              {useLevain && <Feather name="check" size={14} color={colors.onBrandPrimary} />}
             </View>
             <Text style={styles.checkLabel}>Ajouter du levain</Text>
           </Pressable>
@@ -103,7 +121,7 @@ export default function Calculator() {
               prefillDescription: `Pâte de ${result.dough} g à ${hydration}% d'hydratation, calculée avec la méthode du boulanger.`,
             }});
           }} style={styles.saveRecipeBtn}>
-            <Feather name="bookmark" size={16} color="#fff" />
+            <Feather name="bookmark" size={16} color={colors.onBrandPrimary} />
             <Text style={styles.saveRecipeText}>Enregistrer comme recette</Text>
           </Pressable>
         </ScrollView>
@@ -112,49 +130,31 @@ export default function Calculator() {
   );
 }
 
-function Row({ label, value, onChange, testID }: any) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput testID={testID} value={value} onChangeText={onChange} keyboardType="numeric" style={styles.input} placeholderTextColor={theme.color.muted} />
-    </View>
-  );
-}
-
-function ResultRow({ label, value, strong }: any) {
-  return (
-    <View style={styles.resultRow}>
-      <Text style={[styles.resultLabel, strong && { color: theme.color.onSurface, fontWeight: '600' }]}>{label}</Text>
-      <Text style={[styles.resultValue, strong && { fontSize: 22, color: theme.color.brand }]}>{value}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: theme.serif, fontSize: 24, color: theme.color.onSurface },
+  title: { fontFamily: theme.serif, fontSize: 24, color: colors.onSurface },
   body: { padding: 24, paddingBottom: 60 },
-  intro: { fontSize: 13, color: theme.color.muted, marginBottom: 24, lineHeight: 19 },
-  segment: { flexDirection: 'row', backgroundColor: theme.color.surfaceSecondary, borderRadius: 4, padding: 4, marginBottom: 24 },
+  intro: { fontSize: 13, color: colors.muted, marginBottom: 24, lineHeight: 19 },
+  segment: { flexDirection: 'row', backgroundColor: colors.surfaceSecondary, borderRadius: 4, padding: 4, marginBottom: 24 },
   segBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 4 },
-  segActive: { backgroundColor: theme.color.surface },
-  segText: { fontSize: 13, color: theme.color.muted, fontWeight: '500' },
-  segTextActive: { color: theme.color.onSurface },
+  segActive: { backgroundColor: colors.surface },
+  segText: { fontSize: 13, color: colors.muted, fontWeight: '500' },
+  segTextActive: { color: colors.onSurface },
   field: { marginBottom: 18 },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, marginBottom: 6, fontWeight: '600' },
-  input: { fontSize: 18, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 8, fontFamily: theme.serif },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, marginBottom: 6, fontWeight: '600' },
+  input: { fontSize: 18, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 8, fontFamily: theme.serif },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
-  checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  checkboxOn: { backgroundColor: theme.color.brand, borderColor: theme.color.brand },
-  checkLabel: { fontSize: 15, color: theme.color.onSurface },
-  resultCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 20, marginTop: 12 },
-  resultTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 16 },
+  checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  checkboxOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  checkLabel: { fontSize: 15, color: colors.onSurface },
+  resultCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 20, marginTop: 12 },
+  resultTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 16 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  resultLabel: { fontSize: 15, color: theme.color.onSurfaceSecondary },
-  resultValue: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface },
-  divider: { height: 1, backgroundColor: theme.color.borderStrong, marginVertical: 8 },
-  saveRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 15, borderRadius: 8, marginTop: 20 },
-  saveRecipeText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  resultLabel: { fontSize: 15, color: colors.onSurfaceSecondary },
+  resultValue: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface },
+  divider: { height: 1, backgroundColor: colors.borderStrong, marginVertical: 8 },
+  saveRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 15, borderRadius: 8, marginTop: 20 },
+  saveRecipeText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600' },
 });

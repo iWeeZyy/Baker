@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView,
 } from 'react-native';
@@ -9,7 +9,8 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { syncWidgetData } from '@/src/widgetData';
 import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/bakers-live-activity';
 
@@ -99,6 +100,8 @@ const NEXT_STATUS: Record<Step['status'], Step['status']> = {
 };
 
 export default function ProductionDetail() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -196,14 +199,14 @@ export default function ProductionDetail() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+    return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   }
 
   if (!data) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
-          <Feather name="alert-circle" size={34} color={theme.color.muted} />
+          <Feather name="alert-circle" size={34} color={colors.muted} />
           <Text style={styles.emptyText}>{error || 'Production introuvable'}</Text>
           <Pressable testID="detail-back" onPress={() => router.back()} style={styles.retryBtn}>
             <Text style={styles.retryText}>Retour</Text>
@@ -245,7 +248,7 @@ export default function ProductionDetail() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="detail-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{formatDate(data.date)}</Text>
         <Pressable
@@ -253,7 +256,7 @@ export default function ProductionDetail() {
           onPress={() => router.push({ pathname: '/production/new', params: { id: data.id } } as any)}
           style={styles.iconBtn}
         >
-          <Feather name="edit-2" size={18} color={theme.color.onSurface} />
+          <Feather name="edit-2" size={18} color={colors.onSurface} />
         </Pressable>
       </View>
 
@@ -295,7 +298,7 @@ export default function ProductionDetail() {
 
             {data.lines.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Feather name="book-open" size={32} color={theme.color.muted} />
+                <Feather name="book-open" size={32} color={colors.muted} />
                 <Text style={styles.emptyText}>
                   Aucune recette dans cette production.{'\n'}Modifiez-la pour en ajouter.
                 </Text>
@@ -336,7 +339,7 @@ export default function ProductionDetail() {
           <>
             {data.ingredients.items.length === 0 && data.ingredients.unparsed.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Feather name="shopping-bag" size={32} color={theme.color.muted} />
+                <Feather name="shopping-bag" size={32} color={colors.muted} />
                 <Text style={styles.emptyText}>
                   Aucun ingrédient à totaliser.{'\n'}Les recettes de cette production n'en listent pas.
                 </Text>
@@ -359,7 +362,7 @@ export default function ProductionDetail() {
                     </Text>
                     {data.ingredients.unparsed.map((raw, i) => (
                       <View key={`${raw}-${i}`} style={styles.ingRow}>
-                        <Text style={[styles.ingName, { color: theme.color.muted }]}>{raw}</Text>
+                        <Text style={[styles.ingName, { color: colors.muted }]}>{raw}</Text>
                       </View>
                     ))}
                   </>
@@ -373,7 +376,7 @@ export default function ProductionDetail() {
           <>
             {orderedSteps.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Feather name="list" size={32} color={theme.color.muted} />
+                <Feather name="list" size={32} color={colors.muted} />
                 <Text style={styles.emptyText}>Aucune étape à dérouler.</Text>
               </View>
             ) : (
@@ -398,12 +401,12 @@ export default function ProductionDetail() {
                         ]}
                       >
                         {busyStep === step.step_id ? (
-                          <ActivityIndicator size="small" color={theme.color.brand} />
+                          <ActivityIndicator size="small" color={colors.brand} />
                         ) : (
                           <Feather
                             name={step.status === 'done' ? 'check' : step.status === 'doing' ? 'loader' : 'circle'}
                             size={16}
-                            color={step.status === 'todo' ? theme.color.muted : '#fff'}
+                            color={step.status === 'todo' ? colors.muted : colors.onBrandPrimary}
                           />
                         )}
                       </Pressable>
@@ -419,7 +422,7 @@ export default function ProductionDetail() {
                     <View style={styles.stepMetaRow}>
                       {step.start_at ? (
                         <View style={styles.timePill}>
-                          <Feather name="clock" size={11} color={theme.color.onBrandTertiary} />
+                          <Feather name="clock" size={11} color={colors.onBrandTertiary} />
                           <Text style={styles.timePillText}>
                             {day ? `${day} ` : ''}{clock(step.start_at)}
                             {step.end_at ? ` → ${clock(step.end_at)}` : ''}
@@ -442,7 +445,7 @@ export default function ProductionDetail() {
                         onPress={() => startTimer(step)}
                         style={styles.timerChip}
                       >
-                        <Feather name="clock" size={13} color={theme.color.onBrandTertiary} />
+                        <Feather name="clock" size={13} color={colors.onBrandTertiary} />
                         <Text style={styles.timerChipText}>
                           Lancer le minuteur ({formatMinutes(step.duration_minutes)})
                         </Text>
@@ -461,7 +464,7 @@ export default function ProductionDetail() {
                             onChangeText={v => setDurationDrafts(prev => ({ ...prev, [step.step_id]: v }))}
                             keyboardType="numeric"
                             placeholder="minutes"
-                            placeholderTextColor={theme.color.muted}
+                            placeholderTextColor={colors.muted}
                             style={styles.durationInput}
                           />
                           <Pressable
@@ -485,58 +488,58 @@ export default function ProductionDetail() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, textTransform: 'capitalize' },
+  headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, textTransform: 'capitalize' },
   tabs: { flexDirection: 'row', gap: 6, paddingHorizontal: 24, paddingTop: 14 },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
-  tabOn: { backgroundColor: theme.color.brand },
-  tabText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
-  tabTextOn: { color: '#fff' },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
+  tabOn: { backgroundColor: colors.brand },
+  tabText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
+  tabTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingBottom: 60 },
   statRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  stat: { flex: 1, alignItems: 'center', backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, paddingVertical: 16 },
-  statValue: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
-  statLabel: { fontSize: 10, letterSpacing: 1.6, color: theme.color.muted, fontWeight: '600', marginTop: 4 },
-  sectionLabel: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginTop: 18, marginBottom: 10 },
-  lineCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
-  lineTitle: { fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface },
-  lineMeta: { fontSize: 13, color: theme.color.onSurfaceSecondary, marginTop: 4 },
-  notice: { fontSize: 12, color: theme.color.muted, lineHeight: 17, marginTop: 14 },
-  notes: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 21 },
-  ingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.color.border },
-  ingName: { flex: 1, fontSize: 15, color: theme.color.onSurface },
-  ingQty: { fontFamily: theme.serif, fontSize: 17, color: theme.color.brand },
-  hint: { fontSize: 12, color: theme.color.muted, lineHeight: 17, marginBottom: 6 },
-  stepCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  stat: { flex: 1, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingVertical: 16 },
+  statValue: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
+  statLabel: { fontSize: 10, letterSpacing: 1.6, color: colors.muted, fontWeight: '600', marginTop: 4 },
+  sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginTop: 18, marginBottom: 10 },
+  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  lineTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
+  lineMeta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },
+  notice: { fontSize: 12, color: colors.muted, lineHeight: 17, marginTop: 14 },
+  notes: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21 },
+  ingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.border },
+  ingName: { flex: 1, fontSize: 15, color: colors.onSurface },
+  ingQty: { fontFamily: theme.serif, fontSize: 17, color: colors.brand },
+  hint: { fontSize: 12, color: colors.muted, lineHeight: 17, marginBottom: 6 },
+  stepCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
   stepCardDone: { opacity: 0.6 },
   stepTop: { flexDirection: 'row', gap: 12 },
-  statusBtn: { width: 44, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.color.borderStrong, backgroundColor: theme.color.surface },
-  statusBtnDoing: { backgroundColor: theme.color.warning, borderColor: theme.color.warning },
-  statusBtnDone: { backgroundColor: theme.color.success, borderColor: theme.color.success },
-  stepRecipe: { fontSize: 11, letterSpacing: 1, color: theme.color.muted, fontWeight: '600', textTransform: 'uppercase' },
-  stepText: { fontSize: 14, color: theme.color.onSurface, lineHeight: 20, marginTop: 3 },
-  stepTextDone: { textDecorationLine: 'line-through', color: theme.color.muted },
+  statusBtn: { width: 44, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  statusBtnDoing: { backgroundColor: colors.warning, borderColor: colors.warning },
+  statusBtnDone: { backgroundColor: colors.success, borderColor: colors.success },
+  stepRecipe: { fontSize: 11, letterSpacing: 1, color: colors.muted, fontWeight: '600', textTransform: 'uppercase' },
+  stepText: { fontSize: 14, color: colors.onSurface, lineHeight: 20, marginTop: 3 },
+  stepTextDone: { textDecorationLine: 'line-through', color: colors.muted },
   stepMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, marginLeft: 56 },
-  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
-  timePillText: { fontSize: 11, color: theme.color.onBrandTertiary, fontWeight: '700' },
-  stepDuration: { fontSize: 11, color: theme.color.muted },
-  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999 },
-  timerChipText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '600' },
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+  timePillText: { fontSize: 11, color: colors.onBrandTertiary, fontWeight: '700' },
+  stepDuration: { fontSize: 11, color: colors.muted },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999 },
+  timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
   durationBox: { marginTop: 12, marginLeft: 56 },
-  durationHint: { fontSize: 11, color: theme.color.muted, lineHeight: 16 },
+  durationHint: { fontSize: 11, color: colors.muted, lineHeight: 16 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  durationInput: { flex: 1, fontSize: 15, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 6, paddingVertical: 11, paddingHorizontal: 12 },
-  durationBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 6, backgroundColor: theme.color.brand },
-  durationBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  durationInput: { flex: 1, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 6, paddingVertical: 11, paddingHorizontal: 12 },
+  durationBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 6, backgroundColor: colors.brand },
+  durationBtnText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '700' },
   emptyBox: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 30, marginTop: 50 },
-  emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong },
-  retryText: { fontSize: 14, color: theme.color.onSurface, fontWeight: '600' },
-  error: { color: theme.color.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 12, lineHeight: 18 },
+  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
+  retryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
+  error: { color: colors.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 12, lineHeight: 18 },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 20 },
-  deleteText: { color: theme.color.error, fontSize: 13, fontWeight: '600' },
+  deleteText: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

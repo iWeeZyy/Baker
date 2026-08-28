@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import type { Tip } from '@/src/tips/tipsSearch';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 /**
  * La fiche détaillée d'une astuce. Deux présentations selon la nature du
@@ -13,6 +14,23 @@ import { theme } from '@/src/theme';
  * pour le reste — jamais une section vide affichée pour le principe.
  */
 export default function TipDetail() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Section = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {children}
+    </View>
+  );
+
+  const BulletRow = ({ text }: { text: string }) => (
+    <View style={styles.bulletRow}>
+      <View style={styles.dot} />
+      <Text style={styles.bulletText}>{text}</Text>
+    </View>
+  );
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [tip, setTip] = useState<Tip | null>(null);
@@ -48,19 +66,19 @@ export default function TipDetail() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   if (notFound || !tip) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <Pressable testID="tip-back" onPress={() => router.back()} style={styles.iconBtn}>
-            <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+            <Feather name="arrow-left" size={22} color={colors.onSurface} />
           </Pressable>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.center}>
-          <Feather name="alert-circle" size={34} color={theme.color.muted} />
+          <Feather name="alert-circle" size={34} color={colors.muted} />
           <Text style={styles.emptyText}>Astuce introuvable.</Text>
         </View>
       </SafeAreaView>
@@ -71,11 +89,11 @@ export default function TipDetail() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="tip-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Pressable testID="tip-favorite" onPress={toggleFavorite} style={styles.favHeaderBtn}>
-          <Feather name="star" size={18} color={favorited ? theme.color.brandSecondary : theme.color.onSurface} />
-          <Text style={[styles.favHeaderText, favorited && { color: theme.color.brandSecondary }]}>
+          <Feather name="star" size={18} color={favorited ? colors.brandSecondary : colors.onSurface} />
+          <Text style={[styles.favHeaderText, favorited && { color: colors.brandSecondary }]}>
             {favorited ? 'Favori' : 'Ajouter aux favoris'}
           </Text>
         </Pressable>
@@ -83,7 +101,7 @@ export default function TipDetail() {
 
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.iconCircle}>
-          <Feather name={(tip.icon as any) || 'star'} size={26} color={theme.color.brand} />
+          <Feather name={(tip.icon as any) || 'star'} size={26} color={colors.brand} />
         </View>
         <Text style={styles.category}>{tip.category.toUpperCase()}</Text>
         <Text style={styles.title}>{tip.title}</Text>
@@ -126,44 +144,26 @@ export default function TipDetail() {
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-function BulletRow({ text }: { text: string }) {
-  return (
-    <View style={styles.bulletRow}>
-      <View style={styles.dot} />
-      <Text style={styles.bulletText}>{text}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface, gap: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   favHeaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 40 },
-  favHeaderText: { fontSize: 13, fontWeight: '600', color: theme.color.onSurface },
-  emptyText: { fontSize: 14, color: theme.color.muted },
+  favHeaderText: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
+  emptyText: { fontSize: 14, color: colors.muted },
   body: { padding: 24, paddingBottom: 60, alignItems: 'center' },
-  iconCircle: { width: 64, height: 64, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  category: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  title: { fontFamily: theme.serif, fontSize: 26, color: theme.color.onSurface, textAlign: 'center', marginTop: 8, lineHeight: 32 },
+  iconCircle: { width: 64, height: 64, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  category: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
+  title: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface, textAlign: 'center', marginTop: 8, lineHeight: 32 },
   section: { width: '100%', marginTop: 28 },
-  sectionLabel: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: 10 },
-  paragraph: { fontSize: 15, color: theme.color.onSurface, lineHeight: 23 },
+  sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: 10 },
+  paragraph: { fontSize: 15, color: colors.onSurface, lineHeight: 23 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.color.brand, marginTop: 7 },
-  bulletText: { flex: 1, fontSize: 15, color: theme.color.onSurface, lineHeight: 21 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand, marginTop: 7 },
+  bulletText: { flex: 1, fontSize: 15, color: colors.onSurface, lineHeight: 21 },
   keywordRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  keywordPill: { backgroundColor: theme.color.surfaceSecondary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
-  keywordText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  source: { width: '100%', marginTop: 32, fontSize: 12, color: theme.color.muted, fontStyle: 'italic', textAlign: 'center' },
+  keywordPill: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  keywordText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  source: { width: '100%', marginTop: 32, fontSize: 12, color: colors.muted, fontStyle: 'italic', textAlign: 'center' },
 });
