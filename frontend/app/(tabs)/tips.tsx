@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -52,6 +52,7 @@ export default function Tips() {
   const [tips, setTips] = useState<Tip[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Toutes');
@@ -71,6 +72,7 @@ export default function Tips() {
       setError(e.message || 'Impossible de charger les astuces');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -189,6 +191,7 @@ export default function Tips() {
           data={shown}
           keyExtractor={t => t.id}
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 40, gap: 12 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
           renderItem={({ item }) => (
             <TipCard tip={item} favorited={favoriteIds.has(item.id)} onToggleFavorite={() => toggleFavorite(item)} onPress={() => router.push(`/tip/${item.id}`)} />
           )}

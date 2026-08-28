@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
@@ -22,14 +22,22 @@ export default function Assistant() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    api('/chat/history').then((h: any[]) => {
-      setMessages(h.map(m => ({ role: m.role, content: m.content })));
+  const loadHistory = useCallback(async () => {
+    try {
+      const h = await api('/chat/history');
+      setMessages(h.map((m: any) => ({ role: m.role, content: m.content })));
+    } catch {
+      // Le rafraîchissement a échoué : on garde l'historique déjà affiché.
+    } finally {
       setHistoryLoaded(true);
-    }).catch(() => setHistoryLoaded(true));
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
@@ -59,7 +67,12 @@ export default function Assistant() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={80}>
-        <ScrollView ref={scrollRef} contentContainerStyle={styles.chatBody} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.chatBody}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadHistory(); }} tintColor={colors.brand} />}
+        >
           {!historyLoaded ? (
             <ActivityIndicator color={colors.brand} />
           ) : messages.length === 0 ? (

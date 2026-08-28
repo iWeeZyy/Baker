@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -42,6 +42,7 @@ export default function Friends() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const debounceRef = useRef<any>(null);
 
@@ -50,7 +51,7 @@ export default function Friends() {
       const [r, f] = await Promise.all([api('/friends/requests'), api('/friends')]);
       setRequests(r); setFriends(f);
     } catch (e) { console.warn(e); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -138,7 +139,11 @@ export default function Friends() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
+      >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>LE FOURNIL</Text>
           <Text style={styles.title}>Amis</Text>

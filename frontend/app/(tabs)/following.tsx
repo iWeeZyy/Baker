@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -55,12 +55,13 @@ export default function Following() {
 
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [followingCount, setFollowingCount] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
       const [feed, profile] = await Promise.all([
         api('/feed'),
@@ -70,7 +71,7 @@ export default function Following() {
       setHasMore(feed.has_more);
       if (profile) setFollowingCount(profile.following_count);
     } catch (e) { console.warn(e); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); }
   }, [user]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -104,34 +105,36 @@ export default function Following() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
-      ) : items.length === 0 ? (
-        followingCount === 0 ? (
-          <View style={styles.emptyBox}>
-            <Feather name="rss" size={40} color={colors.muted} />
-            <Text style={styles.emptyTitle}>Votre fil est vide</Text>
-            <Text style={styles.emptySubtitle}>
-              Suivez des boulangers et créateurs pour retrouver leurs nouvelles recettes et créations ici.
-            </Text>
-            <Pressable testID="discover-profiles-btn" onPress={() => router.push('/(tabs)/friends' as any)} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>Découvrir des profils</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.emptyBox}>
-            <Feather name="check-circle" size={40} color={colors.muted} />
-            <Text style={styles.emptyTitle}>Aucune nouvelle publication</Text>
-            <Text style={styles.emptySubtitle}>Vous êtes à jour !</Text>
-          </View>
-        )
       ) : (
         <FlatList
           style={{ flex: 1 }}
           data={items}
           keyExtractor={item => `${item.kind}-${item.id}`}
-          contentContainerStyle={{ padding: 24, paddingTop: 16, gap: 20, paddingBottom: 40 }}
+          contentContainerStyle={items.length === 0 ? { flex: 1 } : { padding: 24, paddingTop: 16, gap: 20, paddingBottom: 40 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={colors.brand} />}
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} /> : null}
+          ListEmptyComponent={
+            followingCount === 0 ? (
+              <View style={styles.emptyBox}>
+                <Feather name="rss" size={40} color={colors.muted} />
+                <Text style={styles.emptyTitle}>Votre fil est vide</Text>
+                <Text style={styles.emptySubtitle}>
+                  Suivez des boulangers et créateurs pour retrouver leurs nouvelles recettes et créations ici.
+                </Text>
+                <Pressable testID="discover-profiles-btn" onPress={() => router.push('/(tabs)/friends' as any)} style={styles.emptyBtn}>
+                  <Text style={styles.emptyBtnText}>Découvrir des profils</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.emptyBox}>
+                <Feather name="check-circle" size={40} color={colors.muted} />
+                <Text style={styles.emptyTitle}>Aucune nouvelle publication</Text>
+                <Text style={styles.emptySubtitle}>Vous êtes à jour !</Text>
+              </View>
+            )
+          }
           renderItem={({ item }) => (
             <View style={styles.card} testID={`feed-item-${item.kind}-${item.id}`}>
               <Pressable testID={`feed-author-${item.id}`} onPress={() => router.push(`/baker/${item.author_id}` as any)} style={styles.authorRow}>

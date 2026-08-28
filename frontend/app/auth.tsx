@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/src/auth';
-import { FAMILY_TILES } from '@/src/families';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -38,11 +37,10 @@ export default function AuthScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
-          {/* Un dessin embarqué plutôt qu'une photo distante : c'est le premier
-              écran de l'application, et il s'affichait jusqu'ici depuis une URL
-              Unsplash codée en dur, dont la licence n'avait jamais été vérifiée
-              et qui laissait un fond vide hors ligne. */}
-          <Image source={FAMILY_TILES['pains-classiques']} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          {/* Une vraie photo de four, fournie par Lucas, plutôt que le dessin
+              d'archétype qui servait de repli ici — c'est le premier écran de
+              l'application. */}
+          <Image source={require('../assets/images/auth-hero.jpg')} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={['transparent', 'rgba(42,31,26,0.85)']} style={StyleSheet.absoluteFillObject} />
           <View style={styles.heroContent}>
             <Text style={styles.brandLabel}>BAKERS</Text>
