@@ -268,7 +268,7 @@ export default function Profile() {
             )}
           </Pressable>
           <View style={styles.headerActions}>
-            <Pressable testID="notifications-btn" onPress={() => router.push('/notifications' as any)} style={styles.logoutBtn}>
+            <Pressable testID="notifications-btn" onPress={() => router.push('/messagerie?tab=activity' as any)} style={styles.logoutBtn}>
               <Feather name="bell" size={18} color={colors.onSurfaceSecondary} />
               {unreadCount > 0 && (
                 <View style={styles.notifBadge} testID="notifications-badge">

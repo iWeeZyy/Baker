@@ -10,7 +10,9 @@ type Props = {
   ref?: React.RefObject<SwipeableMethods | null>;
   editLabel?: string;
   deleteLabel?: string;
-  onEdit: () => void;
+  // Absent = pas d'action Modifier — une ligne sans équivalent "éditer"
+  // (une conversation, par exemple) n'affiche alors que Supprimer.
+  onEdit?: () => void;
   onDelete: () => void;
   onSwipeableWillOpen?: () => void;
   onSwipeableClose?: () => void;
@@ -45,10 +47,12 @@ export function SwipeableRow({
             <Feather name="trash-2" size={17} color={colors.onBrandPrimary} />
             <Text style={styles.actionText}>{deleteLabel}</Text>
           </Pressable>
-          <Pressable testID="swipe-action-edit" onPress={onEdit} style={[styles.action, styles.editAction]}>
-            <Feather name="edit-2" size={17} color={colors.onBrandPrimary} />
-            <Text style={styles.actionText}>{editLabel}</Text>
-          </Pressable>
+          {onEdit && (
+            <Pressable testID="swipe-action-edit" onPress={onEdit} style={[styles.action, styles.editAction]}>
+              <Feather name="edit-2" size={17} color={colors.onBrandPrimary} />
+              <Text style={styles.actionText}>{editLabel}</Text>
+            </Pressable>
+          )}
         </>
       )}
     >

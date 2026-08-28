@@ -83,6 +83,22 @@ export default function BakerProfile() {
     }
   };
 
+  const toggleBlock = async () => {
+    const confirmMsg = blocked_by_me
+      ? null
+      : `${data?.user?.name || 'Cette personne'} ne pourra plus vous envoyer de message, de demande d'ami ou d'invitation Team.`;
+    if (confirmMsg) {
+      const ok = await confirmAsync('Bloquer cet utilisateur', confirmMsg, 'Bloquer', true);
+      if (!ok) return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await api(`/users/${id}/block`, { method: 'POST' });
+      setData((d: any) => ({ ...d, blocked_by_me: res.blocked, can_message: res.blocked ? false : d.can_message }));
+    } catch (e) { console.warn(e); }
+    finally { setActionLoading(false); }
+  };
+
   const handleFollowPress = async () => {
     if (data.following) {
       const ok = await confirmAsync(
@@ -108,7 +124,7 @@ export default function BakerProfile() {
 
   const {
     user, recipes, recipe_count, total_likes, comment_count, friend_status, creations, team_count, team_visible,
-    following, follower_count, following_count,
+    following, follower_count, following_count, can_message, blocked_by_me,
   } = data;
   const initial = (user.name || '?').slice(0, 1).toUpperCase();
   const memberSince = user.created_at ? new Date(user.created_at.endsWith?.('Z') || user.created_at.includes?.('+') ? user.created_at : user.created_at + 'Z').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
@@ -134,6 +150,19 @@ export default function BakerProfile() {
       <Pressable testID="follow-btn" onPress={handleFollowPress} style={styles.actionBtn}>
         <Feather name="user-plus" size={16} color={colors.onBrandPrimary} />
         <Text style={styles.actionText}>Suivre</Text>
+      </Pressable>
+    );
+  };
+
+  // Bouton de message autonome, pour l'éligibilité élargie (un abonné peut
+  // désormais écrire sans être ami) — le cas "ami" garde son propre bouton
+  // dans FriendAction ci-dessous pour ne jamais en afficher deux à la fois.
+  const MessageAction = () => {
+    if (friend_status === 'me' || friend_status === 'friends' || !can_message) return null;
+    return (
+      <Pressable testID="message-btn-follow" onPress={() => router.push({ pathname: `/chat/${user.user_id}` as any, params: { name: user.name } })} style={styles.actionBtn}>
+        <Feather name="message-circle" size={16} color={colors.onBrandPrimary} />
+        <Text style={styles.actionText}>Envoyer un message</Text>
       </Pressable>
     );
   };
@@ -241,6 +270,12 @@ export default function BakerProfile() {
             <View style={styles.actionsColumn}>
               <FollowAction />
               <FriendAction />
+              <MessageAction />
+              {friend_status !== 'me' && (
+                <Pressable testID="block-btn" onPress={toggleBlock} disabled={actionLoading} style={styles.removeFriendBtn}>
+                  <Text style={styles.removeFriendText}>{blocked_by_me ? 'Débloquer cet utilisateur' : 'Bloquer cet utilisateur'}</Text>
+                </Pressable>
+              )}
             </View>
 
             {creations?.length > 0 && (

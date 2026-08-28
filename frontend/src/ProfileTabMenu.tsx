@@ -22,7 +22,15 @@ import { useTheme } from '@/src/ThemeContext';
 
 const TAB_BAR_HEIGHT = 82;
 
-type MenuItem = { key: string; label: string; icon: keyof typeof Feather.glyphMap; route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement'; showBadge?: boolean };
+type MenuItem = {
+  key: string; label: string; icon: keyof typeof Feather.glyphMap;
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie';
+  showBadge?: boolean;
+  // Pastille numérique (Amis, Messagerie) — différente du simple point
+  // showBadge, réutilise le style déjà existant du badge de la cloche
+  // notifications sur profile.tsx, jamais un composant inventé pour l'occasion.
+  badgeCount?: number;
+};
 
 export function ProfileTabButton() {
   const { colors } = useTheme();
@@ -30,29 +38,36 @@ export function ProfileTabButton() {
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [messagerieBadge, setMessagerieBadge] = useState(0);
+  const [friendsBadge, setFriendsBadge] = useState(0);
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
-  // Groupe actif : Profil doit rester mis en avant quand on est sur Amis ou
-  // Abonnements aussi, pour que l'utilisateur comprenne que ces pages en
-  // dépendent — comparaison stricte, pas startsWith, pour ne matcher que
-  // ces trois routes précises.
-  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following' || pathname === '/classement';
+  // Groupe actif : Profil doit rester mis en avant quand on est sur Amis,
+  // Abonnements, Classement ou Messagerie aussi, pour que l'utilisateur
+  // comprenne que ces pages en dépendent — comparaison stricte, pas
+  // startsWith, pour ne matcher que ces routes précises.
+  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following' || pathname === '/classement' || pathname === '/messagerie';
 
-  const loadUnreadCount = () => {
-    api('/notifications/unread-count').then(r => setUnreadCount(r.count)).catch(() => {});
+  const loadBadges = () => {
+    // Un seul appel pour les deux compteurs de Messagerie (conversations +
+    // activité) — jamais deux requêtes séparées pour un menu fermé, même
+    // esprit que le commentaire déjà écrit ci-dessous sur le montage unique.
+    api('/messagerie/badge-count').then(r => setMessagerieBadge((r.conversations_unread || 0) + (r.activity_unread || 0))).catch(() => {});
+    // Réutilise l'endpoint déjà existant de la liste des demandes en
+    // attente — pas de route dédiée juste pour un compteur.
+    api('/friends/requests').then(r => setFriendsBadge(Array.isArray(r) ? r.length : 0)).catch(() => {});
   };
 
   // Une seule fois au montage : la barre d'onglets reste montée pendant
   // toute la session, un polling permanent ici serait le genre de charge
   // superflue que la demande écarte explicitement (menu fermé = rien de
   // lourd chargé). Le ré-chargement à l'ouverture (ci-dessous) suffit à
-  // garder la pastille raisonnablement à jour.
-  useEffect(() => { loadUnreadCount(); }, []);
+  // garder les pastilles raisonnablement à jour.
+  useEffect(() => { loadBadges(); }, []);
 
   const openMenu = () => {
-    loadUnreadCount();
+    loadBadges();
     setMenuOpen(true);
     scale.setValue(0.9);
     opacity.setValue(0);
@@ -68,12 +83,18 @@ export function ProfileTabButton() {
 
   const items: MenuItem[] = [
     { key: 'profile', label: 'Profil', icon: 'user', route: '/(tabs)/profile' },
-    { key: 'friends', label: 'Amis', icon: 'users', route: '/(tabs)/friends' },
-    { key: 'following', label: 'Abonnements', icon: 'rss', route: '/(tabs)/following', showBadge: unreadCount > 0 },
+    { key: 'friends', label: 'Amis', icon: 'users', route: '/(tabs)/friends', badgeCount: friendsBadge },
+    // Le point qui vivait ici (nouveaux abonnés/recettes/créations, via
+    // /notifications/unread-count) est retiré : ce même signal fait
+    // désormais partie du compteur Messagerie ci-dessous — deux pastilles
+    // pour la même information serait exactement le genre de doublon
+    // visuel que la demande écarte explicitement.
+    { key: 'following', label: 'Abonnements', icon: 'rss', route: '/(tabs)/following' },
     // "award" est déjà l'icône du badge "coup de cœur" (contenu le plus
     // aimé) ailleurs dans l'app — cohérent avec un classement, pas une
     // icône inventée pour l'occasion.
     { key: 'classement', label: 'Classement', icon: 'award', route: '/classement' },
+    { key: 'messagerie', label: 'Messagerie', icon: 'message-circle', route: '/messagerie', badgeCount: messagerieBadge },
   ];
 
   const select = (item: MenuItem) => {
@@ -81,12 +102,14 @@ export function ProfileTabButton() {
     router.push(item.route as any);
   };
 
+  const hasAnyBadge = messagerieBadge > 0 || friendsBadge > 0;
+
   return (
     <>
       <Pressable testID="profile-tab-button" onPress={toggleMenu} style={styles.tabButton}>
         <View style={styles.iconWrap}>
           <Feather name="user" size={20} color={active ? colors.brand : colors.muted} />
-          {unreadCount > 0 && <View style={styles.tabDot} />}
+          {hasAnyBadge && <View style={styles.tabDot} />}
         </View>
         <Text style={[styles.tabLabel, { color: active ? colors.brand : colors.muted }]}>
           {`Profil ${menuOpen ? '▴' : '▾'}`}
@@ -108,6 +131,11 @@ export function ProfileTabButton() {
                   <Feather name={item.icon} size={18} color={itemActive ? colors.brand : colors.onSurface} />
                   <Text style={[styles.rowText, itemActive && { color: colors.brand, fontWeight: '600' }]}>{item.label}</Text>
                   {item.showBadge && <View style={styles.rowDot} />}
+                  {!!item.badgeCount && (
+                    <View style={styles.rowCountBadge} testID={`profile-menu-badge-${item.key}`}>
+                      <Text style={styles.rowCountBadgeText}>{item.badgeCount > 9 ? '9+' : item.badgeCount}</Text>
+                    </View>
+                  )}
                 </Pressable>
               );
             })}
@@ -134,4 +162,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   rowText: { flex: 1, fontFamily: theme.serif, fontSize: 15, color: colors.onSurface },
   rowDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: colors.brand },
+  rowCountBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  rowCountBadgeText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
 });
