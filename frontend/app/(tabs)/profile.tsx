@@ -46,12 +46,13 @@ export default function Profile() {
   const [instagramDraft, setInstagramDraft] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [creations, setCreations] = useState<{ id: string; title: string; category: string; photos: string[]; like_count: number }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, f] = await Promise.all([api('/recipes/mine'), api('/recipes/favorites')]);
-      setMine(m); setFavs(f);
+      const [m, f, c] = await Promise.all([api('/recipes/mine'), api('/recipes/favorites'), api('/creations/mine')]);
+      setMine(m); setFavs(f); setCreations(c);
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
   }, []);
@@ -276,6 +277,42 @@ export default function Profile() {
           </View>
         )}
 
+        {!editingProfile && (
+          <View style={styles.creationsSection}>
+            <View style={styles.creationsHeaderRow}>
+              <Text style={styles.creationsTitle}>Mes créations</Text>
+              {creations.length > 0 && (
+                creations.length > 6 ? (
+                  <Pressable testID="see-all-creations" onPress={() => router.push(`/creations/${user?.user_id}` as any)}>
+                    <Text style={styles.creationsSeeAll}>Voir tout ({creations.length})</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable testID="add-creation-link" onPress={() => router.push('/creation/new' as any)}>
+                    <Text style={styles.creationsSeeAll}>+ Ajouter</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+            {creations.length === 0 ? (
+              <View style={styles.creationsEmpty}>
+                <Text style={styles.creationsEmptyText}>Partagez vos réalisations avec la communauté.</Text>
+                <Pressable testID="empty-add-creation-btn" onPress={() => router.push('/creation/new' as any)} style={styles.addCreationBtn}>
+                  <Feather name="plus" size={14} color="#fff" />
+                  <Text style={styles.addCreationBtnText}>Ajouter une création</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.creationsGrid}>
+                {creations.slice(0, 6).map(c => (
+                  <Pressable key={c.id} testID={`creation-tile-${c.id}`} onPress={() => router.push(`/creation/${c.id}` as any)} style={styles.creationTile}>
+                    <Image source={{ uri: `${API_BASE}/files/${c.photos[0]}` }} style={styles.creationTileImage} contentFit="cover" />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={styles.tabs}>
           <Pressable testID="tab-mine" onPress={() => setTab('mine')} style={[styles.tab, tab === 'mine' && styles.tabActive]}>
             <Text style={[styles.tabText, tab === 'mine' && styles.tabTextActive]}>Mes recettes</Text>
@@ -458,6 +495,17 @@ const styles = StyleSheet.create({
   editCancelText: { fontSize: 14, color: theme.color.muted, fontWeight: '600' },
   editSaveBtn: { backgroundColor: theme.color.brand, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
   editSaveText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  creationsSection: { marginTop: 20 },
+  creationsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  creationsTitle: { fontSize: 13, letterSpacing: 1, color: theme.color.onSurface, fontWeight: '700' },
+  creationsSeeAll: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.color.surfaceSecondary },
+  creationTileImage: { width: '100%', height: '100%' },
+  creationsEmpty: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 20, alignItems: 'center', gap: 12 },
+  creationsEmptyText: { fontSize: 13, color: theme.color.muted, textAlign: 'center' },
+  addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
+  addCreationBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   previewCard: { backgroundColor: theme.color.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
   previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, marginBottom: 20 },
