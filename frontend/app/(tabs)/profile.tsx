@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform, TextInput, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -38,6 +38,7 @@ export default function Profile() {
   const [mine, setMine] = useState<any[]>([]);
   const [favs, setFavs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -60,8 +61,8 @@ export default function Profile() {
   const [stats, setStats] = useState({ recipe_count: 0, comment_count: 0, total_likes: 0, follower_count: 0, following_count: 0 });
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
       const [m, f, c, p] = await Promise.all([
         api('/recipes/mine'), api('/recipes/favorites'), api('/creations/mine'),
@@ -132,6 +133,13 @@ export default function Profile() {
       setCommentsHasMore(res.has_more);
     } catch (e) { console.warn(e); }
     finally { setCommentsLoadingMore(false); }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    const tasks: Promise<any>[] = [load(true), loadTeam(), loadUnreadCount()];
+    if (tab === 'comments') tasks.push(loadComments());
+    Promise.all(tasks).finally(() => setRefreshing(false));
   };
 
   const items = tab === 'favorites' ? favs : mine;
@@ -539,6 +547,7 @@ export default function Profile() {
             data={myComments}
             keyExtractor={c => c.id}
             contentContainerStyle={{ gap: 16, padding: 24, paddingBottom: 40 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
             renderItem={({ item }) => {
               const isReply = !!item.parent_id;
               return (
@@ -595,6 +604,7 @@ export default function Profile() {
           numColumns={2}
           columnWrapperStyle={{ gap: 16, paddingHorizontal: 24 }}
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
           renderItem={({ item }) => (
             <Pressable testID={`profile-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.card}>
               <Image source={recipeImageSource(item, API_BASE)} style={styles.cardImage} contentFit="cover" />

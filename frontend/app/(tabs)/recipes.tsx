@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -29,12 +29,18 @@ export default function Recipes() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [category, setCategory] = useState('Tous');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    api('/families').then(setFamilies).catch(console.warn).finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      setFamilies(await api('/families'));
+    } catch (e) { console.warn(e); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const categories = useMemo(() => {
     const present = new Set(families.map(f => f.category));
@@ -95,6 +101,7 @@ export default function Recipes() {
           data={rows}
           keyExtractor={(row) => row.map(f => f.key).join('+')}
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
           renderItem={({ item: row }) => (
             <View style={styles.gridRow}>
               {row.map(family => (

@@ -3,9 +3,10 @@
  * compte (donc jamais réinitialisée à la déconnexion), persistée avec le
  * même patron que src/revealedPhotos.ts : cache en mémoire, écriture
  * optimiste, échec de lecture/écriture silencieusement absorbé et retombant
- * sur 'system'. Le mode "Système" s'appuie sur useColorScheme() de
- * react-native, déjà réactif à un changement d'apparence iOS sans code
- * supplémentaire.
+ * sur 'light' (défaut choisi plutôt que 'system' pour un premier lancement
+ * prévisible). Le mode "Système" reste un choix explicite disponible dans
+ * Réglages et s'appuie sur useColorScheme() de react-native, déjà réactif
+ * à un changement d'apparence iOS sans code supplémentaire.
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
@@ -27,7 +28,7 @@ type ThemeCtx = {
 const Ctx = createContext<ThemeCtx>({
   colors: LIGHT_COLORS,
   mode: 'light',
-  preference: 'system',
+  preference: 'light',
   setPreference: () => {},
 });
 
@@ -35,7 +36,7 @@ export const useTheme = () => useContext(Ctx);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
-  const [preference, setPreferenceState] = useState<ThemePreference>('system');
+  const [preference, setPreferenceState] = useState<ThemePreference>('light');
 
   useEffect(() => {
     (async () => {
@@ -43,7 +44,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         const raw = await AsyncStorage.getItem(KEY);
         if (raw === 'light' || raw === 'dark' || raw === 'system') setPreferenceState(raw);
       } catch {
-        // Reste sur 'system' par défaut.
+        // Reste sur 'light' par défaut.
       }
     })();
   }, []);

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -50,6 +50,7 @@ export default function Planning() {
   const [productions, setProductions] = useState<ProductionRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -62,6 +63,7 @@ export default function Planning() {
       setError(e.message || 'Impossible de charger le planning');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -186,7 +188,10 @@ export default function Planning() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); reloadPlan(); }} tintColor={colors.brand} />}
+      >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>LE FOURNIL</Text>
           <Text style={styles.title}>Planning</Text>
