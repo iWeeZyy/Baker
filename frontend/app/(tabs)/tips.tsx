@@ -185,6 +185,7 @@ export default function Tips() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={shown}
           keyExtractor={t => t.id}
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 40, gap: 12 }}

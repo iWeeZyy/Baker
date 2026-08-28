@@ -114,6 +114,7 @@ export default function BakerProfile() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <FlatList
+        style={{ flex: 1 }}
         data={recipes}
         keyExtractor={(r) => r.id}
         numColumns={2}

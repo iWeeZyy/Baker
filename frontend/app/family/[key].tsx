@@ -75,6 +75,7 @@ export default function FamilyScreen() {
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={rows}
           keyExtractor={(row) => row.key}
           contentContainerStyle={{ paddingBottom: 40 }}

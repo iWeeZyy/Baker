@@ -481,6 +481,7 @@ export default function Profile() {
           <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
         ) : (
           <FlatList
+            style={{ flex: 1 }}
             data={myComments}
             keyExtractor={c => c.id}
             contentContainerStyle={{ gap: 16, padding: 24, paddingBottom: 40 }}
@@ -534,6 +535,7 @@ export default function Profile() {
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={items}
           keyExtractor={r => r.id}
           numColumns={2}

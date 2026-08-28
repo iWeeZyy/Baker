@@ -126,6 +126,7 @@ export default function TeamList() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={members}
           keyExtractor={m => m.user_id}
           contentContainerStyle={{ paddingBottom: 40 }}

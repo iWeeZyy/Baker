@@ -288,6 +288,7 @@ export default function Chat() {
           <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
         ) : (
           <FlatList
+            style={{ flex: 1 }}
             ref={listRef}
             data={messages}
             keyExtractor={m => m.id}
