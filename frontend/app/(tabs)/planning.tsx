@@ -1,12 +1,18 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useAuth } from '@/src/auth';
+import { confirmAsync } from '@/src/confirm';
 import { usePlan } from '@/src/plan';
 import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
+import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme } from '@/src/theme';
+import { endBakeActivity } from '@/modules/bakers-live-activity';
+import { syncWidgetData } from '@/src/widgetData';
 
 type ProductionRow = {
   id: string;
@@ -35,6 +41,7 @@ type Mode = 'production' | 'staff';
 
 export default function Planning() {
   const router = useRouter();
+  const { user } = useAuth();
   const { plan, reload: reloadPlan } = usePlan();
   const [mode, setMode] = useState<Mode>('production');
   const [productions, setProductions] = useState<ProductionRow[]>([]);
@@ -61,46 +68,116 @@ export default function Planning() {
   const upcoming = productions.filter(p => p.date >= today);
   const past = productions.filter(p => p.date < today);
 
+  /**
+   * Le swipe est une deuxième porte d'entrée vers les mêmes actions Modifier/
+   * Supprimer que l'écran de détail (bouton crayon, "Supprimer cette
+   * production"/"cet emploi du temps") — jamais une deuxième logique. Une
+   * seule ligne ouverte à la fois : ouvrir une ligne referme la précédente ;
+   * taper sur une ligne pendant qu'une autre est ouverte la referme sans
+   * naviguer (comme Mail), le tap normal (fermé) navigue exactement comme
+   * avant.
+   */
+  const swipeRefs = useRef<Map<string, React.RefObject<SwipeableMethods | null>>>(new Map());
+  const openRowId = useRef<string | null>(null);
+
+  const getSwipeRef = (id: string): React.RefObject<SwipeableMethods | null> => {
+    let ref = swipeRefs.current.get(id);
+    if (!ref) {
+      ref = { current: null };
+      swipeRefs.current.set(id, ref);
+    }
+    return ref;
+  };
+
+  const closeOpenRow = () => {
+    if (!openRowId.current) return;
+    swipeRefs.current.get(openRowId.current)?.current?.close();
+    openRowId.current = null;
+  };
+
+  const handleRowPress = (navigate: () => void) => {
+    if (openRowId.current) {
+      closeOpenRow();
+      return;
+    }
+    navigate();
+  };
+
+  const deleteProduction = async (id: string) => {
+    const ok = await confirmAsync('Supprimer cette production', 'Cette action est définitive.', 'Supprimer', true);
+    if (!ok) return;
+    try {
+      await api(`/productions/${id}`, { method: 'DELETE' });
+      endBakeActivity();
+      if (user) syncWidgetData(user.user_id);
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Suppression impossible');
+    }
+  };
+
+  const deleteSchedule = async (id: string) => {
+    const ok = await confirmAsync('Supprimer cet emploi du temps', 'Cette action est définitive.', 'Supprimer', true);
+    if (!ok) return;
+    try {
+      await api(`/schedules/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Suppression impossible');
+    }
+  };
+
   const Card = ({ p }: { p: ProductionRow }) => {
     const progress = p.steps_total ? Math.round((p.steps_done / p.steps_total) * 100) : 0;
     return (
-      <Pressable
-        testID={`production-${p.id}`}
-        onPress={() => router.push(`/production/${p.id}` as any)}
-        style={styles.card}
+      <SwipeableRow
+        ref={getSwipeRef(p.id)}
+        onSwipeableWillOpen={() => {
+          if (openRowId.current && openRowId.current !== p.id) getSwipeRef(openRowId.current).current?.close();
+          openRowId.current = p.id;
+        }}
+        onSwipeableClose={() => { if (openRowId.current === p.id) openRowId.current = null; }}
+        onEdit={() => router.push({ pathname: '/production/new', params: { id: p.id } } as any)}
+        onDelete={() => deleteProduction(p.id)}
       >
-        <View style={styles.cardTop}>
-          <Text style={styles.cardDate}>{formatDate(p.date)}</Text>
-          {p.target_time ? (
-            <View style={styles.timePill}>
-              <Feather name="clock" size={11} color={theme.color.onBrandTertiary} />
-              <Text style={styles.timePillText}>{p.target_time}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text style={styles.cardRecipes} numberOfLines={2}>
-          {p.recipe_titles.length ? p.recipe_titles.join(' · ') : 'Aucune recette'}
-        </Text>
-
-        <View style={styles.cardMetaRow}>
-          <Text style={styles.cardMeta}>
-            {p.line_count} recette{p.line_count > 1 ? 's' : ''}
-            {p.total_pieces != null ? ` · ${p.total_pieces} pièces` : ''}
-          </Text>
-          {p.steps_total > 0 && (
-            <Text style={[styles.cardMeta, progress === 100 && { color: theme.color.success }]}>
-              {p.steps_done}/{p.steps_total} étapes
-            </Text>
-          )}
-        </View>
-
-        {p.steps_total > 0 && (
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        <Pressable
+          testID={`production-${p.id}`}
+          onPress={() => handleRowPress(() => router.push(`/production/${p.id}` as any))}
+          style={styles.card}
+        >
+          <View style={styles.cardTop}>
+            <Text style={styles.cardDate}>{formatDate(p.date)}</Text>
+            {p.target_time ? (
+              <View style={styles.timePill}>
+                <Feather name="clock" size={11} color={theme.color.onBrandTertiary} />
+                <Text style={styles.timePillText}>{p.target_time}</Text>
+              </View>
+            ) : null}
           </View>
-        )}
-      </Pressable>
+
+          <Text style={styles.cardRecipes} numberOfLines={2}>
+            {p.recipe_titles.length ? p.recipe_titles.join(' · ') : 'Aucune recette'}
+          </Text>
+
+          <View style={styles.cardMetaRow}>
+            <Text style={styles.cardMeta}>
+              {p.line_count} recette{p.line_count > 1 ? 's' : ''}
+              {p.total_pieces != null ? ` · ${p.total_pieces} pièces` : ''}
+            </Text>
+            {p.steps_total > 0 && (
+              <Text style={[styles.cardMeta, progress === 100 && { color: theme.color.success }]}>
+                {p.steps_done}/{p.steps_total} étapes
+              </Text>
+            )}
+          </View>
+
+          {p.steps_total > 0 && (
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            </View>
+          )}
+        </Pressable>
+      </SwipeableRow>
     );
   };
 
@@ -164,23 +241,34 @@ export default function Planning() {
           ) : (
             <View style={styles.section}>
               {schedules.map(s => (
-                <Pressable
+                <SwipeableRow
                   key={s.id}
-                  testID={`schedule-${s.id}`}
-                  onPress={() => router.push(`/schedule/${s.id}` as any)}
-                  style={styles.card}
+                  ref={getSwipeRef(s.id)}
+                  onSwipeableWillOpen={() => {
+                    if (openRowId.current && openRowId.current !== s.id) getSwipeRef(openRowId.current).current?.close();
+                    openRowId.current = s.id;
+                  }}
+                  onSwipeableClose={() => { if (openRowId.current === s.id) openRowId.current = null; }}
+                  onEdit={() => router.push(`/schedule/${s.id}` as any)}
+                  onDelete={() => deleteSchedule(s.id)}
                 >
-                  <Text style={styles.cardDate}>{weekTitle(s.week_start)}</Text>
-                  <View style={styles.cardMetaRow}>
-                    <Text style={styles.cardMeta}>
-                      {s.employee_count} personne{s.employee_count > 1 ? 's' : ''}
-                    </Text>
-                    <Text style={styles.cardMeta}>{formatHours(s.grand_total_minutes)} au total</Text>
-                  </View>
-                  {s.notes ? (
-                    <Text style={styles.cardMeta} numberOfLines={1}>{s.notes}</Text>
-                  ) : null}
-                </Pressable>
+                  <Pressable
+                    testID={`schedule-${s.id}`}
+                    onPress={() => handleRowPress(() => router.push(`/schedule/${s.id}` as any))}
+                    style={styles.card}
+                  >
+                    <Text style={styles.cardDate}>{weekTitle(s.week_start)}</Text>
+                    <View style={styles.cardMetaRow}>
+                      <Text style={styles.cardMeta}>
+                        {s.employee_count} personne{s.employee_count > 1 ? 's' : ''}
+                      </Text>
+                      <Text style={styles.cardMeta}>{formatHours(s.grand_total_minutes)} au total</Text>
+                    </View>
+                    {s.notes ? (
+                      <Text style={styles.cardMeta} numberOfLines={1}>{s.notes}</Text>
+                    ) : null}
+                  </Pressable>
+                </SwipeableRow>
               ))}
             </View>
           )
@@ -238,7 +326,7 @@ const styles = StyleSheet.create({
   segTextOn: { color: '#fff' },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 12 },
-  card: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
+  card: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardDate: { flex: 1, fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, textTransform: 'capitalize' },
   timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
