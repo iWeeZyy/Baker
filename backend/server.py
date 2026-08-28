@@ -186,6 +186,10 @@ class AuthResponse(BaseModel):
     user: dict
 
 TEAM_VISIBILITY_OPTIONS = ["public", "authenticated", "private"]
+# Qui peut m'envoyer un message — même convention qu'une visibilité (toujours
+# une valeur par défaut, jamais "absent"). Le défaut "friends_and_followers"
+# correspond au comportement demandé : un ami OU un abonné peut écrire.
+MESSAGE_PRIVACY_OPTIONS = ["friends_only", "followers", "friends_and_followers", "everyone"]
 
 class UserProfileUpdate(BaseModel):
     # Une chaîne vide signifie "supprimer ce champ" (converti en None avant
@@ -198,6 +202,8 @@ class UserProfileUpdate(BaseModel):
     # défaut ("public"), contrairement à bio/instagram qui peuvent être
     # absents. Omis = inchangé ; fourni = doit être l'une des 3 valeurs.
     team_visibility: Optional[str] = None
+    # Même principe que team_visibility : toujours une valeur, jamais "absent".
+    message_privacy: Optional[str] = None
     # Réglages de notifications minimalistes : un booléen par type d'événement,
     # défaut True (comme team_visibility="public") — omis = inchangé.
     notify_new_follower: Optional[bool] = None
@@ -394,6 +400,7 @@ async def register(inp: RegisterInput):
         "instagram_username": None,
         "profession": None,
         "team_visibility": "public",
+        "message_privacy": "friends_and_followers",
         "created_at": datetime.now(timezone.utc),
     }
     await db.users.insert_one(user_doc)
@@ -403,6 +410,7 @@ async def register(inp: RegisterInput):
     return {"token": token, "user": {
         "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None,
         "bio": None, "instagram_username": None, "profession": None, "team_visibility": "public",
+        "message_privacy": "friends_and_followers",
         "notify_new_follower": True, "notify_new_recipe": True, "notify_new_creation": True,
     }}
 
@@ -418,6 +426,7 @@ async def login(inp: LoginInput):
         "user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
         "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "message_privacy": user.get("message_privacy") or "friends_and_followers",
         "notify_new_follower": user.get("notify_new_follower", True),
         "notify_new_recipe": user.get("notify_new_recipe", True),
         "notify_new_creation": user.get("notify_new_creation", True),
@@ -429,6 +438,7 @@ async def me(user: dict = Depends(get_current_user)):
         "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
         "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "message_privacy": user.get("message_privacy") or "friends_and_followers",
         "notify_new_follower": user.get("notify_new_follower", True),
         "notify_new_recipe": user.get("notify_new_recipe", True),
         "notify_new_creation": user.get("notify_new_creation", True),
@@ -476,6 +486,11 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
             raise HTTPException(422, "Visibilité Team invalide.")
         updates["team_visibility"] = inp.team_visibility
 
+    if inp.message_privacy is not None:
+        if inp.message_privacy not in MESSAGE_PRIVACY_OPTIONS:
+            raise HTTPException(422, "Confidentialité des messages invalide.")
+        updates["message_privacy"] = inp.message_privacy
+
     if inp.notify_new_follower is not None:
         updates["notify_new_follower"] = inp.notify_new_follower
     if inp.notify_new_recipe is not None:
@@ -491,6 +506,7 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
         "bio": updates.get("bio", user.get("bio")), "instagram_username": updates.get("instagram_username", user.get("instagram_username")),
         "profession": updates.get("profession", user.get("profession")),
         "team_visibility": updates.get("team_visibility", user.get("team_visibility") or "public"),
+        "message_privacy": updates.get("message_privacy", user.get("message_privacy") or "friends_and_followers"),
         "notify_new_follower": updates.get("notify_new_follower", user.get("notify_new_follower", True)),
         "notify_new_recipe": updates.get("notify_new_recipe", user.get("notify_new_recipe", True)),
         "notify_new_creation": updates.get("notify_new_creation", user.get("notify_new_creation", True)),
@@ -865,6 +881,10 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
         except DuplicateKeyError:
             pass
         liked = True
+        recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0, "author_id": 1})
+        owner_id = recipe.get("author_id") if recipe else None
+        if owner_id and owner_id != user["user_id"]:
+            await _upsert_like_notification(owner_id, recipe_id, actor_id=user["user_id"], actor_name=user.get("name"), data={"content_kind": "recipe"})
     count = await db.likes.count_documents({"recipe_id": recipe_id})
     return {"liked": liked, "count": count}
 
@@ -963,6 +983,23 @@ async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(ge
     await _moderate_and_flag(moderation_result, "comment", doc["id"], user["user_id"])
     await db.comments.insert_one(doc)
     doc.pop("_id", None)
+
+    # Notifications : le propriétaire de la recette (jamais pour son propre
+    # commentaire), et l'auteur du commentaire racine s'il s'agit d'une
+    # réponse et qu'il diffère à la fois du répondeur et du propriétaire
+    # déjà notifié. Les créations n'ont pas de commentaires (voir CLAUDE.md),
+    # donc uniquement les recettes sont concernées ici.
+    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0, "author_id": 1})
+    owner_id = recipe.get("author_id") if recipe else None
+    notif_data = {"recipe_id": recipe_id, "comment_id": doc["id"]}
+    if owner_id and owner_id != user["user_id"]:
+        await _create_notification(owner_id, "new_comment", actor_id=user["user_id"], actor_name=doc["user_name"], target_id=recipe_id, data=notif_data)
+    if doc["parent_id"]:
+        root = await db.comments.find_one({"id": doc["parent_id"]}, {"_id": 0, "user_id": 1})
+        root_author_id = root.get("user_id") if root else None
+        if root_author_id and root_author_id != user["user_id"] and root_author_id != owner_id:
+            await _create_notification(root_author_id, "new_comment_reply", actor_id=user["user_id"], actor_name=doc["user_name"], target_id=recipe_id, data=notif_data)
+
     return doc
 
 @api_router.put("/recipes/{recipe_id}/comments/{comment_id}")
@@ -1211,7 +1248,8 @@ async def get_creation_likes(creation_id: str, user: dict = Depends(get_current_
 
 @api_router.post("/creations/{creation_id}/like")
 async def toggle_creation_like(creation_id: str, user: dict = Depends(get_current_user)):
-    if not await db.creations.find_one({"id": creation_id}, {"_id": 0, "id": 1}):
+    creation = await db.creations.find_one({"id": creation_id}, {"_id": 0, "user_id": 1})
+    if not creation:
         raise HTTPException(404, "Création introuvable")
     existing = await db.creation_likes.find_one({"user_id": user["user_id"], "creation_id": creation_id})
     if existing:
@@ -1223,6 +1261,9 @@ async def toggle_creation_like(creation_id: str, user: dict = Depends(get_curren
         except DuplicateKeyError:
             pass
         liked = True
+        owner_id = creation.get("user_id")
+        if owner_id and owner_id != user["user_id"]:
+            await _upsert_like_notification(owner_id, creation_id, actor_id=user["user_id"], actor_name=user.get("name"), data={"content_kind": "creation"})
     count = await db.creation_likes.count_documents({"creation_id": creation_id})
     return {"liked": liked, "count": count}
 
@@ -1317,6 +1358,10 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
         "follower_count": await _follower_count(user_id),
         "following_count": await _following_count(user_id),
         "following": await _is_following(user["user_id"], user_id),
+        "can_message": await _can_message(user["user_id"], user_id) if user["user_id"] != user_id else False,
+        # Directionnel (contrairement à _is_blocked, qui vérifie les deux sens) —
+        # c'est ce qui permet à l'écran d'afficher "Bloquer" ou "Débloquer".
+        "blocked_by_me": bool(await db.blocks.find_one({"blocker_id": user["user_id"], "blocked_id": user_id})) if user["user_id"] != user_id else False,
     }
 
 @api_router.post("/friends/request")
@@ -1328,6 +1373,8 @@ async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_
     target_user = await db.users.find_one({"user_id": target}, {"_id": 0})
     if not target_user:
         raise HTTPException(404, "Utilisateur introuvable")
+    if await _is_blocked(me, target):
+        raise HTTPException(403, "Impossible d'envoyer une demande à cet utilisateur")
     if await _are_friends(me, target):
         return {"status": "friends"}
     # Demo bots accept instantly — nobody is on the other side to tap "accept",
@@ -1340,17 +1387,25 @@ async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_
     if rev:
         await db.friend_requests.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
         await _create_friendship(me, target)
+        # target avait envoyé la demande initiale ; de son point de vue,
+        # c'est bien une acceptation, pas une nouvelle demande.
+        await _create_notification(target, "friend_request_accepted", actor_id=me, actor_name=user.get("name"))
         return {"status": "friends"}
     existing = await db.friend_requests.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
     if existing:
         return {"status": "pending_sent"}
+    request_id = str(uuid.uuid4())
     await db.friend_requests.insert_one({
-        "id": str(uuid.uuid4()),
+        "id": request_id,
         "from_user_id": me,
         "to_user_id": target,
         "status": "pending",
         "created_at": datetime.now(timezone.utc),
     })
+    # target_id porte l'id de la demande elle-même (pas celui de l'expéditeur,
+    # déjà dans actor_id) — c'est ce qui permet à l'onglet Activité d'accepter/
+    # refuser directement sans un aller-retour supplémentaire pour la retrouver.
+    await _create_notification(target, "new_friend_request", actor_id=me, actor_name=user.get("name"), target_id=request_id)
     return {"status": "pending_sent"}
 
 @api_router.get("/friends/requests")
@@ -1372,6 +1427,7 @@ async def respond_request(request_id: str, inp: RespondInput, user: dict = Depen
     await db.friend_requests.update_one({"id": request_id}, {"$set": {"status": new_status}})
     if inp.accept:
         await _create_friendship(user["user_id"], req["from_user_id"])
+        await _create_notification(req["from_user_id"], "friend_request_accepted", actor_id=user["user_id"], actor_name=user.get("name"))
         return {"status": "friends"}
     return {"status": "declined"}
 
@@ -1491,6 +1547,8 @@ async def send_team_invite(inp: TeamInviteInput, user: dict = Depends(get_curren
     target_user = await db.users.find_one({"user_id": target}, {"_id": 0})
     if not target_user:
         raise HTTPException(404, "Utilisateur introuvable")
+    if await _is_blocked(me, target):
+        raise HTTPException(403, "Impossible d'inviter cet utilisateur")
     if await _are_team(me, target):
         return {"status": "team"}
     # Si l'autre a déjà envoyé une invitation en attente, l'accepter directement
@@ -1681,6 +1739,8 @@ async def toggle_follow(user_id: str, user: dict = Depends(get_current_user)):
     target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not target:
         raise HTTPException(404, "Utilisateur introuvable")
+    if await _is_blocked(me, user_id):
+        raise HTTPException(403, "Impossible de suivre cet utilisateur")
     existing = await db.follows.find_one({"follower_id": me, "followee_id": user_id})
     if existing:
         await db.follows.delete_one({"follower_id": me, "followee_id": user_id})
@@ -1719,6 +1779,67 @@ async def user_following(user_id: str, limit: int = FOLLOW_PAGE_SIZE, before: Op
     total = await _following_count(user_id)
     items, has_more = await _follow_list(user_id, user["user_id"], "follower_id", "followee_id", limit, before)
     return {"users": items, "count": total, "has_more": has_more}
+
+# ---------- Blocking ----------
+# Même forme que db.follows (relation asymétrique, pas de pair_key) : bloquer
+# n'est pas une action mutuelle, seul le bloqueur décide.
+
+async def _is_blocked(a: str, b: str) -> bool:
+    """Vrai si a a bloqué b OU b a bloqué a — dans les deux cas, la porte de
+    la messagerie/des demandes reste fermée, quel que soit qui a bloqué qui."""
+    return bool(await db.blocks.find_one({"$or": [
+        {"blocker_id": a, "blocked_id": b},
+        {"blocker_id": b, "blocked_id": a},
+    ]}))
+
+@api_router.post("/users/{user_id}/block")
+async def toggle_block(user_id: str, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    if user_id == me:
+        raise HTTPException(400, "Impossible de se bloquer soi-même")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Utilisateur introuvable")
+    existing = await db.blocks.find_one({"blocker_id": me, "blocked_id": user_id})
+    if existing:
+        await db.blocks.delete_one({"blocker_id": me, "blocked_id": user_id})
+        blocked = False
+    else:
+        try:
+            await db.blocks.insert_one({
+                "blocker_id": me, "blocked_id": user_id,
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            pass
+        blocked = True
+        # Un abonnement existant dans un sens ou l'autre ne doit pas survivre
+        # au blocage — sinon il continue silencieusement à générer des
+        # notifications new_follower/new_recipe/new_creation indéfiniment.
+        await db.follows.delete_many({"$or": [
+            {"follower_id": me, "followee_id": user_id},
+            {"follower_id": user_id, "followee_id": me},
+        ]})
+    return {"blocked": blocked}
+
+async def _can_message(sender_id: str, recipient_id: str) -> bool:
+    """Autorité unique pour "peut envoyer/lire un message à" — vérifiée
+    symétriquement en lecture et en écriture, comme le précédent déjà posé
+    par la désamitié (se désamir bloque déjà GET autant que POST)."""
+    if await _is_blocked(sender_id, recipient_id):
+        return False
+    recipient = await db.users.find_one({"user_id": recipient_id}, {"_id": 0})
+    privacy = (recipient.get("message_privacy") if recipient else None) or "friends_and_followers"
+    if privacy == "everyone":
+        return True
+    if privacy == "friends_only":
+        return await _are_friends(sender_id, recipient_id)
+    if privacy == "followers":
+        return await _is_following(sender_id, recipient_id)
+    # friends_and_followers (défaut)
+    if await _are_friends(sender_id, recipient_id):
+        return True
+    return await _is_following(sender_id, recipient_id)
 
 # ---------- Feed ----------
 # Fil des publications récentes des personnes suivies : fusionne db.recipes
@@ -1935,12 +2056,43 @@ async def leaderboard_creations(period: str = "week", limit: int = leaderboard.D
 
 NOTIFICATIONS_PAGE_SIZE = 30
 
-async def _create_notification(user_id: str, ntype: str, actor_id: str, actor_name: Optional[str], target_id: Optional[str] = None) -> None:
-    await db.notifications.insert_one({
+async def _create_notification(user_id: str, ntype: str, actor_id: str, actor_name: Optional[str], target_id: Optional[str] = None, data: Optional[dict] = None) -> None:
+    """`data` porte ce qu'un seul `target_id` ne peut pas exprimer (ex. un
+    commentaire a besoin à la fois de recipe_id et de comment_id) —
+    optionnel et rétrocompatible, les 3 sites d'appel déjà existants
+    n'ont rien à changer. Poussée en direct sur le même WebSocket que les
+    messages (_push_to_user), jamais une deuxième infrastructure."""
+    doc = {
         "id": str(uuid.uuid4()), "user_id": user_id, "type": ntype,
         "actor_id": actor_id, "actor_name": actor_name, "target_id": target_id,
-        "read": False, "created_at": datetime.now(timezone.utc),
-    })
+        "data": data, "read": False, "created_at": datetime.now(timezone.utc),
+    }
+    await db.notifications.insert_one(doc)
+    doc.pop("_id", None)
+    await _push_to_user(user_id, {"type": "notification", "notification": doc})
+
+async def _upsert_like_notification(owner_id: str, target_id: str, actor_id: str, actor_name: Optional[str], data: Optional[dict] = None) -> None:
+    """Regroupe les likes rapprochés ("Thomas et 4 autres ont aimé...") sans
+    fenêtre de course : un unique find_one_and_update atomique, jamais un
+    find_one suivi d'un insert/update séparé qui laisserait deux likes
+    simultanés créer deux lignes au lieu d'une seule incrémentée. Tant que
+    la notif du dernier lot de likes n'a pas été lue, un nouveau like
+    l'incrémente ; une fois lue, le prochain like en recrée une neuve à
+    count=1 — la lecture agit comme la limite du regroupement, pas une
+    fenêtre de temps arbitraire."""
+    now = datetime.now(timezone.utc)
+    doc = await db.notifications.find_one_and_update(
+        {"user_id": owner_id, "type": "new_like", "target_id": target_id, "read": False},
+        {
+            "$set": {"actor_id": actor_id, "actor_name": actor_name, "data": data, "created_at": now},
+            "$inc": {"count": 1},
+            "$setOnInsert": {"id": str(uuid.uuid4())},
+        },
+        upsert=True,
+        return_document=True,
+    )
+    doc.pop("_id", None)
+    await _push_to_user(owner_id, {"type": "notification", "notification": doc})
 
 async def _notify_followers_of_new_post(author_id: str, author_name: Optional[str], ntype: str, target_id: str, setting_field: str) -> None:
     """Fan-out à la publication : une notif pour chaque abonné qui a le
@@ -2001,8 +2153,10 @@ MESSAGES_PAGE_SIZE = 50
 @api_router.get("/messages/{friend_id}")
 async def get_messages(friend_id: str, before: Optional[str] = None, user: dict = Depends(get_current_user)):
     me = user["user_id"]
-    if not await _are_friends(me, friend_id):
-        raise HTTPException(403, "Vous devez être amis pour discuter")
+    # Lecture : l'un ou l'autre sens suffit (soit je peux lui écrire, soit il
+    # peut m'écrire) — contrairement à l'envoi, qui est unidirectionnel.
+    if not (await _can_message(me, friend_id) or await _can_message(friend_id, me)):
+        raise HTTPException(403, "Vous ne pouvez pas échanger de messages avec cette personne")
     pk = _pair_key(me, friend_id)
     q = {"pair": pk}
     if before:
@@ -2053,8 +2207,8 @@ async def send_message(
     user: dict = Depends(get_current_user),
 ):
     me = user["user_id"]
-    if not await _are_friends(me, friend_id):
-        raise HTTPException(403, "Vous devez être amis pour discuter")
+    if not await _can_message(me, friend_id):
+        raise HTTPException(403, "Vous ne pouvez pas échanger de messages avec cette personne")
     content = inp.content.strip()
     if not content:
         raise HTTPException(400, "Message vide")
@@ -2080,8 +2234,8 @@ async def send_photo_message(
     d'emblée, avant qu'un seul octet ne soit écrit en stockage.
     """
     me = user["user_id"]
-    if not await _are_friends(me, friend_id):
-        raise HTTPException(403, "Vous devez être amis pour discuter")
+    if not await _can_message(me, friend_id):
+        raise HTTPException(403, "Vous ne pouvez pas échanger de messages avec cette personne")
 
     raw_bytes = await file.read()
     if not raw_bytes:
@@ -2151,8 +2305,8 @@ async def get_message_photo(message_id: str, variant: str = "display", user: dic
     other = msg["to_user_id"] if msg["from_user_id"] == me else msg["from_user_id"] if msg["to_user_id"] == me else None
     if other is None:
         raise HTTPException(403, "Accès refusé")
-    if not await _are_friends(me, other):
-        raise HTTPException(403, "Vous devez être amis pour voir cette photo")
+    if not (await _can_message(me, other) or await _can_message(other, me)):
+        raise HTTPException(403, "Vous ne pouvez pas voir cette photo")
 
     if variant == "blur":
         path = msg.get("photo_blur_path")
@@ -2189,6 +2343,114 @@ async def report_message(message_id: str, inp: MessageReportInput, user: dict = 
     }
     await db.reports.insert_one(doc)
     return {"status": "reported"}
+
+# ---------- Conversations (Messagerie) ----------
+# Liste dédiée, distincte de GET /friends : une conversation peut désormais
+# exister entre un abonné et son abonné sans amitié (voir _can_message),
+# donc GET /friends (scopé aux amis) ne peut plus faire office de liste de
+# messagerie. Construite depuis db.messages (jamais de collection
+# db.conversations séparée) — une paire n'apparaît qu'une fois un premier
+# message réellement envoyé, exactement ce que demande la fonctionnalité.
+
+CONVERSATIONS_PAGE_SIZE = 30
+
+async def _conversation_hides_map(user_id: str) -> dict:
+    """pair -> hidden_before, pour l'utilisateur courant seulement — jamais
+    plus qu'une poignée de lignes à cette échelle, un aller-retour unique."""
+    out = {}
+    async for d in db.conversation_hides.find({"user_id": user_id}, {"_id": 0, "pair": 1, "hidden_before": 1}):
+        out[d["pair"]] = d["hidden_before"]
+    return out
+
+@api_router.get("/conversations")
+async def list_conversations(before: Optional[str] = None, limit: int = CONVERSATIONS_PAGE_SIZE, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    limit = max(1, min(limit, 100))
+    pipeline = [
+        {"$match": {"$or": [{"from_user_id": me}, {"to_user_id": me}]}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": "$pair", "last": {"$first": "$$ROOT"}}},
+    ]
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+        pipeline.append({"$match": {"last.created_at": {"$lt": cursor_dt}}})
+    pipeline += [{"$sort": {"last.created_at": -1}}, {"$limit": limit}]
+    rows = await db.messages.aggregate(pipeline).to_list(limit)
+    has_more = len(rows) == limit
+
+    # Une conversation masquée par MOI disparaît tant qu'aucun nouveau
+    # message n'est arrivé depuis — jamais de suppression, juste un filtre
+    # d'affichage (comportement à la iMessage).
+    hides = await _conversation_hides_map(me)
+    rows = [r for r in rows if r["_id"] not in hides or r["last"]["created_at"] > hides[r["_id"]]]
+
+    other_ids = []
+    for r in rows:
+        last = r["last"]
+        other_ids.append(last["to_user_id"] if last["from_user_id"] == me else last["from_user_id"])
+    others = {}
+    if other_ids:
+        async for u in db.users.find({"user_id": {"$in": other_ids}}, {"_id": 0, "password_hash": 0}):
+            others[u["user_id"]] = u
+
+    items = []
+    for r in rows:
+        last = r["last"]
+        other_id = last["to_user_id"] if last["from_user_id"] == me else last["from_user_id"]
+        other_user = others.get(other_id)
+        if not other_user:
+            continue
+        # Même idiome que GET /friends (une requête par ligne) — la liste
+        # d'amis fait déjà exactement ça, jamais plus qu'une poignée
+        # d'utilisateurs actifs à cette échelle.
+        unread = await db.messages.count_documents({"pair": r["_id"], "to_user_id": me, "read": False})
+        pu = _public_user(other_user)
+        items.append({
+            "peer": pu,
+            "last_message": {
+                "content": last.get("content"), "type": last.get("type"),
+                "from_me": last["from_user_id"] == me, "created_at": last["created_at"],
+            },
+            "unread": unread,
+        })
+    return {"conversations": items, "has_more": has_more}
+
+@api_router.get("/messagerie/badge-count")
+async def messagerie_badge_count(user: dict = Depends(get_current_user)):
+    """Un seul aller-retour pour les deux compteurs du menu Profil (messages
+    + activité) — jamais deux requêtes séparées pour un menu fermé, dans le
+    même esprit que le commentaire déjà écrit sur ProfileTabButton côté
+    front ("menu fermé = rien de lourd chargé")."""
+    me = user["user_id"]
+    hides = await _conversation_hides_map(me)
+    pipeline = [
+        {"$match": {"to_user_id": me, "read": False}},
+        {"$group": {"_id": "$pair", "last_created_at": {"$max": "$created_at"}}},
+    ]
+    unread_pairs = await db.messages.aggregate(pipeline).to_list(None)
+    conversations_unread = sum(
+        1 for p in unread_pairs
+        if p["_id"] not in hides or p["last_created_at"] > hides[p["_id"]]
+    )
+    activity_unread = await db.notifications.count_documents({"user_id": me, "read": False})
+    return {"conversations_unread": conversations_unread, "activity_unread": activity_unread}
+
+@api_router.post("/conversations/{peer_id}/hide")
+async def hide_conversation(peer_id: str, user: dict = Depends(get_current_user)):
+    """Masquage non destructif, pour soi uniquement — aucun message n'est
+    jamais supprimé, seul l'affichage de cette conversation dans ma propre
+    liste s'arrête jusqu'au prochain message (dans un sens ou l'autre)."""
+    me = user["user_id"]
+    pk = _pair_key(me, peer_id)
+    await db.conversation_hides.update_one(
+        {"user_id": me, "pair": pk},
+        {"$set": {"hidden_before": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"ok": True}
 
 # ---------- Realtime (WebSocket) ----------
 ws_connections: dict = defaultdict(set)
@@ -3068,6 +3330,11 @@ async def startup():
     await db.friend_requests.create_index([("from_user_id", 1), ("status", 1)])
     await db.messages.create_index([("pair", 1), ("created_at", 1)])
     await db.messages.create_index("id", unique=True)
+    # Sert GET /conversations : retrouver, pour l'utilisateur courant, toutes
+    # les paires où il est expéditeur/destinataire, triées par activité —
+    # même idiome composé que db.productions ([user_id, created_at]).
+    await db.messages.create_index([("from_user_id", 1), ("created_at", -1)])
+    await db.messages.create_index([("to_user_id", 1), ("created_at", -1)])
     await db.reports.create_index("message_id")
     await db.reports.create_index("reported_user_id")
     await db.flagged_content.create_index([("content_type", 1), ("content_id", 1)])
@@ -3095,6 +3362,13 @@ async def startup():
     # d'abord) ; followee_id seul sert "qui me suit" + le comptage abonnés.
     await db.follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
     await db.follows.create_index("followee_id")
+    # Même forme composée unique que follows : empêche les doublons, sert
+    # "qui a bloqué/est bloqué par qui" dans les deux sens.
+    await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+    await db.blocks.create_index("blocked_id")
+    # Une seule ligne par (utilisateur, conversation) : un nouveau masquage
+    # écrase simplement l'ancien horodatage plutôt que d'empiler des lignes.
+    await db.conversation_hides.create_index([("user_id", 1), ("pair", 1)], unique=True)
     # Sert le futur fil (auteurs suivis, tri par date) et accélère la requête
     # déjà existante de public_profile() sur author_id.
     await db.recipes.create_index([("author_id", 1), ("created_at", -1)])

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { ActionSheet } from '@/src/ActionSheet';
 import { api, API_BASE, getToken } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
@@ -141,6 +142,8 @@ export default function Chat() {
   const [pendingPhoto, setPendingPhoto] = useState<{ uri: string; name: string } | null>(null);
   const [sendingPhoto, setSendingPhoto] = useState(false);
   const [peerPicture, setPeerPicture] = useState<string | null>(null);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const listRef = useRef<FlatList>(null);
   const didInitialScroll = useRef(false);
 
@@ -175,8 +178,27 @@ export default function Chat() {
     // Source unique du profil (nom déjà passé par la navigation, mais pas
     // toujours la photo) — un seul appel léger, jamais répété tant que la
     // conversation reste ouverte.
-    api(`/users/${id}/profile`).then(p => setPeerPicture(p.user?.picture ?? null)).catch(() => {});
+    api(`/users/${id}/profile`).then(p => {
+      setPeerPicture(p.user?.picture ?? null);
+      setBlockedByMe(!!p.blocked_by_me);
+    }).catch(() => {});
   }, [id]);
+
+  const toggleBlock = async () => {
+    try {
+      const res = await api(`/users/${id}/block`, { method: 'POST' });
+      setBlockedByMe(res.blocked);
+      if (res.blocked) setNotFriends(true);
+    } catch (e: any) {
+      setError(e.message || 'Action impossible');
+    }
+  };
+
+  const reportConversation = () => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    reportMessage(last.id);
+  };
 
   useEffect(() => {
     load().finally(() => setLoading(false));
@@ -281,7 +303,22 @@ export default function Chat() {
             <Text style={styles.headerSub}>Voir le profil</Text>
           </View>
         </Pressable>
+        <Pressable testID="chat-menu" onPress={() => setMenuOpen(true)} style={styles.iconBtn}>
+          <Feather name="more-vertical" size={20} color={colors.onSurface} />
+        </Pressable>
       </View>
+
+      <ActionSheet
+        visible={menuOpen}
+        title="Conversation"
+        onClose={() => setMenuOpen(false)}
+        options={[
+          ...(messages.length > 0 ? [{ key: 'report', emoji: '🚩', label: 'Signaler', onPress: reportConversation }] : []),
+          blockedByMe
+            ? { key: 'unblock', emoji: '✅', label: 'Débloquer', onPress: toggleBlock }
+            : { key: 'block', emoji: '🚫', label: 'Bloquer cet utilisateur', onPress: toggleBlock, destructive: true },
+        ]}
+      />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
         {loading ? (
@@ -354,7 +391,7 @@ export default function Chat() {
         {notFriends ? (
           <View style={styles.notFriendsBox} testID="chat-not-friends">
             <Feather name="user-x" size={16} color={colors.muted} />
-            <Text style={styles.notFriendsText}>Vous n'êtes plus amis avec cette personne — impossible d'échanger des messages.</Text>
+            <Text style={styles.notFriendsText}>Vous ne pouvez pas échanger de messages avec cette personne.</Text>
           </View>
         ) : (
           <View style={styles.inputRow}>

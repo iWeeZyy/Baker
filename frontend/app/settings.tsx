@@ -13,6 +13,15 @@ const OPTIONS: { key: ThemePreference; icon: any; label: string; body: string }[
   { key: 'dark', icon: 'moon', label: 'Sombre', body: 'Toujours le thème sombre, quel que soit le réglage système.' },
 ];
 
+type PrivacyKey = 'friends_only' | 'followers' | 'friends_and_followers' | 'everyone';
+
+const PRIVACY_OPTIONS: { key: PrivacyKey; icon: any; label: string; body: string }[] = [
+  { key: 'friends_only', icon: 'users', label: 'Amis uniquement', body: 'Seuls vos amis peuvent vous envoyer un message.' },
+  { key: 'followers', icon: 'rss', label: 'Personnes qui me suivent', body: 'Toute personne qui vous suit peut vous envoyer un message.' },
+  { key: 'friends_and_followers', icon: 'user-check', label: 'Amis et abonnés', body: 'Vos amis et vos abonnés peuvent vous envoyer un message.' },
+  { key: 'everyone', icon: 'globe', label: 'Tout le monde', body: 'Tout utilisateur peut vous envoyer un message.' },
+];
+
 type NotifKey = 'notify_new_follower' | 'notify_new_recipe' | 'notify_new_creation';
 
 const NOTIF_OPTIONS: { key: NotifKey; icon: any; label: string; body: string }[] = [
@@ -27,6 +36,7 @@ export default function Settings() {
   const router = useRouter();
   const { user, updateProfile } = useAuth();
   const [busyKey, setBusyKey] = useState<NotifKey | null>(null);
+  const [busyPrivacy, setBusyPrivacy] = useState(false);
 
   const toggleNotif = async (key: NotifKey) => {
     if (busyKey) return;
@@ -35,6 +45,15 @@ export default function Settings() {
       await updateProfile({ [key]: !(user?.[key] ?? true) });
     } catch (e) { console.warn(e); }
     finally { setBusyKey(null); }
+  };
+
+  const setPrivacy = async (key: PrivacyKey) => {
+    if (busyPrivacy || user?.message_privacy === key) return;
+    setBusyPrivacy(true);
+    try {
+      await updateProfile({ message_privacy: key });
+    } catch (e) { console.warn(e); }
+    finally { setBusyPrivacy(false); }
   };
 
   return (
@@ -67,6 +86,35 @@ export default function Settings() {
                   <Text style={styles.rowBody}>{opt.body}</Text>
                 </View>
                 {active && <Feather name="check" size={18} color={colors.brand} />}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>CONFIDENTIALITÉ DES MESSAGES</Text>
+        <View style={styles.card}>
+          {PRIVACY_OPTIONS.map((opt, i) => {
+            const active = (user?.message_privacy || 'friends_and_followers') === opt.key;
+            return (
+              <Pressable
+                key={opt.key}
+                testID={`privacy-option-${opt.key}`}
+                onPress={() => setPrivacy(opt.key)}
+                disabled={busyPrivacy}
+                style={[styles.row, i < PRIVACY_OPTIONS.length - 1 && styles.rowDivider]}
+              >
+                <View style={styles.rowIcon}>
+                  <Feather name={opt.icon} size={17} color={active ? colors.brand : colors.onSurfaceSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>{opt.label}</Text>
+                  <Text style={styles.rowBody}>{opt.body}</Text>
+                </View>
+                {busyPrivacy && active ? (
+                  <ActivityIndicator size="small" color={colors.brand} />
+                ) : active ? (
+                  <Feather name="check" size={18} color={colors.brand} />
+                ) : null}
               </Pressable>
             );
           })}

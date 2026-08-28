@@ -1,7 +1,11 @@
 import { API_BASE, getToken } from './api';
 
 type NewMessageEvent = { type: 'new_message'; message: any };
-type RealtimeEvent = NewMessageEvent;
+// Poussé par tout site d'appel de _create_notification/l'upsert de like
+// côté serveur — mêmes 8 types que GET /notifications (3 existants + 5
+// ajoutés par la Messagerie), jamais une infrastructure séparée.
+type NotificationEvent = { type: 'notification'; notification: any };
+type RealtimeEvent = NewMessageEvent | NotificationEvent;
 type Listener = (evt: RealtimeEvent) => void;
 
 const listeners = new Set<Listener>();

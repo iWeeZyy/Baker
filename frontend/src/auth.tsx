@@ -12,6 +12,7 @@ export type User = {
   instagram_username?: string | null;
   profession?: string | null;
   team_visibility?: 'public' | 'authenticated' | 'private';
+  message_privacy?: 'friends_only' | 'followers' | 'friends_and_followers' | 'everyone';
   notify_new_follower?: boolean;
   notify_new_recipe?: boolean;
   notify_new_creation?: boolean;
@@ -25,7 +26,7 @@ type AuthCtx = {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateProfile: (fields: {
-    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string;
+    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string; message_privacy?: string;
     notify_new_follower?: boolean; notify_new_recipe?: boolean; notify_new_creation?: boolean;
   }) => Promise<void>;
 };
