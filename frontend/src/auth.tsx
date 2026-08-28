@@ -12,6 +12,9 @@ export type User = {
   instagram_username?: string | null;
   profession?: string | null;
   team_visibility?: 'public' | 'authenticated' | 'private';
+  notify_new_follower?: boolean;
+  notify_new_recipe?: boolean;
+  notify_new_creation?: boolean;
 };
 
 type AuthCtx = {
@@ -21,7 +24,10 @@ type AuthCtx = {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  updateProfile: (fields: { bio?: string; instagram_username?: string; profession?: string; team_visibility?: string }) => Promise<void>;
+  updateProfile: (fields: {
+    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string;
+    notify_new_follower?: boolean; notify_new_recipe?: boolean; notify_new_creation?: boolean;
+  }) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -92,7 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Même séquence que l'upload d'avatar : on écrit, puis on relit la source
   // de vérité serveur plutôt que de corriger l'état local à la main.
-  const updateProfile = async (fields: { bio?: string; instagram_username?: string }) => {
+  const updateProfile = async (fields: {
+    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string;
+    notify_new_follower?: boolean; notify_new_recipe?: boolean; notify_new_creation?: boolean;
+  }) => {
     await api('/auth/me', { method: 'PUT', body: JSON.stringify(fields) });
     await refreshUser();
   };

@@ -197,6 +197,11 @@ class UserProfileUpdate(BaseModel):
     # défaut ("public"), contrairement à bio/instagram qui peuvent être
     # absents. Omis = inchangé ; fourni = doit être l'une des 3 valeurs.
     team_visibility: Optional[str] = None
+    # Réglages de notifications minimalistes : un booléen par type d'événement,
+    # défaut True (comme team_visibility="public") — omis = inchangé.
+    notify_new_follower: Optional[bool] = None
+    notify_new_recipe: Optional[bool] = None
+    notify_new_creation: Optional[bool] = None
 
 BIO_MAX_LENGTH = 300
 PROFESSION_MAX_LENGTH = 60
@@ -397,6 +402,7 @@ async def register(inp: RegisterInput):
     return {"token": token, "user": {
         "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None,
         "bio": None, "instagram_username": None, "profession": None, "team_visibility": "public",
+        "notify_new_follower": True, "notify_new_recipe": True, "notify_new_creation": True,
     }}
 
 @api_router.post("/auth/login", response_model=AuthResponse)
@@ -411,6 +417,9 @@ async def login(inp: LoginInput):
         "user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
         "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "notify_new_follower": user.get("notify_new_follower", True),
+        "notify_new_recipe": user.get("notify_new_recipe", True),
+        "notify_new_creation": user.get("notify_new_creation", True),
     }}
 
 @api_router.get("/auth/me")
@@ -419,6 +428,9 @@ async def me(user: dict = Depends(get_current_user)):
         "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
         "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "notify_new_follower": user.get("notify_new_follower", True),
+        "notify_new_recipe": user.get("notify_new_recipe", True),
+        "notify_new_creation": user.get("notify_new_creation", True),
     }
 
 @api_router.put("/auth/me")
@@ -463,6 +475,13 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
             raise HTTPException(422, "Visibilité Team invalide.")
         updates["team_visibility"] = inp.team_visibility
 
+    if inp.notify_new_follower is not None:
+        updates["notify_new_follower"] = inp.notify_new_follower
+    if inp.notify_new_recipe is not None:
+        updates["notify_new_recipe"] = inp.notify_new_recipe
+    if inp.notify_new_creation is not None:
+        updates["notify_new_creation"] = inp.notify_new_creation
+
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
 
@@ -471,6 +490,9 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
         "bio": updates.get("bio", user.get("bio")), "instagram_username": updates.get("instagram_username", user.get("instagram_username")),
         "profession": updates.get("profession", user.get("profession")),
         "team_visibility": updates.get("team_visibility", user.get("team_visibility") or "public"),
+        "notify_new_follower": updates.get("notify_new_follower", user.get("notify_new_follower", True)),
+        "notify_new_recipe": updates.get("notify_new_recipe", user.get("notify_new_recipe", True)),
+        "notify_new_creation": updates.get("notify_new_creation", user.get("notify_new_creation", True)),
     }
 
 @api_router.post("/auth/logout")
@@ -646,6 +668,7 @@ async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current
     doc = r.dict()
     await db.recipes.insert_one(doc)
     doc.pop("_id", None)
+    await _notify_followers_of_new_post(user["user_id"], user.get("name"), "new_recipe", doc["id"], "notify_new_recipe")
     return doc
 
 # ---------- Recipe scan ----------
@@ -1125,6 +1148,7 @@ async def create_creation(inp: CreationInput, user: dict = Depends(get_current_u
     }
     await _moderate_and_flag(moderation_result, "creation", doc["id"], user["user_id"])
     await db.creations.insert_one(doc)
+    await _notify_followers_of_new_post(user["user_id"], user.get("name"), "new_creation", doc["id"], "notify_new_creation")
     return await _creation_detail(doc)
 
 @api_router.get("/creations/{creation_id}")
@@ -1250,11 +1274,14 @@ async def search_users(q: str = "", user: dict = Depends(get_current_user)):
         {"$or": [{"name": regex}, {"profession": regex}], "user_id": {"$ne": user["user_id"]}},
         {"_id": 0, "password_hash": 0},
     ).limit(20)
+    docs = await cursor.to_list(20)
+    following_set = await _following_set(user["user_id"], [u["user_id"] for u in docs])
     out = []
-    for u in await cursor.to_list(20):
+    for u in docs:
         pu = _public_user(u)
         pu["friend_status"] = await _friend_status(user["user_id"], u["user_id"])
         pu["team_status"] = await _team_status(user["user_id"], u["user_id"])
+        pu["following"] = u["user_id"] in following_set
         out.append(pu)
     return out
 
@@ -1281,10 +1308,14 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
         "recipes": docs,
         "recipe_count": len(docs),
         "total_likes": total_likes,
+        "comment_count": await db.comments.count_documents({"user_id": user_id}),
         "creations": creations,
         "friend_status": await _friend_status(user["user_id"], user_id),
         "team_count": team_count,
         "team_visible": team_visible,
+        "follower_count": await _follower_count(user_id),
+        "following_count": await _following_count(user_id),
+        "following": await _is_following(user["user_id"], user_id),
     }
 
 @api_router.post("/friends/request")
@@ -1577,6 +1608,309 @@ async def user_team(user_id: str, q: str = "", limit: int = TEAM_PAGE_SIZE, befo
         members.append(_team_member_stub(other_user, role, d["created_at"]))
 
     return {"members": members, "count": total, "visible": True, "has_more": has_more}
+
+# ---------- Follows ----------
+# Suivre un utilisateur : relation asymétrique et instantanée, sans
+# demande/acceptation — contrairement à Amis/Team (relations symétriques,
+# pair_key trié). Le patron est celui de db.likes/db.creation_likes (paire
+# ciblée, index unique composé sur les deux id), pas celui des relations
+# symétriques ci-dessus.
+
+FOLLOW_PAGE_SIZE = 30
+
+async def _is_following(follower_id: str, followee_id: str) -> bool:
+    return bool(await db.follows.find_one({"follower_id": follower_id, "followee_id": followee_id}))
+
+async def _follower_count(user_id: str) -> int:
+    return await db.follows.count_documents({"followee_id": user_id})
+
+async def _following_count(user_id: str) -> int:
+    return await db.follows.count_documents({"follower_id": user_id})
+
+async def _following_set(follower_id: str, followee_ids: list) -> set:
+    """Parmi followee_ids, ceux que follower_id suit déjà — un seul aller-
+    retour groupé, jamais une vérification par ligne dans une liste."""
+    ids = list({fid for fid in followee_ids if fid})
+    if not ids:
+        return set()
+    out = set()
+    async for d in db.follows.find({"follower_id": follower_id, "followee_id": {"$in": ids}}, {"_id": 0, "followee_id": 1}):
+        out.add(d["followee_id"])
+    return out
+
+async def _follow_list(user_id: str, viewer_id: str, own_field: str, other_field: str, limit: int, before: Optional[str]):
+    """own_field/other_field désignent respectivement le champ filtré sur
+    user_id et celui identifiant l'autre partie : ("followee_id",
+    "follower_id") pour la liste des abonnés, l'inverse pour les
+    abonnements. Même convention de pagination que /users/{id}/team."""
+    limit = max(1, min(limit, 100))
+    q_filter: dict = {own_field: user_id}
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+        q_filter["created_at"] = {"$lt": cursor_dt}
+    docs = await db.follows.find(q_filter, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    has_more = len(docs) == limit
+
+    other_ids = [d[other_field] for d in docs]
+    others = {}
+    if other_ids:
+        async for u in db.users.find({"user_id": {"$in": other_ids}}, {"_id": 0, "password_hash": 0}):
+            others[u["user_id"]] = u
+    following_set = await _following_set(viewer_id, other_ids)
+
+    items = []
+    for d in docs:
+        other_user = others.get(d[other_field])
+        if not other_user:
+            continue
+        pu = _public_user(other_user)
+        pu["following"] = other_user["user_id"] in following_set
+        pu["since"] = d["created_at"]
+        items.append(pu)
+    return items, has_more
+
+@api_router.post("/users/{user_id}/follow")
+async def toggle_follow(user_id: str, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    if user_id == me:
+        raise HTTPException(400, "Impossible de se suivre soi-même")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Utilisateur introuvable")
+    existing = await db.follows.find_one({"follower_id": me, "followee_id": user_id})
+    if existing:
+        await db.follows.delete_one({"follower_id": me, "followee_id": user_id})
+        following = False
+    else:
+        # L'index unique (follower_id, followee_id) protège déjà la donnée ;
+        # ce try/except évite qu'un double-clic/une course ne remonte une 500
+        # au lieu de retomber proprement sur l'état "suivi" — même idiome que
+        # toggle_like/_create_friendship.
+        try:
+            await db.follows.insert_one({
+                "follower_id": me, "followee_id": user_id,
+                "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            pass
+        following = True
+        await _create_notification(user_id, "new_follower", actor_id=me, actor_name=user.get("name"))
+    count = await _follower_count(user_id)
+    return {"following": following, "follower_count": count}
+
+@api_router.get("/users/{user_id}/followers")
+async def user_followers(user_id: str, limit: int = FOLLOW_PAGE_SIZE, before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    owner = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not owner:
+        raise HTTPException(404, "Utilisateur introuvable")
+    total = await _follower_count(user_id)
+    items, has_more = await _follow_list(user_id, user["user_id"], "followee_id", "follower_id", limit, before)
+    return {"users": items, "count": total, "has_more": has_more}
+
+@api_router.get("/users/{user_id}/following")
+async def user_following(user_id: str, limit: int = FOLLOW_PAGE_SIZE, before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    owner = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not owner:
+        raise HTTPException(404, "Utilisateur introuvable")
+    total = await _following_count(user_id)
+    items, has_more = await _follow_list(user_id, user["user_id"], "follower_id", "followee_id", limit, before)
+    return {"users": items, "count": total, "has_more": has_more}
+
+# ---------- Feed ----------
+# Fil des publications récentes des personnes suivies : fusionne db.recipes
+# (champ auteur author_id) et db.creations (champ auteur user_id) — deux
+# collections aux noms de champ différents, jamais un $match unique. Tri
+# chronologique simple (created_at) ; la requête à deux flux triés fusionnés
+# laisse la porte ouverte à un classement plus riche plus tard sans
+# changement de schéma. Les recettes du catalogue (author_id=None) ne
+# peuvent jamais apparaître : aucun followee_id n'est jamais None.
+
+FEED_PAGE_SIZE = 20
+
+async def _liked_recipe_ids(user_id: str, recipe_ids: list) -> set:
+    """Aucun lookup groupé "aimé par moi" n'existait pour les recettes
+    avant le fil — seulement un par un (toggle_like/get_likes). Même forme
+    que _following_set : un aller-retour $in, jamais une requête par item."""
+    ids = list({rid for rid in recipe_ids if rid})
+    if not ids:
+        return set()
+    out = set()
+    async for d in db.likes.find({"user_id": user_id, "recipe_id": {"$in": ids}}, {"_id": 0, "recipe_id": 1}):
+        out.add(d["recipe_id"])
+    return out
+
+async def _liked_creation_ids(user_id: str, creation_ids: list) -> set:
+    ids = list({cid for cid in creation_ids if cid})
+    if not ids:
+        return set()
+    out = set()
+    async for d in db.creation_likes.find({"user_id": user_id, "creation_id": {"$in": ids}}, {"_id": 0, "creation_id": 1}):
+        out.add(d["creation_id"])
+    return out
+
+async def _comment_counts(recipe_ids: list) -> dict:
+    # Même forme que _like_counts : un aller-retour groupé. Les créations
+    # n'ont pas d'équivalent — ce système n'a aucun commentaire sur les
+    # créations aujourd'hui (voir Creations ci-dessus), donc les cartes
+    # création du fil n'affichent jamais de compteur de commentaires.
+    counts = {}
+    ids = list({rid for rid in recipe_ids if rid})
+    if not ids:
+        return counts
+    pipeline = [
+        {"$match": {"recipe_id": {"$in": ids}}},
+        {"$group": {"_id": "$recipe_id", "c": {"$sum": 1}}},
+    ]
+    async for row in db.comments.aggregate(pipeline):
+        counts[row["_id"]] = row["c"]
+    return counts
+
+@api_router.get("/feed")
+async def get_feed(before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    # Validé avant le court-circuit "personne suivi" ci-dessous : un curseur
+    # invalide doit toujours faire 400, même quand le fil serait de toute
+    # façon vide pour une autre raison.
+    cursor_dt = None
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+
+    followee_ids = []
+    async for d in db.follows.find({"follower_id": me}, {"_id": 0, "followee_id": 1}):
+        followee_ids.append(d["followee_id"])
+    if not followee_ids:
+        return {"items": [], "has_more": False}
+
+    # PAGE_SIZE+1 de chaque flux : après fusion et tri, on sait si l'un des
+    # deux avait plus à offrir sans avoir à recompter la base.
+    fetch_n = FEED_PAGE_SIZE + 1
+    recipe_q: dict = {"author_id": {"$in": followee_ids}}
+    creation_q: dict = {"user_id": {"$in": followee_ids}}
+    if cursor_dt:
+        recipe_q["created_at"] = {"$lt": cursor_dt}
+        creation_q["created_at"] = {"$lt": cursor_dt}
+
+    recipe_docs = await db.recipes.find(recipe_q, {"_id": 0}).sort("created_at", -1).limit(fetch_n).to_list(fetch_n)
+    creation_docs = await db.creations.find(creation_q, {"_id": 0}).sort("created_at", -1).limit(fetch_n).to_list(fetch_n)
+
+    recipe_docs = await enrich_recipes(recipe_docs)
+    liked_recipes = await _liked_recipe_ids(me, [d["id"] for d in recipe_docs])
+    comment_counts = await _comment_counts([d["id"] for d in recipe_docs])
+
+    creation_counts = await _creation_like_counts([d["id"] for d in creation_docs])
+    creation_pictures = await _pictures_by_user_id([d["user_id"] for d in creation_docs])
+    liked_creations = await _liked_creation_ids(me, [d["id"] for d in creation_docs])
+
+    items = []
+    for d in recipe_docs:
+        items.append({
+            "kind": "recipe",
+            "id": d["id"],
+            "title": d["title"],
+            "image_path": d.get("image_path"),
+            "image_url": d.get("image_url"),
+            "product": d.get("product"),
+            "author_id": d.get("author_id"),
+            "author_name": d.get("author_name"),
+            "author_picture": d.get("author_picture"),
+            "like_count": d.get("like_count", 0),
+            "liked": d["id"] in liked_recipes,
+            "comment_count": comment_counts.get(d["id"], 0),
+            "created_at": d["created_at"],
+        })
+    for d in creation_docs:
+        items.append({
+            "kind": "creation",
+            "id": d["id"],
+            "title": d["title"],
+            "photos": d.get("photos") or [],
+            "author_id": d["user_id"],
+            "author_name": d.get("user_name"),
+            "author_picture": creation_pictures.get(d["user_id"]),
+            "like_count": creation_counts.get(d["id"], 0),
+            "liked": d["id"] in liked_creations,
+            "created_at": d["created_at"],
+        })
+
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    has_more = len(items) > FEED_PAGE_SIZE
+    items = items[:FEED_PAGE_SIZE]
+    return {"items": items, "has_more": has_more}
+
+# ---------- Notifications ----------
+# Système minimal : consultées à l'ouverture de l'app, aucun push mobile
+# (aucun jeton APNs/FCM stocké nulle part). Fan-out à l'écriture, à trois
+# points déjà existants (suivre, publier une recette, publier une
+# création) — jamais de tâche de fond ni de file d'attente, l'échelle de
+# cette app le permet.
+
+NOTIFICATIONS_PAGE_SIZE = 30
+
+async def _create_notification(user_id: str, ntype: str, actor_id: str, actor_name: Optional[str], target_id: Optional[str] = None) -> None:
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()), "user_id": user_id, "type": ntype,
+        "actor_id": actor_id, "actor_name": actor_name, "target_id": target_id,
+        "read": False, "created_at": datetime.now(timezone.utc),
+    })
+
+async def _notify_followers_of_new_post(author_id: str, author_name: Optional[str], ntype: str, target_id: str, setting_field: str) -> None:
+    """Fan-out à la publication : une notif pour chaque abonné qui a le
+    réglage activé — jamais à tout le monde. Un insert_many trivial à
+    l'échelle de cette app (quelques dizaines d'abonnés au plus par
+    utilisateur), pas besoin d'une file d'attente."""
+    follower_ids = []
+    async for d in db.follows.find({"followee_id": author_id}, {"_id": 0, "follower_id": 1}):
+        follower_ids.append(d["follower_id"])
+    if not follower_ids:
+        return
+    enabled_ids = []
+    async for u in db.users.find({"user_id": {"$in": follower_ids}}, {"_id": 0, "user_id": 1, setting_field: 1}):
+        if u.get(setting_field, True):
+            enabled_ids.append(u["user_id"])
+    if not enabled_ids:
+        return
+    now = datetime.now(timezone.utc)
+    docs = [
+        {"id": str(uuid.uuid4()), "user_id": uid, "type": ntype, "actor_id": author_id,
+         "actor_name": author_name, "target_id": target_id, "read": False, "created_at": now}
+        for uid in enabled_ids
+    ]
+    await db.notifications.insert_many(docs)
+
+@api_router.get("/notifications")
+async def list_notifications(limit: int = NOTIFICATIONS_PAGE_SIZE, before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    limit = max(1, min(limit, 100))
+    q: dict = {"user_id": user["user_id"]}
+    if before:
+        try:
+            cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Paramètre 'before' invalide")
+        q["created_at"] = {"$lt": cursor_dt}
+    docs = await db.notifications.find(q, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    has_more = len(docs) == limit
+    return {"notifications": docs, "has_more": has_more}
+
+@api_router.get("/notifications/unread-count")
+async def notifications_unread_count(user: dict = Depends(get_current_user)):
+    count = await db.notifications.count_documents({"user_id": user["user_id"], "read": False})
+    return {"count": count}
+
+@api_router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user: dict = Depends(get_current_user)):
+    await db.notifications.update_one({"id": notification_id, "user_id": user["user_id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+@api_router.post("/notifications/read-all")
+async def mark_all_notifications_read(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"ok": True}
 
 # ---------- Messages ----------
 MESSAGES_PAGE_SIZE = 50
@@ -2674,6 +3008,14 @@ async def startup():
     await db.team_members.create_index("pair_key", unique=True)
     await db.team_invites.create_index([("to_user_id", 1), ("status", 1)])
     await db.team_invites.create_index([("from_user_id", 1), ("status", 1)])
+    # Composé unique : empêche les doublons et sert "qui je suis" (follower_id
+    # d'abord) ; followee_id seul sert "qui me suit" + le comptage abonnés.
+    await db.follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
+    await db.follows.create_index("followee_id")
+    # Sert le futur fil (auteurs suivis, tri par date) et accélère la requête
+    # déjà existante de public_profile() sur author_id.
+    await db.recipes.create_index([("author_id", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on

@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemePreference } from '@/src/ThemeContext';
 
@@ -12,10 +13,29 @@ const OPTIONS: { key: ThemePreference; icon: any; label: string; body: string }[
   { key: 'dark', icon: 'moon', label: 'Sombre', body: 'Toujours le thème sombre, quel que soit le réglage système.' },
 ];
 
+type NotifKey = 'notify_new_follower' | 'notify_new_recipe' | 'notify_new_creation';
+
+const NOTIF_OPTIONS: { key: NotifKey; icon: any; label: string; body: string }[] = [
+  { key: 'notify_new_follower', icon: 'user-plus', label: 'Nouveaux abonnés', body: "Être notifié quand quelqu'un commence à vous suivre." },
+  { key: 'notify_new_recipe', icon: 'book-open', label: 'Nouvelles recettes', body: 'Être notifié quand une personne suivie publie une recette.' },
+  { key: 'notify_new_creation', icon: 'camera', label: 'Nouvelles créations', body: 'Être notifié quand une personne suivie publie une création.' },
+];
+
 export default function Settings() {
   const { colors, preference, setPreference } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { user, updateProfile } = useAuth();
+  const [busyKey, setBusyKey] = useState<NotifKey | null>(null);
+
+  const toggleNotif = async (key: NotifKey) => {
+    if (busyKey) return;
+    setBusyKey(key);
+    try {
+      await updateProfile({ [key]: !(user?.[key] ?? true) });
+    } catch (e) { console.warn(e); }
+    finally { setBusyKey(null); }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -47,6 +67,35 @@ export default function Settings() {
                   <Text style={styles.rowBody}>{opt.body}</Text>
                 </View>
                 {active && <Feather name="check" size={18} color={colors.brand} />}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>NOTIFICATIONS</Text>
+        <View style={styles.card}>
+          {NOTIF_OPTIONS.map((opt, i) => {
+            const active = user?.[opt.key] ?? true;
+            return (
+              <Pressable
+                key={opt.key}
+                testID={`notif-option-${opt.key}`}
+                onPress={() => toggleNotif(opt.key)}
+                disabled={busyKey === opt.key}
+                style={[styles.row, i < NOTIF_OPTIONS.length - 1 && styles.rowDivider]}
+              >
+                <View style={styles.rowIcon}>
+                  <Feather name={opt.icon} size={17} color={active ? colors.brand : colors.onSurfaceSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>{opt.label}</Text>
+                  <Text style={styles.rowBody}>{opt.body}</Text>
+                </View>
+                {busyKey === opt.key ? (
+                  <ActivityIndicator size="small" color={colors.brand} />
+                ) : active ? (
+                  <Feather name="check" size={18} color={colors.brand} />
+                ) : null}
               </Pressable>
             );
           })}
