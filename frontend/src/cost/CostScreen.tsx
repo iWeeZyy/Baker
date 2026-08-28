@@ -21,46 +21,26 @@ const VAT_PRESETS = ['5,5', '10', '20'];
 
 type Snapshot = { result: RecipeCostResult; sale: SaleMetrics };
 
-export function CostScreen({ recipeId }: { recipeId?: string }) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const SectionTitle = ({ icon, label }: { icon: any; label: string }) => (
-    <View style={styles.sectionTitleRow}>
-      <Feather name={icon} size={14} color={colors.muted} />
-      <Text style={styles.sectionTitle}>{label.toUpperCase()}</Text>
-    </View>
-  );
-
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  return (
     <View style={{ marginBottom: 14 }}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
   );
+}
 
-  const Row = ({ label, value, big, light }: { label: string; value: string; big?: boolean; light?: boolean }) => (
-    <View style={styles.resultRow}>
-      <Text style={[light ? styles.resultLabelLight : styles.resultLabel, big && styles.resultLabelBig]}>{label}</Text>
-      <Text style={[light ? styles.resultValueLight : styles.resultValue, big && styles.resultValueBig]}>{value}</Text>
-    </View>
-  );
-
-  const CompareRow = ({ label, before, after }: { label: string; before: string; after: string }) => (
-    <View style={styles.compareRow}>
-      <Text style={styles.compareLabel}>{label}</Text>
-      <Text style={styles.compareBefore}>{before}</Text>
-      <Feather name="arrow-right" size={12} color={colors.muted} />
-      <Text style={styles.compareAfter}>{after}</Text>
-    </View>
-  );
-
-  const CostItemList = ({ items, setItems, testPrefix, placeholder }: {
-    items: CostLineItem[];
-    setItems: (fn: (prev: CostLineItem[]) => CostLineItem[]) => void;
-    testPrefix: string;
-    placeholder: string;
-  }) => (
+function CostItemList({ items, setItems, testPrefix, placeholder }: {
+  items: CostLineItem[];
+  setItems: (fn: (prev: CostLineItem[]) => CostLineItem[]) => void;
+  testPrefix: string;
+  placeholder: string;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
     <View style={styles.card}>
       {items.map((item, i) => (
         <View key={item.id} style={styles.itemRow}>
@@ -90,6 +70,34 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
         <Feather name="plus" size={14} color={colors.brand} />
         <Text style={styles.addItemText}>Ajouter</Text>
       </Pressable>
+    </View>
+  );
+}
+
+export function CostScreen({ recipeId }: { recipeId?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const SectionTitle = ({ icon, label }: { icon: any; label: string }) => (
+    <View style={styles.sectionTitleRow}>
+      <Feather name={icon} size={14} color={colors.muted} />
+      <Text style={styles.sectionTitle}>{label.toUpperCase()}</Text>
+    </View>
+  );
+
+  const Row = ({ label, value, big, light }: { label: string; value: string; big?: boolean; light?: boolean }) => (
+    <View style={styles.resultRow}>
+      <Text style={[light ? styles.resultLabelLight : styles.resultLabel, big && styles.resultLabelBig]}>{label}</Text>
+      <Text style={[light ? styles.resultValueLight : styles.resultValue, big && styles.resultValueBig]}>{value}</Text>
+    </View>
+  );
+
+  const CompareRow = ({ label, before, after }: { label: string; before: string; after: string }) => (
+    <View style={styles.compareRow}>
+      <Text style={styles.compareLabel}>{label}</Text>
+      <Text style={styles.compareBefore}>{before}</Text>
+      <Feather name="arrow-right" size={12} color={colors.muted} />
+      <Text style={styles.compareAfter}>{after}</Text>
     </View>
   );
 

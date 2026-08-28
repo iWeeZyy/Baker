@@ -16,17 +16,21 @@ const UNITS: { key: string; label: string }[] = [
   { key: 'piece', label: 'pièce' },
 ];
 
-/** Ajouter ou modifier une matière première : le prix au kg/L/pièce se déduit, jamais saisi directement. */
-export default function MaterialForm() {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       {children}
     </View>
   );
+}
+
+/** Ajouter ou modifier une matière première : le prix au kg/L/pièce se déduit, jamais saisi directement. */
+export default function MaterialForm() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
   const { id, prefillName } = useLocalSearchParams<{ id?: string; prefillName?: string }>();
