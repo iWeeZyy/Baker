@@ -14,7 +14,7 @@ import { useTheme } from '@/src/ThemeContext';
 // this list near-instantly when a message arrives while connected.
 const POLL_FALLBACK_MS = 20000;
 
-type UserRow = { user_id: string; name: string; picture?: string; friend_status?: string };
+type UserRow = { user_id: string; name: string; picture?: string; friend_status?: string; following?: boolean };
 type FriendRow = UserRow & { last_message?: { content: string; from_me: boolean; created_at: string } | null; unread: number };
 type RequestRow = { id: string; from_user: UserRow };
 
@@ -42,6 +42,7 @@ export default function Friends() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const debounceRef = useRef<any>(null);
 
   const load = useCallback(async () => {
@@ -82,6 +83,22 @@ export default function Friends() {
     } catch (e) { console.warn(e); }
   };
 
+  const toggleFollow = async (u: UserRow) => {
+    if (followBusyId) return;
+    setFollowBusyId(u.user_id);
+    const prev = u.following;
+    setResults(list => list.map(r => r.user_id === u.user_id ? { ...r, following: !r.following } : r));
+    try {
+      const res = await api(`/users/${u.user_id}/follow`, { method: 'POST' });
+      setResults(list => list.map(r => r.user_id === u.user_id ? { ...r, following: res.following } : r));
+    } catch (e) {
+      console.warn(e);
+      setResults(list => list.map(r => r.user_id === u.user_id ? { ...r, following: prev } : r));
+    } finally {
+      setFollowBusyId(null);
+    }
+  };
+
   const respond = async (req: RequestRow, accept: boolean) => {
     try {
       await api(`/friends/requests/${req.id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
@@ -97,6 +114,24 @@ export default function Friends() {
       <Pressable testID={`add-friend-${u.user_id}`} onPress={() => sendRequest(u)} style={styles.addBtn}>
         <Feather name="user-plus" size={15} color={colors.onBrandPrimary} />
         <Text style={styles.addBtnText}>{u.friend_status === 'pending_received' ? 'Accepter' : 'Ajouter'}</Text>
+      </Pressable>
+    );
+  };
+
+  const FollowPill = ({ u }: { u: UserRow }) => {
+    if (followBusyId === u.user_id) return <ActivityIndicator size="small" color={colors.brand} />;
+    if (u.following) {
+      return (
+        <Pressable testID={`unfollow-${u.user_id}`} onPress={() => toggleFollow(u)} style={styles.followBtnMuted}>
+          <Feather name="check" size={13} color={colors.onSurfaceSecondary} />
+          <Text style={styles.followBtnMutedText}>Suivi</Text>
+        </Pressable>
+      );
+    }
+    return (
+      <Pressable testID={`follow-${u.user_id}`} onPress={() => toggleFollow(u)} style={styles.followBtn}>
+        <Feather name="plus" size={13} color={colors.onBrandPrimary} />
+        <Text style={styles.followBtnText}>Suivre</Text>
       </Pressable>
     );
   };
@@ -140,7 +175,10 @@ export default function Friends() {
                   <Avatar user={u} />
                   <Text style={styles.rowName}>{u.name}</Text>
                 </Pressable>
-                <SearchAction u={u} />
+                <View style={styles.rowActions}>
+                  <FollowPill u={u} />
+                  <SearchAction u={u} />
+                </View>
               </View>
             ))}
           </View>
@@ -228,6 +266,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   countBadgeText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  followBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brand, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  followBtnText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: '600' },
+  followBtnMuted: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  followBtnMutedText: { color: colors.onSurfaceSecondary, fontSize: 12, fontWeight: '600' },
   rowName: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
   rowSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   rowSubUnread: { color: colors.onSurface, fontWeight: '600' },

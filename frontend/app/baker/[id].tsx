@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,6 +20,7 @@ export default function BakerProfile() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; picture?: string | null; role: string | null }[]>([]);
 
   const load = useCallback(async () => {
@@ -65,6 +66,36 @@ export default function BakerProfile() {
     if (ok) await doRemoveFriend();
   };
 
+  const toggleFollow = async () => {
+    if (followLoading) return;
+    setFollowLoading(true);
+    const prev = { following: data.following, follower_count: data.follower_count };
+    // Optimistic : le bouton change d'état immédiatement, corrigé si l'appel échoue.
+    setData((d: any) => ({ ...d, following: !d.following, follower_count: d.follower_count + (d.following ? -1 : 1) }));
+    try {
+      const res = await api(`/users/${id}/follow`, { method: 'POST' });
+      setData((d: any) => ({ ...d, following: res.following, follower_count: res.follower_count }));
+    } catch (e) {
+      console.warn(e);
+      setData((d: any) => ({ ...d, ...prev }));
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const handleFollowPress = async () => {
+    if (data.following) {
+      const ok = await confirmAsync(
+        'Ne plus suivre',
+        `Vous ne verrez plus les nouvelles publications de ${data?.user?.name || 'cette personne'} dans votre fil.`,
+        'Ne plus suivre',
+        true,
+      );
+      if (!ok) return;
+    }
+    await toggleFollow();
+  };
+
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   if (!data) return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -75,9 +106,37 @@ export default function BakerProfile() {
     </SafeAreaView>
   );
 
-  const { user, recipes, recipe_count, total_likes, friend_status, creations, team_count, team_visible } = data;
+  const {
+    user, recipes, recipe_count, total_likes, comment_count, friend_status, creations, team_count, team_visible,
+    following, follower_count, following_count,
+  } = data;
   const initial = (user.name || '?').slice(0, 1).toUpperCase();
   const memberSince = user.created_at ? new Date(user.created_at.endsWith?.('Z') || user.created_at.includes?.('+') ? user.created_at : user.created_at + 'Z').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
+
+  const FollowAction = () => {
+    if (friend_status === 'me') return null;
+    if (followLoading) {
+      return (
+        <View style={[styles.actionBtn, styles.actionBtnMuted]}>
+          <ActivityIndicator size="small" color={colors.muted} />
+        </View>
+      );
+    }
+    if (following) {
+      return (
+        <Pressable testID="unfollow-btn" onPress={handleFollowPress} style={[styles.actionBtn, styles.actionBtnMuted]}>
+          <Feather name="check" size={16} color={colors.onSurfaceSecondary} />
+          <Text style={[styles.actionText, { color: colors.onSurfaceSecondary }]}>Suivi</Text>
+        </Pressable>
+      );
+    }
+    return (
+      <Pressable testID="follow-btn" onPress={handleFollowPress} style={styles.actionBtn}>
+        <Feather name="user-plus" size={16} color={colors.onBrandPrimary} />
+        <Text style={styles.actionText}>Suivre</Text>
+      </Pressable>
+    );
+  };
 
   const FriendAction = () => {
     if (friend_status === 'me') return null;
@@ -143,16 +202,31 @@ export default function BakerProfile() {
               </Pressable>
             )}
 
-            <View style={styles.statsRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
               <View style={styles.stat}>
                 <Text style={styles.statVal}>{recipe_count}</Text>
                 <Text style={styles.statLabel}>RECETTES</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.stat}>
+                <Text style={styles.statVal}>{comment_count}</Text>
+                <Text style={styles.statLabel}>COMMENTAIRES</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.stat}>
                 <Text style={styles.statVal}>{total_likes}</Text>
                 <Text style={styles.statLabel}>J'AIME REÇUS</Text>
               </View>
+              <View style={styles.statDivider} />
+              <Pressable testID="baker-followers-stat" onPress={() => router.push(`/followers/${user.user_id}` as any)} style={styles.stat}>
+                <Text style={styles.statVal}>{follower_count}</Text>
+                <Text style={styles.statLabel}>ABONNÉS</Text>
+              </Pressable>
+              <View style={styles.statDivider} />
+              <Pressable testID="baker-following-stat" onPress={() => router.push(`/following/${user.user_id}` as any)} style={styles.stat}>
+                <Text style={styles.statVal}>{following_count}</Text>
+                <Text style={styles.statLabel}>ABONNEMENTS</Text>
+              </Pressable>
               {team_visible && (
                 <>
                   <View style={styles.statDivider} />
@@ -162,9 +236,12 @@ export default function BakerProfile() {
                   </View>
                 </>
               )}
-            </View>
+            </ScrollView>
 
-            <FriendAction />
+            <View style={styles.actionsColumn}>
+              <FollowAction />
+              <FriendAction />
+            </View>
 
             {creations?.length > 0 && (
               <View style={styles.creationsSection}>
@@ -250,12 +327,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 28 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 20, paddingHorizontal: 4 },
   stat: { alignItems: 'center' },
   statVal: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface },
-  statLabel: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginTop: 2 },
+  statLabel: { fontSize: 10, letterSpacing: 1, color: colors.muted, fontWeight: '600', marginTop: 2 },
   statDivider: { width: 1, height: 32, backgroundColor: colors.border },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, marginTop: 20 },
+  actionsColumn: { alignItems: 'center', gap: 10, marginTop: 20 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999 },
   actionBtnMuted: { backgroundColor: colors.surfaceSecondary },
   actionText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '600' },
   removeFriendBtn: { marginTop: 10, paddingVertical: 6, paddingHorizontal: 12 },

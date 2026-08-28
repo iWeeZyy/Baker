@@ -57,17 +57,34 @@ export default function Profile() {
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; picture?: string | null; role: string | null }[]>([]);
   const [teamCount, setTeamCount] = useState(0);
   const [teamInvites, setTeamInvites] = useState<{ id: string; from_user: { user_id: string; name: string; picture?: string | null }; role: string | null }[]>([]);
+  const [stats, setStats] = useState({ recipe_count: 0, comment_count: 0, total_likes: 0, follower_count: 0, following_count: 0 });
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, f, c] = await Promise.all([api('/recipes/mine'), api('/recipes/favorites'), api('/creations/mine')]);
+      const [m, f, c, p] = await Promise.all([
+        api('/recipes/mine'), api('/recipes/favorites'), api('/creations/mine'),
+        user ? api(`/users/${user.user_id}/profile`) : Promise.resolve(null),
+      ]);
       setMine(m); setFavs(f); setCreations(c);
+      if (p) {
+        setStats({
+          recipe_count: p.recipe_count, comment_count: p.comment_count, total_likes: p.total_likes,
+          follower_count: p.follower_count, following_count: p.following_count,
+        });
+      }
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
-  }, []);
+  }, [user]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const loadUnreadCount = useCallback(async () => {
+    try { setUnreadCount((await api('/notifications/unread-count')).count); } catch (e) { console.warn(e); }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadUnreadCount(); }, [loadUnreadCount]));
 
   const loadTeam = useCallback(async () => {
     if (!user) return;
@@ -234,6 +251,14 @@ export default function Profile() {
             )}
           </Pressable>
           <View style={styles.headerActions}>
+            <Pressable testID="notifications-btn" onPress={() => router.push('/notifications' as any)} style={styles.logoutBtn}>
+              <Feather name="bell" size={18} color={colors.onSurfaceSecondary} />
+              {unreadCount > 0 && (
+                <View style={styles.notifBadge} testID="notifications-badge">
+                  <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </Pressable>
             <Pressable testID="settings-btn" onPress={() => router.push('/settings' as any)} style={styles.logoutBtn}>
               <Feather name="settings" size={18} color={colors.onSurfaceSecondary} />
             </Pressable>
@@ -263,6 +288,35 @@ export default function Profile() {
             <Feather name="instagram" size={15} color={colors.brand} />
             <Text style={styles.instagramText}>Instagram @{user.instagram_username}</Text>
           </Pressable>
+        )}
+
+        {!editingProfile && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
+            <View style={styles.stat}>
+              <Text style={styles.statVal}>{stats.recipe_count}</Text>
+              <Text style={styles.statLabel}>RECETTES</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <Text style={styles.statVal}>{stats.comment_count}</Text>
+              <Text style={styles.statLabel}>COMMENTAIRES</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <Text style={styles.statVal}>{stats.total_likes}</Text>
+              <Text style={styles.statLabel}>J'AIME REÇUS</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <Pressable testID="my-followers-stat" onPress={() => user && router.push(`/followers/${user.user_id}` as any)} style={styles.stat}>
+              <Text style={styles.statVal}>{stats.follower_count}</Text>
+              <Text style={styles.statLabel}>ABONNÉS</Text>
+            </Pressable>
+            <View style={styles.statDivider} />
+            <Pressable testID="my-following-stat" onPress={() => user && router.push(`/following/${user.user_id}` as any)} style={styles.stat}>
+              <Text style={styles.statVal}>{stats.following_count}</Text>
+              <Text style={styles.statLabel}>ABONNEMENTS</Text>
+            </Pressable>
+          </ScrollView>
         )}
 
         <View style={styles.avatarLinksRow}>
@@ -607,8 +661,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 28, color: colors.onBrandTertiary, fontFamily: theme.serif },
   logoutBtn: { width: 40, height: 40, borderRadius: 999, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  notifBadge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  notifBadgeText: { color: colors.onBrandPrimary, fontSize: 9, fontWeight: '700' },
   name: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 14 },
   email: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 20, paddingHorizontal: 4 },
+  stat: { alignItems: 'center' },
+  statVal: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
+  statLabel: { fontSize: 10, letterSpacing: 1, color: colors.muted, fontWeight: '600', marginTop: 2 },
+  statDivider: { width: 1, height: 28, backgroundColor: colors.border },
   tabs: { flexDirection: 'row', marginTop: 24, gap: 24 },
   tab: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: colors.brand },
