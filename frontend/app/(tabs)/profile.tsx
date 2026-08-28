@@ -247,9 +247,18 @@ export default function Profile() {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
+  // Rendu comme ListHeaderComponent des deux FlatList ci-dessous plutôt que
+  // comme un sibling fixe : sur un profil chargé (bio + Instagram + Team +
+  // créations + invitations), ce bloc peut désormais dépasser la hauteur de
+  // l'écran, et un View non défilant à côté d'un FlatList flex:1 laisse ce
+  // dernier s'écraser à hauteur nulle — rien en dessous n'est alors ni
+  // visible ni défilable. En passant cet élément JSX (pas une fonction) en
+  // ListHeaderComponent, tout scrolle comme une seule liste et React continue
+  // de réconcilier les mêmes types de nœuds à chaque rendu (donc les champs
+  // de saisie de l'édition de profil ne perdent pas le focus) — même
+  // convention déjà utilisée par `app/baker/[id].tsx`.
+  const header = (
+    <View style={styles.header}>
         <View style={styles.headerTop}>
           <Pressable testID="avatar-btn" onPress={() => setAvatarMenuOpen(true)} style={styles.avatar}>
             {avatarUrl(user?.picture, API_BASE) ? (
@@ -536,18 +545,19 @@ export default function Profile() {
             <Text style={[styles.tabText, tab === 'comments' && styles.tabTextActive]}>Mes commentaires</Text>
           </Pressable>
         </View>
-      </View>
+    </View>
+  );
 
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
       {tab === 'comments' ? (
-        !commentsLoaded ? (
-          <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
-        ) : (
           <FlatList
             style={{ flex: 1 }}
             data={myComments}
             keyExtractor={c => c.id}
-            contentContainerStyle={{ gap: 16, padding: 24, paddingBottom: 40 }}
+            contentContainerStyle={{ gap: 16, paddingBottom: 40 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
+            ListHeaderComponent={header}
             renderItem={({ item }) => {
               const isReply = !!item.parent_id;
               return (
@@ -578,14 +588,18 @@ export default function Profile() {
               );
             }}
             ListEmptyComponent={
-              <View style={styles.empty}>
-                <Feather name="message-circle" size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>Aucun commentaire</Text>
-                <Text style={styles.emptySubtitle}>Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes.</Text>
-                <Pressable testID="empty-comments-btn" onPress={() => router.push('/(tabs)/recipes' as any)} style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Découvrir des recettes</Text>
-                </Pressable>
-              </View>
+              !commentsLoaded ? (
+                <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
+              ) : (
+                <View style={styles.empty}>
+                  <Feather name="message-circle" size={40} color={colors.muted} />
+                  <Text style={styles.emptyTitle}>Aucun commentaire</Text>
+                  <Text style={styles.emptySubtitle}>Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes.</Text>
+                  <Pressable testID="empty-comments-btn" onPress={() => router.push('/(tabs)/recipes' as any)} style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>Découvrir des recettes</Text>
+                  </Pressable>
+                </View>
+              )
             }
             ListFooterComponent={commentsHasMore ? (
               <Pressable testID="comments-load-more" onPress={loadMoreComments} disabled={commentsLoadingMore} style={styles.loadMoreBtn}>
@@ -593,18 +607,16 @@ export default function Profile() {
               </Pressable>
             ) : null}
           />
-        )
-      ) : loading ? (
-        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
           style={{ flex: 1 }}
-          data={items}
+          data={loading ? [] : items}
           keyExtractor={r => r.id}
           numColumns={2}
           columnWrapperStyle={{ gap: 16, paddingHorizontal: 24 }}
-          contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
+          contentContainerStyle={{ gap: 24, paddingBottom: 40 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
+          ListHeaderComponent={header}
           renderItem={({ item }) => (
             <Pressable testID={`profile-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.card}>
               <Image source={recipeImageSource(item, API_BASE)} style={styles.cardImage} contentFit="cover" />
@@ -613,15 +625,19 @@ export default function Profile() {
             </Pressable>
           )}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Feather name={tab === 'mine' ? 'edit-3' : 'bookmark'} size={40} color={colors.muted} />
-              <Text style={styles.emptyTitle}>{tab === 'mine' ? "Vous n'avez pas encore partagé de recette" : 'Aucune recette sauvegardée'}</Text>
-              {tab === 'mine' && (
-                <Pressable testID="empty-share-btn" onPress={() => router.push('/share')} style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Partager une recette</Text>
-                </Pressable>
-              )}
-            </View>
+            loading ? (
+              <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
+            ) : (
+              <View style={styles.empty}>
+                <Feather name={tab === 'mine' ? 'edit-3' : 'bookmark'} size={40} color={colors.muted} />
+                <Text style={styles.emptyTitle}>{tab === 'mine' ? "Vous n'avez pas encore partagé de recette" : 'Aucune recette sauvegardée'}</Text>
+                {tab === 'mine' && (
+                  <Pressable testID="empty-share-btn" onPress={() => router.push('/share')} style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>Partager une recette</Text>
+                  </Pressable>
+                )}
+              </View>
+            )
           }
         />
       )}
@@ -665,6 +681,7 @@ export default function Profile() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyCenter: { paddingTop: 60, alignItems: 'center' },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerActions: { flexDirection: 'row', gap: 10 },
@@ -694,7 +711,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
   emptyBtn: { marginTop: 16, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
   emptyBtnText: { color: colors.onBrandPrimary, fontWeight: '600' },
-  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14 },
+  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14, marginHorizontal: 24 },
   commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceTertiary },
   commentCardKind: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
   commentCardReplyTo: { fontSize: 12, color: colors.brand, fontWeight: '500', marginTop: 2 },
