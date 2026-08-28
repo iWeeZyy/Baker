@@ -15,6 +15,9 @@
         "NSPhotoLibraryUsageDescription": "Choisir une photo pour votre recette",
         "NSCameraUsageDescription": "Prendre une photo de votre recette",
         "NSPhotoLibraryAddUsageDescription": "Enregistrer l'emploi du temps de votre équipe dans vos photos"
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.lucasmorey.bakers"]
       }
     },
     "android": {
@@ -38,6 +41,7 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
+      "@bacons/apple-targets",
       [
         "expo-splash-screen",
         {

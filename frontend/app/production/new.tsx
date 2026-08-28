@@ -7,9 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { isPlanLimitError } from '@/src/plan';
 import { theme } from '@/src/theme';
+import { syncWidgetData } from '@/src/widgetData';
 
 type Recipe = { id: string; title: string; category: string; yield_pieces?: number | null };
 type Line = { key: string; recipe_id: string; quantity: string; mode: 'pieces' | 'batches' };
@@ -21,6 +23,7 @@ function todayISO() {
 
 export default function ProductionForm() {
   const router = useRouter();
+  const { user } = useAuth();
   // Same screen for both: `id` present means we are editing.
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id && id !== 'new';
@@ -99,6 +102,9 @@ export default function ProductionForm() {
       const saved = isEdit
         ? await api(`/productions/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
         : await api('/productions', { method: 'POST', body: JSON.stringify(payload) });
+      // Sans condition sur la date : si ce n'est pas aujourd'hui, la
+      // resynchronisation ne change simplement rien à l'instantané du widget.
+      if (user) syncWidgetData(user.user_id);
       router.replace(`/production/${saved.id}` as any);
     } catch (e: any) {
       // Hitting the Free ceiling is not a failure — it is the moment to explain Pro.
@@ -114,6 +120,7 @@ export default function ProductionForm() {
     if (!ok) return;
     try {
       await api(`/productions/${id}`, { method: 'DELETE' });
+      if (user) syncWidgetData(user.user_id);
       router.replace('/(tabs)/planning' as any);
     } catch (e: any) {
       setError(e.message || 'Suppression impossible');

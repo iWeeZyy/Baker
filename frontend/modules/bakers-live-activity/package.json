@@ -1,0 +1,8 @@
+{
+  "name": "bakers-live-activity",
+  "version": "1.0.0",
+  "description": "Pont natif local (non publié) : démarre/actualise/termine la Live Activity « cuisson en cours », pilotée depuis app/production/[id].tsx.",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "private": true
+}

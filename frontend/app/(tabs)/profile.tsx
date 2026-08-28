@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -10,9 +10,12 @@ import { api, API_BASE, getToken } from '@/src/api';
 import { ActionSheet } from '@/src/ActionSheet';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
+import { openInstagram, parseInstagramUsername } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { formatRelativeDate } from '@/src/relativeDate';
 import { theme } from '@/src/theme';
+
+const BIO_MAX_LENGTH = 300;
 
 type PendingImage = { uri: string; name: string };
 
@@ -24,7 +27,7 @@ type MyComment = {
 };
 
 export default function Profile() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, updateProfile } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'mine' | 'favorites' | 'comments'>('mine');
   const [mine, setMine] = useState<any[]>([]);
@@ -38,6 +41,11 @@ export default function Profile() {
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [commentsHasMore, setCommentsHasMore] = useState(false);
   const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [bioDraft, setBioDraft] = useState('');
+  const [instagramDraft, setInstagramDraft] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,6 +154,35 @@ export default function Profile() {
     }
   };
 
+  const openProfileEdit = () => {
+    setProfileError(null);
+    setBioDraft(user?.bio || '');
+    setInstagramDraft(user?.instagram_username ? `@${user.instagram_username}` : '');
+    setEditingProfile(true);
+  };
+
+  const instagramDraftError = instagramDraft.trim() && parseInstagramUsername(instagramDraft) === null;
+
+  const saveProfile = async () => {
+    if (instagramDraftError) {
+      setProfileError('Nom d’utilisateur ou lien Instagram invalide.');
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError(null);
+    try {
+      await updateProfile({
+        bio: bioDraft.trim(),
+        instagram_username: instagramDraft.trim() ? (parseInstagramUsername(instagramDraft) || '') : '',
+      });
+      setEditingProfile(false);
+    } catch (e: any) {
+      setProfileError(e.message || 'Enregistrement impossible. Vérifiez votre connexion et réessayez.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -163,6 +200,23 @@ export default function Profile() {
         </View>
         <Text style={styles.name}>{user?.name || 'Boulanger'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
+
+        {/* Bio + Instagram : rien n'est affiché si les deux sont vides,
+            jamais un bloc creux. */}
+        {!editingProfile && !!user?.bio && (
+          <Text style={styles.bio} testID="profile-bio">{user.bio}</Text>
+        )}
+        {!editingProfile && !!user?.instagram_username && (
+          <Pressable
+            testID="profile-instagram-link"
+            onPress={() => openInstagram(user!.instagram_username as string)}
+            style={styles.instagramRow}
+          >
+            <Feather name="instagram" size={15} color={theme.color.brand} />
+            <Text style={styles.instagramText}>Instagram @{user.instagram_username}</Text>
+          </Pressable>
+        )}
+
         <View style={styles.avatarLinksRow}>
           <Pressable testID="edit-avatar-link" onPress={() => setAvatarMenuOpen(true)}>
             <Text style={styles.avatarLink}>Modifier la photo</Text>
@@ -172,8 +226,55 @@ export default function Profile() {
               <Text style={[styles.avatarLink, { color: theme.color.error }]}>Supprimer la photo</Text>
             </Pressable>
           )}
+          {!editingProfile && (
+            <Pressable testID="edit-profile-link" onPress={openProfileEdit}>
+              <Text style={styles.avatarLink}>Modifier mon profil</Text>
+            </Pressable>
+          )}
         </View>
         {avatarError && <Text style={styles.avatarError} testID="avatar-error">{avatarError}</Text>}
+
+        {editingProfile && (
+          <View style={styles.editProfileCard}>
+            <Text style={styles.editLabel}>Description</Text>
+            <TextInput
+              testID="bio-input"
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              placeholder="Écrire une description…"
+              placeholderTextColor={theme.color.muted}
+              style={styles.bioInput}
+              multiline
+              maxLength={BIO_MAX_LENGTH}
+            />
+            <Text style={styles.charCount}>{bioDraft.length} / {BIO_MAX_LENGTH}</Text>
+
+            <Text style={styles.editLabel}>Instagram</Text>
+            <TextInput
+              testID="instagram-input"
+              value={instagramDraft}
+              onChangeText={setInstagramDraft}
+              placeholder="@moncompte"
+              placeholderTextColor={theme.color.muted}
+              style={styles.editInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {instagramDraftError && (
+              <Text style={styles.avatarError} testID="instagram-format-error">Nom d’utilisateur ou lien Instagram invalide.</Text>
+            )}
+            {profileError && <Text style={styles.avatarError} testID="profile-error">{profileError}</Text>}
+
+            <View style={styles.editActionsRow}>
+              <Pressable testID="cancel-profile-edit" disabled={profileSaving} onPress={() => setEditingProfile(false)} style={styles.editCancelBtn}>
+                <Text style={styles.editCancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable testID="save-profile-btn" disabled={profileSaving} onPress={saveProfile} style={[styles.editSaveBtn, profileSaving && { opacity: 0.6 }]}>
+                {profileSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.editSaveText}>Enregistrer</Text>}
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <View style={styles.tabs}>
           <Pressable testID="tab-mine" onPress={() => setTab('mine')} style={[styles.tab, tab === 'mine' && styles.tabActive]}>
@@ -341,9 +442,22 @@ const styles = StyleSheet.create({
   commentCardMeta: { fontSize: 12, color: theme.color.muted },
   loadMoreBtn: { alignItems: 'center', paddingVertical: 14 },
   loadMoreText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  avatarLinksRow: { flexDirection: 'row', gap: 20, marginTop: 10 },
+  avatarLinksRow: { flexDirection: 'row', gap: 20, marginTop: 10, flexWrap: 'wrap' },
   avatarLink: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
   avatarError: { fontSize: 13, color: theme.color.error, marginTop: 8 },
+  bio: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
+  instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  instagramText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
+  editProfileCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 16, marginTop: 14 },
+  editLabel: { fontSize: 12, color: theme.color.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
+  bioInput: { fontSize: 14, color: theme.color.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: theme.color.surface, borderRadius: 8, padding: 10 },
+  charCount: { fontSize: 11, color: theme.color.muted, textAlign: 'right', marginTop: 4 },
+  editInput: { fontSize: 14, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 8, padding: 10 },
+  editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
+  editCancelBtn: { paddingVertical: 10, paddingHorizontal: 14 },
+  editCancelText: { fontSize: 14, color: theme.color.muted, fontWeight: '600' },
+  editSaveBtn: { backgroundColor: theme.color.brand, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  editSaveText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   previewCard: { backgroundColor: theme.color.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
   previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, marginBottom: 20 },

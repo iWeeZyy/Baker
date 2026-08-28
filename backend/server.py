@@ -34,6 +34,7 @@ import imaging
 import moderation
 import text_moderation
 import scan
+import instagram
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -182,6 +183,15 @@ class LoginInput(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: dict
+
+class UserProfileUpdate(BaseModel):
+    # Une chaîne vide signifie "supprimer ce champ" (converti en None avant
+    # stockage) — c'est ce qui couvre la suppression de la bio/Instagram,
+    # pas un champ séparé.
+    bio: Optional[str] = None
+    instagram_username: Optional[str] = None
+
+BIO_MAX_LENGTH = 300
 
 class Recipe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -340,13 +350,15 @@ async def register(inp: RegisterInput):
         "password_hash": pw_hash,
         "provider": "email",
         "picture": None,
+        "bio": None,
+        "instagram_username": None,
         "created_at": datetime.now(timezone.utc),
     }
     await db.users.insert_one(user_doc)
     token = sign_jwt(user_id)
     user_doc.pop("password_hash", None)
     user_doc.pop("_id", None)
-    return {"token": token, "user": {"user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None}}
+    return {"token": token, "user": {"user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None, "bio": None, "instagram_username": None}}
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(inp: LoginInput):
@@ -356,11 +368,53 @@ async def login(inp: LoginInput):
     if not bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode()):
         raise HTTPException(401, "Email ou mot de passe invalide")
     token = sign_jwt(user["user_id"])
-    return {"token": token, "user": {"user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture")}}
+    return {"token": token, "user": {
+        "user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"),
+        "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
+    }}
 
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
-    return {"user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture")}
+    return {
+        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
+        "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
+    }
+
+@api_router.put("/auth/me")
+async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_current_user)):
+    """Modifie la bio et/ou l'Instagram du compte connecté — jamais celui
+    d'un autre : comme pour la photo de profil, il n'y a aucun paramètre
+    d'utilisateur cible, l'identité vient uniquement du JWT."""
+    updates: dict = {}
+
+    if inp.bio is not None:
+        bio = inp.bio.strip()
+        if not bio:
+            updates["bio"] = None
+        else:
+            if len(bio) > BIO_MAX_LENGTH:
+                raise HTTPException(422, f"La description ne peut pas dépasser {BIO_MAX_LENGTH} caractères.")
+            moderation_result = text_moderation.classify_comment(bio)
+            await _moderate_and_flag(moderation_result, "bio", user["user_id"], user["user_id"])
+            updates["bio"] = bio
+
+    if inp.instagram_username is not None:
+        handle = inp.instagram_username.strip()
+        if not handle:
+            updates["instagram_username"] = None
+        else:
+            try:
+                updates["instagram_username"] = instagram.parse_instagram_username(handle)
+            except ValueError:
+                raise HTTPException(422, "Nom d'utilisateur ou lien Instagram invalide.")
+
+    if updates:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
+
+    return {
+        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
+        "bio": updates.get("bio", user.get("bio")), "instagram_username": updates.get("instagram_username", user.get("instagram_username")),
+    }
 
 @api_router.post("/auth/logout")
 async def logout():
@@ -960,7 +1014,10 @@ async def _friend_status(me: str, other: str) -> str:
     return "none"
 
 def _public_user(u: dict) -> dict:
-    return {"user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture")}
+    return {
+        "user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture"),
+        "bio": u.get("bio"), "instagram_username": u.get("instagram_username"),
+    }
 
 @api_router.get("/users/search")
 async def search_users(q: str = "", user: dict = Depends(get_current_user)):

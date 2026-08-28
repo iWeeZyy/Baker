@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
+import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme } from '@/src/theme';
 
@@ -123,6 +124,13 @@ export default function BakerProfile() {
             </View>
             <Text style={styles.name} testID="baker-name">{user.name}</Text>
             {memberSince && <Text style={styles.since}>Boulanger depuis {memberSince}</Text>}
+            {!!user.bio && <Text style={styles.bio} testID="baker-bio">{user.bio}</Text>}
+            {!!user.instagram_username && (
+              <Pressable testID="baker-instagram-link" onPress={() => openInstagram(user.instagram_username)} style={styles.instagramRow}>
+                <Feather name="instagram" size={15} color={theme.color.brand} />
+                <Text style={styles.instagramText}>Instagram @{user.instagram_username}</Text>
+              </Pressable>
+            )}
 
             <View style={styles.statsRow}>
               <View style={styles.stat}>
@@ -166,6 +174,9 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 34, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
   name: { fontFamily: theme.serif, fontSize: 28, color: theme.color.onSurface, marginTop: 14 },
   since: { fontSize: 13, color: theme.color.muted, marginTop: 4, fontStyle: 'italic' },
+  bio: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
+  instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  instagramText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 28 },
   stat: { alignItems: 'center' },
   statVal: { fontFamily: theme.serif, fontSize: 26, color: theme.color.onSurface },
