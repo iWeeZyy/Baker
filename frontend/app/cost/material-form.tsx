@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 const UNITS: { key: string; label: string }[] = [
   { key: 'kg', label: 'kg' },
@@ -17,6 +18,16 @@ const UNITS: { key: string; label: string }[] = [
 
 /** Ajouter ou modifier une matière première : le prix au kg/L/pièce se déduit, jamais saisi directement. */
 export default function MaterialForm() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      {children}
+    </View>
+  );
+
   const router = useRouter();
   const { id, prefillName } = useLocalSearchParams<{ id?: string; prefillName?: string }>();
   const isEdit = !!id;
@@ -91,13 +102,13 @@ export default function MaterialForm() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="material-form-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{isEdit ? 'Modifier le prix' : 'Nouvelle matière première'}</Text>
         <View style={{ width: 40 }} />
@@ -106,25 +117,25 @@ export default function MaterialForm() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Field label="Nom">
-            <TextInput testID="material-name" value={name} onChangeText={setName} placeholder="Farine T65" placeholderTextColor={theme.color.muted} style={styles.input} />
+            <TextInput testID="material-name" value={name} onChangeText={setName} placeholder="Farine T65" placeholderTextColor={colors.muted} style={styles.input} />
           </Field>
           <Field label="Catégorie (optionnel)">
-            <TextInput testID="material-category" value={category} onChangeText={setCategory} placeholder="Farines" placeholderTextColor={theme.color.muted} style={styles.input} />
+            <TextInput testID="material-category" value={category} onChangeText={setCategory} placeholder="Farines" placeholderTextColor={colors.muted} style={styles.input} />
           </Field>
           <Field label="Fournisseur (optionnel)">
-            <TextInput testID="material-supplier" value={supplier} onChangeText={setSupplier} placeholder="Moulin local" placeholderTextColor={theme.color.muted} style={styles.input} />
+            <TextInput testID="material-supplier" value={supplier} onChangeText={setSupplier} placeholder="Moulin local" placeholderTextColor={colors.muted} style={styles.input} />
           </Field>
 
           <Text style={styles.sectionLabel}>ACHAT</Text>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Field label="Quantité achetée">
-                <TextInput testID="material-quantity" value={purchaseQuantity} onChangeText={setPurchaseQuantity} keyboardType="decimal-pad" placeholder="25" placeholderTextColor={theme.color.muted} style={styles.input} />
+                <TextInput testID="material-quantity" value={purchaseQuantity} onChangeText={setPurchaseQuantity} keyboardType="decimal-pad" placeholder="25" placeholderTextColor={colors.muted} style={styles.input} />
               </Field>
             </View>
             <View style={{ flex: 1 }}>
               <Field label="Prix payé (€)">
-                <TextInput testID="material-price" value={purchasePrice} onChangeText={setPurchasePrice} keyboardType="decimal-pad" placeholder="21,25" placeholderTextColor={theme.color.muted} style={styles.input} />
+                <TextInput testID="material-price" value={purchasePrice} onChangeText={setPurchasePrice} keyboardType="decimal-pad" placeholder="21,25" placeholderTextColor={colors.muted} style={styles.input} />
               </Field>
             </View>
           </View>
@@ -153,7 +164,7 @@ export default function MaterialForm() {
           {error && <Text style={styles.error}>{error}</Text>}
 
           <Pressable testID="material-save" onPress={save} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.6 }]}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
+            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -161,36 +172,27 @@ export default function MaterialForm() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface },
+  title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
   body: { padding: 24, paddingBottom: 60 },
   field: { marginBottom: 18 },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, marginBottom: 6, fontWeight: '600' },
-  input: { fontSize: 16, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 8 },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, marginBottom: 6, fontWeight: '600' },
+  input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 8 },
   row: { flexDirection: 'row', gap: 16 },
-  sectionLabel: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginTop: 8, marginBottom: 12 },
+  sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginTop: 8, marginBottom: 12 },
   unitRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
-  unitChip: { paddingHorizontal: 16, height: 36, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  unitChipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
-  unitChipText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  unitChipTextActive: { color: theme.color.onSurfaceInverse },
-  previewCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 20 },
-  previewLabel: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  previewValue: { fontFamily: theme.serif, fontSize: 24, color: theme.color.brand, marginTop: 6 },
-  error: { color: theme.color.error, fontSize: 13, marginBottom: 16 },
-  saveBtn: { backgroundColor: theme.color.brand, paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  unitChip: { paddingHorizontal: 16, height: 36, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  unitChipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  unitChipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  unitChipTextActive: { color: colors.onSurfaceInverse },
+  previewCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 20 },
+  previewLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
+  previewValue: { fontFamily: theme.serif, fontSize: 24, color: colors.brand, marginTop: 6 },
+  error: { color: colors.error, fontSize: 13, marginBottom: 16 },
+  saveBtn: { backgroundColor: colors.brand, paddingVertical: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  saveBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600' },
 });

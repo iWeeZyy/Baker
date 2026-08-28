@@ -7,7 +7,8 @@ import { api } from '@/src/api';
 import { scaleIngredientLine } from '@/src/ingredientScale';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { confirmAsync } from '@/src/confirm';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import {
   computeRecipeCost, computeSaleMetrics, formatCurrency, formatCurrencyPrecise, formatPercent,
   normalizeName, type RawMaterial, type SaleMetrics, type RecipeCostResult,
@@ -21,6 +22,77 @@ const VAT_PRESETS = ['5,5', '10', '20'];
 type Snapshot = { result: RecipeCostResult; sale: SaleMetrics };
 
 export function CostScreen({ recipeId }: { recipeId?: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const SectionTitle = ({ icon, label }: { icon: any; label: string }) => (
+    <View style={styles.sectionTitleRow}>
+      <Feather name={icon} size={14} color={colors.muted} />
+      <Text style={styles.sectionTitle}>{label.toUpperCase()}</Text>
+    </View>
+  );
+
+  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={styles.label}>{label}</Text>
+      {children}
+    </View>
+  );
+
+  const Row = ({ label, value, big, light }: { label: string; value: string; big?: boolean; light?: boolean }) => (
+    <View style={styles.resultRow}>
+      <Text style={[light ? styles.resultLabelLight : styles.resultLabel, big && styles.resultLabelBig]}>{label}</Text>
+      <Text style={[light ? styles.resultValueLight : styles.resultValue, big && styles.resultValueBig]}>{value}</Text>
+    </View>
+  );
+
+  const CompareRow = ({ label, before, after }: { label: string; before: string; after: string }) => (
+    <View style={styles.compareRow}>
+      <Text style={styles.compareLabel}>{label}</Text>
+      <Text style={styles.compareBefore}>{before}</Text>
+      <Feather name="arrow-right" size={12} color={colors.muted} />
+      <Text style={styles.compareAfter}>{after}</Text>
+    </View>
+  );
+
+  const CostItemList = ({ items, setItems, testPrefix, placeholder }: {
+    items: CostLineItem[];
+    setItems: (fn: (prev: CostLineItem[]) => CostLineItem[]) => void;
+    testPrefix: string;
+    placeholder: string;
+  }) => (
+    <View style={styles.card}>
+      {items.map((item, i) => (
+        <View key={item.id} style={styles.itemRow}>
+          <TextInput
+            testID={`${testPrefix}-label-${i}`}
+            value={item.label}
+            onChangeText={(v) => setItems(prev => prev.map(p => p.id === item.id ? { ...p, label: v } : p))}
+            placeholder={placeholder}
+            placeholderTextColor={colors.muted}
+            style={[styles.input, { flex: 1 }]}
+          />
+          <TextInput
+            testID={`${testPrefix}-cost-${i}`}
+            value={item.costText}
+            onChangeText={(v) => setItems(prev => prev.map(p => p.id === item.id ? { ...p, costText: v } : p))}
+            keyboardType="decimal-pad"
+            placeholder="0,00"
+            placeholderTextColor={colors.muted}
+            style={[styles.input, { width: 80, textAlign: 'right' }]}
+          />
+          <Pressable testID={`${testPrefix}-remove-${i}`} onPress={() => setItems(prev => prev.filter(p => p.id !== item.id))} hitSlop={10}>
+            <Feather name="x" size={16} color={colors.muted} />
+          </Pressable>
+        </View>
+      ))}
+      <Pressable testID={`${testPrefix}-add`} onPress={() => setItems(prev => [...prev, newItem()])} style={styles.addItemBtn}>
+        <Feather name="plus" size={14} color={colors.brand} />
+        <Text style={styles.addItemText}>Ajouter</Text>
+      </Pressable>
+    </View>
+  );
+
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [recipe, setRecipe] = useState<any>(null);
@@ -176,17 +248,17 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
     setHistory(prev => prev.filter(h => h.id !== entryId));
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="cost-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>{recipe ? recipe.title : 'Coût de revient'}</Text>
         <Pressable testID="cost-materials-link" onPress={() => router.push('/cost/materials')} style={styles.iconBtn}>
-          <Feather name="shopping-bag" size={20} color={theme.color.onSurface} />
+          <Feather name="shopping-bag" size={20} color={colors.onSurface} />
         </Pressable>
       </View>
 
@@ -201,7 +273,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {segment === 'historique' ? (
           <ScrollView contentContainerStyle={styles.body}>
-            {historyLoading ? <ActivityIndicator color={theme.color.brand} style={{ marginTop: 30 }} /> : history.length === 0 ? (
+            {historyLoading ? <ActivityIndicator color={colors.brand} style={{ marginTop: 30 }} /> : history.length === 0 ? (
               <Text style={styles.emptyText}>Aucun calcul enregistré pour l&apos;instant.</Text>
             ) : history.map(h => (
               <View key={h.id} testID={`history-${h.id}`} style={styles.historyCard}>
@@ -221,7 +293,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                   )}
                 </View>
                 <Pressable testID={`history-delete-${h.id}`} onPress={() => deleteHistoryEntry(h.id)} hitSlop={10}>
-                  <Feather name="trash-2" size={16} color={theme.color.muted} />
+                  <Feather name="trash-2" size={16} color={colors.muted} />
                 </Pressable>
               </View>
             ))}
@@ -231,7 +303,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
           {!recipe && (
             <View style={styles.card}>
               <Pressable testID="cost-load-recipe" onPress={openPicker} style={styles.loadRecipeBtn}>
-                <Feather name="book-open" size={16} color={theme.color.brand} />
+                <Feather name="book-open" size={16} color={colors.brand} />
                 <Text style={styles.loadRecipeText}>Charger une recette</Text>
               </Pressable>
               {showPicker && (
@@ -241,7 +313,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                     value={pickerQuery}
                     onChangeText={setPickerQuery}
                     placeholder="Rechercher une recette…"
-                    placeholderTextColor={theme.color.muted}
+                    placeholderTextColor={colors.muted}
                     style={styles.input}
                   />
                   <ScrollView style={{ maxHeight: 220, marginTop: 8 }}>
@@ -262,7 +334,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                 value={manualText}
                 onChangeText={setManualText}
                 placeholder={"500 g de farine T65\n2 œufs\n..."}
-                placeholderTextColor={theme.color.muted}
+                placeholderTextColor={colors.muted}
                 style={[styles.input, { minHeight: 90, marginTop: 8 }]}
                 multiline
               />
@@ -289,7 +361,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                     )}
                     {item.status === 'price_missing' && (
                       <View style={styles.missingRow}>
-                        <Feather name="alert-triangle" size={12} color={theme.color.warning} />
+                        <Feather name="alert-triangle" size={12} color={colors.warning} />
                         <Text style={styles.missingText}>Prix manquant</Text>
                         <Pressable
                           testID={`cost-add-price-${i}`}
@@ -308,7 +380,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                         onChangeText={(v) => setPriceOverrides(prev => ({ ...prev, [key]: v }))}
                         keyboardType="decimal-pad"
                         placeholder="prix"
-                        placeholderTextColor={theme.color.muted}
+                        placeholderTextColor={colors.muted}
                         style={styles.ingPriceInput}
                       />
                       <Text style={styles.ingCost}>{item.status === 'ok' ? formatCurrencyPrecise(item.cost) : '—'}</Text>
@@ -351,7 +423,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                 onChangeText={(v) => { piecesTouched.current = true; setPieces(v); }}
                 keyboardType="decimal-pad"
                 placeholder="100"
-                placeholderTextColor={theme.color.muted}
+                placeholderTextColor={colors.muted}
                 style={styles.input}
               />
             </Field>
@@ -365,7 +437,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
           <SectionTitle icon="tag" label="Prix de vente" />
           <View style={styles.card}>
             <Field label="Prix de vente HT / pièce">
-              <TextInput testID="cost-sale-price" value={salePriceHt} onChangeText={setSalePriceHt} keyboardType="decimal-pad" placeholder="1,30" placeholderTextColor={theme.color.muted} style={styles.input} />
+              <TextInput testID="cost-sale-price" value={salePriceHt} onChangeText={setSalePriceHt} keyboardType="decimal-pad" placeholder="1,30" placeholderTextColor={colors.muted} style={styles.input} />
             </Field>
             <Text style={styles.label}>TVA</Text>
             <View style={styles.unitRow}>
@@ -383,7 +455,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
                 onChangeText={setVatRate}
                 keyboardType="decimal-pad"
                 placeholder="autre %"
-                placeholderTextColor={theme.color.muted}
+                placeholderTextColor={colors.muted}
                 style={[styles.input, { flex: 1, minWidth: 90 }]}
               />
             </View>
@@ -407,7 +479,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
 
           {/* ---------- Comparaison de scénario (secondaire) ---------- */}
           <Pressable testID="cost-compare-toggle" onPress={toggleCompare} style={styles.compareToggle}>
-            <Feather name="columns" size={14} color={theme.color.brand} />
+            <Feather name="columns" size={14} color={colors.brand} />
             <Text style={styles.compareToggleText}>{comparing ? 'Arrêter la comparaison' : 'Comparer un scénario'}</Text>
           </Pressable>
           {comparing && baseline && (
@@ -424,9 +496,9 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
           )}
 
           <Pressable testID="cost-save" onPress={saveCalculation} disabled={saving || result.items.length === 0} style={[styles.saveBtn, (saving || result.items.length === 0) && { opacity: 0.5 }]}>
-            {saving ? <ActivityIndicator color="#fff" /> : (
+            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
               <>
-                <Feather name="save" size={16} color="#fff" />
+                <Feather name="save" size={16} color={colors.onBrandPrimary} />
                 <Text style={styles.saveBtnText}>{saveFlash ? 'Calcul enregistré ✓' : 'Enregistrer ce calcul'}</Text>
               </>
             )}
@@ -438,149 +510,71 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
   );
 }
 
-function SectionTitle({ icon, label }: { icon: any; label: string }) {
-  return (
-    <View style={styles.sectionTitleRow}>
-      <Feather name={icon} size={14} color={theme.color.muted} />
-      <Text style={styles.sectionTitle}>{label.toUpperCase()}</Text>
-    </View>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={{ marginBottom: 14 }}>
-      <Text style={styles.label}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-function Row({ label, value, big, light }: { label: string; value: string; big?: boolean; light?: boolean }) {
-  return (
-    <View style={styles.resultRow}>
-      <Text style={[light ? styles.resultLabelLight : styles.resultLabel, big && styles.resultLabelBig]}>{label}</Text>
-      <Text style={[light ? styles.resultValueLight : styles.resultValue, big && styles.resultValueBig]}>{value}</Text>
-    </View>
-  );
-}
-
-function CompareRow({ label, before, after }: { label: string; before: string; after: string }) {
-  return (
-    <View style={styles.compareRow}>
-      <Text style={styles.compareLabel}>{label}</Text>
-      <Text style={styles.compareBefore}>{before}</Text>
-      <Feather name="arrow-right" size={12} color={theme.color.muted} />
-      <Text style={styles.compareAfter}>{after}</Text>
-    </View>
-  );
-}
-
-function CostItemList({ items, setItems, testPrefix, placeholder }: {
-  items: CostLineItem[];
-  setItems: (fn: (prev: CostLineItem[]) => CostLineItem[]) => void;
-  testPrefix: string;
-  placeholder: string;
-}) {
-  return (
-    <View style={styles.card}>
-      {items.map((item, i) => (
-        <View key={item.id} style={styles.itemRow}>
-          <TextInput
-            testID={`${testPrefix}-label-${i}`}
-            value={item.label}
-            onChangeText={(v) => setItems(prev => prev.map(p => p.id === item.id ? { ...p, label: v } : p))}
-            placeholder={placeholder}
-            placeholderTextColor={theme.color.muted}
-            style={[styles.input, { flex: 1 }]}
-          />
-          <TextInput
-            testID={`${testPrefix}-cost-${i}`}
-            value={item.costText}
-            onChangeText={(v) => setItems(prev => prev.map(p => p.id === item.id ? { ...p, costText: v } : p))}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-            placeholderTextColor={theme.color.muted}
-            style={[styles.input, { width: 80, textAlign: 'right' }]}
-          />
-          <Pressable testID={`${testPrefix}-remove-${i}`} onPress={() => setItems(prev => prev.filter(p => p.id !== item.id))} hitSlop={10}>
-            <Feather name="x" size={16} color={theme.color.muted} />
-          </Pressable>
-        </View>
-      ))}
-      <Pressable testID={`${testPrefix}-add`} onPress={() => setItems(prev => [...prev, newItem()])} style={styles.addItemBtn}>
-        <Feather name="plus" size={14} color={theme.color.brand} />
-        <Text style={styles.addItemText}>Ajouter</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginHorizontal: 8 },
+  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginHorizontal: 8 },
   segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginTop: 12 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
-  segBtnOn: { backgroundColor: theme.color.brand },
-  segText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: '#fff' },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
+  segBtnOn: { backgroundColor: colors.brand },
+  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
+  segTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingBottom: 60 },
-  card: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 8 },
+  card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 8 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 20, marginBottom: 8 },
-  sectionTitle: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, marginBottom: 6, fontWeight: '600' },
-  input: { fontSize: 15, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 8 },
-  emptyText: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic' },
-  loadRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brandTertiary, paddingVertical: 12, borderRadius: 8 },
-  loadRecipeText: { color: theme.color.onBrandTertiary, fontSize: 14, fontWeight: '600' },
-  orText: { fontSize: 12, color: theme.color.muted, marginTop: 16, textAlign: 'center' },
-  pickerRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
-  pickerRowText: { fontSize: 14, color: theme.color.onSurface },
-  ingRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 10 },
-  ingRaw: { fontSize: 14, color: theme.color.onSurface },
-  ingNote: { fontSize: 11, color: theme.color.muted, marginTop: 2, fontStyle: 'italic' },
+  sectionTitle: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, marginBottom: 6, fontWeight: '600' },
+  input: { fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 8 },
+  emptyText: { fontSize: 13, color: colors.muted, fontStyle: 'italic' },
+  loadRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brandTertiary, paddingVertical: 12, borderRadius: 8 },
+  loadRecipeText: { color: colors.onBrandTertiary, fontSize: 14, fontWeight: '600' },
+  orText: { fontSize: 12, color: colors.muted, marginTop: 16, textAlign: 'center' },
+  pickerRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerRowText: { fontSize: 14, color: colors.onSurface },
+  ingRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 },
+  ingRaw: { fontSize: 14, color: colors.onSurface },
+  ingNote: { fontSize: 11, color: colors.muted, marginTop: 2, fontStyle: 'italic' },
   missingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  missingText: { fontSize: 12, color: theme.color.warning, fontWeight: '600' },
-  addPriceLink: { fontSize: 12, color: theme.color.brand, fontWeight: '600', textDecorationLine: 'underline' },
+  missingText: { fontSize: 12, color: colors.warning, fontWeight: '600' },
+  addPriceLink: { fontSize: 12, color: colors.brand, fontWeight: '600', textDecorationLine: 'underline' },
   ingRight: { alignItems: 'flex-end', gap: 4 },
-  ingPriceInput: { width: 64, fontSize: 13, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, textAlign: 'right', paddingVertical: 2 },
-  ingCost: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
+  ingPriceInput: { width: 64, fontSize: 13, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, textAlign: 'right', paddingVertical: 2 },
+  ingCost: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  addItemText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  totalCard: { backgroundColor: theme.color.surfaceInverse, borderRadius: 8, padding: 20, marginTop: 8 },
+  addItemText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
+  totalCard: { backgroundColor: colors.surfaceInverse, borderRadius: 8, padding: 20, marginTop: 8 },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 10 },
-  dividerLight: { height: 1, backgroundColor: theme.color.borderStrong, marginVertical: 10 },
+  dividerLight: { height: 1, backgroundColor: colors.borderStrong, marginVertical: 10 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   resultLabel: { fontSize: 13, color: 'rgba(250,248,245,0.75)' },
-  resultLabelLight: { fontSize: 13, color: theme.color.onSurfaceSecondary },
-  resultLabelBig: { fontSize: 13, letterSpacing: 1, color: theme.color.onSurfaceInverse, fontWeight: '700' },
-  resultValue: { fontSize: 15, color: theme.color.onSurfaceInverse, fontFamily: theme.serif },
-  resultValueLight: { fontSize: 15, color: theme.color.onSurface, fontFamily: theme.serif },
-  resultValueBig: { fontSize: 26, color: theme.color.brandSecondary },
-  missingBanner: { fontSize: 12, color: theme.color.warning, marginTop: 10, lineHeight: 17 },
-  bigResultRow: { alignItems: 'center', marginTop: 8, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.color.border },
-  bigResultLabel: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  bigResultValue: { fontFamily: theme.serif, fontSize: 34, color: theme.color.brand, marginTop: 4 },
+  resultLabelLight: { fontSize: 13, color: colors.onSurfaceSecondary },
+  resultLabelBig: { fontSize: 13, letterSpacing: 1, color: colors.onSurfaceInverse, fontWeight: '700' },
+  resultValue: { fontSize: 15, color: colors.onSurfaceInverse, fontFamily: theme.serif },
+  resultValueLight: { fontSize: 15, color: colors.onSurface, fontFamily: theme.serif },
+  resultValueBig: { fontSize: 26, color: colors.brandSecondary },
+  missingBanner: { fontSize: 12, color: colors.warning, marginTop: 10, lineHeight: 17 },
+  bigResultRow: { alignItems: 'center', marginTop: 8, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border },
+  bigResultLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
+  bigResultValue: { fontFamily: theme.serif, fontSize: 34, color: colors.brand, marginTop: 4 },
   unitRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  vatChip: { paddingHorizontal: 14, height: 34, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  vatChipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
-  vatChipText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  vatChipTextActive: { color: theme.color.onSurfaceInverse },
+  vatChip: { paddingHorizontal: 14, height: 34, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  vatChipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  vatChipText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  vatChipTextActive: { color: colors.onSurfaceInverse },
   compareToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20, paddingVertical: 10 },
-  compareToggleText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  compareHint: { fontSize: 12, color: theme.color.muted, marginBottom: 10, lineHeight: 17 },
+  compareToggleText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
+  compareHint: { fontSize: 12, color: colors.muted, marginBottom: 10, lineHeight: 17 },
   compareRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  compareLabel: { flex: 1, fontSize: 12, color: theme.color.onSurfaceSecondary },
-  compareBefore: { fontSize: 12, color: theme.color.muted },
-  compareAfter: { fontSize: 12, color: theme.color.onSurface, fontWeight: '700' },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 15, borderRadius: 8, marginTop: 28 },
-  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  historyCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
-  historyTitle: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
-  historyMeta: { fontSize: 12, color: theme.color.muted, marginTop: 3 },
-  historyCost: { fontSize: 13, color: theme.color.onSurfaceSecondary, marginTop: 6, fontWeight: '600' },
+  compareLabel: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
+  compareBefore: { fontSize: 12, color: colors.muted },
+  compareAfter: { fontSize: 12, color: colors.onSurface, fontWeight: '700' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 15, borderRadius: 8, marginTop: 28 },
+  saveBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600' },
+  historyCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
+  historyTitle: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
+  historyMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
+  historyCost: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 6, fontWeight: '600' },
 });

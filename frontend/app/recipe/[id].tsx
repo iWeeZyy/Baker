@@ -14,7 +14,8 @@ import { formatDuration } from '@/src/format';
 import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
 import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type Comment = {
   id: string; user_id: string; user_name: string; user_picture?: string | null; content: string;
@@ -110,66 +111,69 @@ function unbreakable(text: string) {
  * Rendu discrètement sous la photo, dans le style du « D'après … » qui crédite
  * déjà l'ouvrage en bas de la fiche technique. Aucun écran nouveau.
  */
-function PhotoCredit({ credit }: { credit?: Record<string, any> | null }) {
-  if (!credit?.author || !credit?.page) return null;
-  const open = (url?: string) => { if (url) Linking.openURL(url).catch(() => {}); };
-  return (
-    <View style={styles.photoCredit} testID="photo-credit">
-      <Feather name="camera" size={11} color={theme.color.muted} />
-      <Text style={styles.photoCreditText}>
-        Photo{' '}
-        <Text style={styles.photoCreditLink} onPress={() => open(credit.author_url)}>
-          {credit.author}
-        </Text>
-        {' · '}
-        <Text style={styles.photoCreditLink} onPress={() => open(credit.page)}>
-          Pexels
-        </Text>
-      </Text>
-    </View>
-  );
-}
-
-function TechnicalSheet(
-  { technical, source, quantity }:
-  { technical?: Record<string, any> | null; source?: string | null; quantity: number },
-) {
-  // Seul le rendement suit le multiplicateur. Une durée et une température
-  // n'en dépendent pas : un pointage de 15 minutes reste 15 minutes qu'on
-  // fasse huit pièces ou vingt-quatre, et le four reste à 250 °C.
-  const rows = TECHNICAL_ROWS
-    .map(([key, label]) => [
-      label,
-      key === 'yield_label' && typeof technical?.[key] === 'string'
-        ? scaleYieldLabel(technical[key], quantity)
-        : technical?.[key],
-    ] as const)
-    .filter(([, value]) => typeof value === 'string' && value.trim().length > 0);
-  const equipment: string[] = Array.isArray(technical?.equipment) ? technical!.equipment : [];
-
-  if (rows.length === 0 && equipment.length === 0 && !source) return null;
-
-  return (
-    <View style={styles.sheet} testID="technical-sheet">
-      <Text style={styles.sheetTitle}>FICHE TECHNIQUE</Text>
-      {rows.map(([label, value]) => (
-        <View key={label} style={styles.sheetRow}>
-          <Text style={styles.sheetLabel}>{label}</Text>
-          <Text style={styles.sheetValue}>{unbreakable(value as string)}</Text>
-        </View>
-      ))}
-      {equipment.length > 0 && (
-        <View style={styles.sheetRow}>
-          <Text style={styles.sheetLabel}>Matériel</Text>
-          <Text style={styles.sheetValue}>{unbreakable(equipment.join(' · '))}</Text>
-        </View>
-      )}
-      {!!source && <Text style={styles.sheetSource}>D'après {source}</Text>}
-    </View>
-  );
-}
-
 export default function RecipeDetail() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const PhotoCredit = ({ credit }: { credit?: Record<string, any> | null }) => {
+    if (!credit?.author || !credit?.page) return null;
+    const open = (url?: string) => { if (url) Linking.openURL(url).catch(() => {}); };
+    return (
+      <View style={styles.photoCredit} testID="photo-credit">
+        <Feather name="camera" size={11} color={colors.muted} />
+        <Text style={styles.photoCreditText}>
+          Photo{' '}
+          <Text style={styles.photoCreditLink} onPress={() => open(credit.author_url)}>
+            {credit.author}
+          </Text>
+          {' · '}
+          <Text style={styles.photoCreditLink} onPress={() => open(credit.page)}>
+            Pexels
+          </Text>
+        </Text>
+      </View>
+    );
+  };
+
+  const TechnicalSheet = (
+    { technical, source, quantity }:
+    { technical?: Record<string, any> | null; source?: string | null; quantity: number },
+  ) => {
+    // Seul le rendement suit le multiplicateur. Une durée et une température
+    // n'en dépendent pas : un pointage de 15 minutes reste 15 minutes qu'on
+    // fasse huit pièces ou vingt-quatre, et le four reste à 250 °C.
+    const rows = TECHNICAL_ROWS
+      .map(([key, label]) => [
+        label,
+        key === 'yield_label' && typeof technical?.[key] === 'string'
+          ? scaleYieldLabel(technical[key], quantity)
+          : technical?.[key],
+      ] as const)
+      .filter(([, value]) => typeof value === 'string' && value.trim().length > 0);
+    const equipment: string[] = Array.isArray(technical?.equipment) ? technical!.equipment : [];
+
+    if (rows.length === 0 && equipment.length === 0 && !source) return null;
+
+    return (
+      <View style={styles.sheet} testID="technical-sheet">
+        <Text style={styles.sheetTitle}>FICHE TECHNIQUE</Text>
+        {rows.map(([label, value]) => (
+          <View key={label} style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>{label}</Text>
+            <Text style={styles.sheetValue}>{unbreakable(value as string)}</Text>
+          </View>
+        ))}
+        {equipment.length > 0 && (
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Matériel</Text>
+            <Text style={styles.sheetValue}>{unbreakable(equipment.join(' · '))}</Text>
+          </View>
+        )}
+        {!!source && <Text style={styles.sheetSource}>D'après {source}</Text>}
+      </View>
+    );
+  };
+
   const { id, tab: tabParam, highlightComment } = useLocalSearchParams<{ id: string; tab?: string; highlightComment?: string }>();
   const router = useRouter();
   const { start, startSequence } = useTimer();
@@ -387,7 +391,7 @@ export default function RecipeDetail() {
     [recipe, quantity],
   );
 
-  if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   // Téléversement, puis photo du produit, puis dessin d'archétype, puis rien.
   // La règle vit dans `src/products.ts` et sert aussi à l'accueil, pour que les
@@ -430,10 +434,10 @@ export default function RecipeDetail() {
           />
           <SafeAreaView edges={['top']} style={styles.heroTop}>
             <Pressable testID="back-btn" onPress={() => router.back()} style={styles.iconBtn}>
-              <Feather name="arrow-left" size={20} color="#fff" />
+              <Feather name="arrow-left" size={20} color={colors.onBrandPrimary} />
             </Pressable>
             <Pressable testID="fav-btn" onPress={toggleFav} style={styles.iconBtn}>
-              <Feather name="bookmark" size={20} color={favorited ? theme.color.brandSecondary : '#fff'} />
+              <Feather name="bookmark" size={20} color={favorited ? colors.brandSecondary : colors.onBrandPrimary} />
             </Pressable>
           </SafeAreaView>
           <View style={styles.heroBottom}>
@@ -441,7 +445,7 @@ export default function RecipeDetail() {
               <Text style={styles.category}>{recipe.category.toUpperCase()}</Text>
               {recipe.coup_de_coeur && (
                 <View style={styles.cdcBadge} testID="cdc-badge">
-                  <Feather name="award" size={11} color={theme.color.onBrandPrimary} />
+                  <Feather name="award" size={11} color={colors.onBrandPrimary} />
                   <Text style={styles.cdcText}>COUP DE CŒUR</Text>
                 </View>
               )}
@@ -473,12 +477,12 @@ export default function RecipeDetail() {
         <View style={styles.likeRow}>
           <Pressable testID="like-btn" onPress={toggleLike} style={styles.likeBtn}>
             <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-              <Ionicons name={likes.liked ? 'heart' : 'heart-outline'} size={18} color={likes.liked ? theme.color.error : theme.color.onSurfaceSecondary} />
+              <Ionicons name={likes.liked ? 'heart' : 'heart-outline'} size={18} color={likes.liked ? colors.error : colors.onSurfaceSecondary} />
             </Animated.View>
             <Text style={styles.likeText}>{likes.count} j'aime</Text>
           </Pressable>
           <Pressable testID="comment-jump" onPress={() => setTab('community')} style={styles.likeBtn}>
-            <Feather name="message-square" size={18} color={theme.color.onSurfaceSecondary} />
+            <Feather name="message-square" size={18} color={colors.onSurfaceSecondary} />
             <Text style={styles.likeText}>{comments.length} avis</Text>
           </Pressable>
         </View>
@@ -496,7 +500,7 @@ export default function RecipeDetail() {
               {costInfo.cost_per_piece.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} €/pièce
             </Text>
           )}
-          <Feather name="chevron-right" size={16} color={theme.color.muted} />
+          <Feather name="chevron-right" size={16} color={colors.muted} />
         </Pressable>
 
         <TechnicalSheet technical={recipe.technical} source={recipe.source} quantity={quantity} />
@@ -530,7 +534,7 @@ export default function RecipeDetail() {
               <>
                 {seq.length > 1 && (
                   <Pressable testID="start-all-timers" onPress={() => startSequence(seq)} style={styles.seqBtn}>
-                    <Feather name="play-circle" size={16} color="#fff" />
+                    <Feather name="play-circle" size={16} color={colors.onBrandPrimary} />
                     <Text style={styles.seqBtnText}>Lancer les {seq.length} minuteurs en séquence</Text>
                   </Pressable>
                 )}
@@ -543,7 +547,7 @@ export default function RecipeDetail() {
                         <Text style={styles.stepText}>{s}</Text>
                         {dur && (
                           <Pressable testID={`timer-step-${i}`} onPress={() => start(`Étape ${i + 1}`, dur)} style={styles.timerChip}>
-                            <Feather name="clock" size={13} color={theme.color.brand} />
+                            <Feather name="clock" size={13} color={colors.brand} />
                             <Text style={styles.timerChipText}>Lancer le minuteur ({Math.round(dur / 60)} min)</Text>
                           </Pressable>
                         )}
@@ -560,7 +564,7 @@ export default function RecipeDetail() {
               {/* Personal note */}
               <View style={styles.noteCard}>
                 <View style={styles.noteHeader}>
-                  <Feather name="edit-3" size={15} color={theme.color.brand} />
+                  <Feather name="edit-3" size={15} color={colors.brand} />
                   <Text style={styles.noteTitle}>Mes notes personnelles</Text>
                 </View>
                 <TextInput
@@ -568,7 +572,7 @@ export default function RecipeDetail() {
                   value={note}
                   onChangeText={(t) => { setNote(t); setNoteSaved(false); }}
                   placeholder="Vos ajustements, astuces, tour de main…"
-                  placeholderTextColor={theme.color.muted}
+                  placeholderTextColor={colors.muted}
                   style={styles.noteInput}
                   multiline
                 />
@@ -585,7 +589,7 @@ export default function RecipeDetail() {
                 <View style={styles.replyBanner} testID="reply-banner">
                   <Text style={styles.replyBannerText}>Réponse à {replyTo.toName}</Text>
                   <Pressable testID="cancel-reply" onPress={() => setReplyTo(null)}>
-                    <Feather name="x" size={16} color={theme.color.muted} />
+                    <Feather name="x" size={16} color={colors.muted} />
                   </Pressable>
                 </View>
               )}
@@ -595,12 +599,12 @@ export default function RecipeDetail() {
                   value={commentText}
                   onChangeText={setCommentText}
                   placeholder={replyTo ? `Répondre à ${replyTo.toName}…` : 'Partagez votre avis…'}
-                  placeholderTextColor={theme.color.muted}
+                  placeholderTextColor={colors.muted}
                   style={styles.commentInput}
                   multiline
                 />
                 <Pressable testID="comment-send" onPress={sendComment} disabled={!commentText.trim()} style={[styles.commentSend, !commentText.trim() && { opacity: 0.4 }]}>
-                  <Feather name="send" size={18} color="#fff" />
+                  <Feather name="send" size={18} color={colors.onBrandPrimary} />
                 </Pressable>
               </View>
               {commentError && <Text style={styles.commentError} testID="comment-error">{commentError}</Text>}
@@ -633,7 +637,7 @@ export default function RecipeDetail() {
                 const renderActions = (c: Comment, rootId: string) => (
                   <View style={styles.commentActionsRow}>
                     <Pressable testID={`comment-like-btn-${c.id}`} onPress={() => toggleCommentLike(c.id)} style={styles.replyBtn}>
-                      <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? theme.color.error : theme.color.brand} />
+                      <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? colors.error : colors.brand} />
                       <Text style={styles.replyBtnText}>{c.like_count || 0}</Text>
                     </Pressable>
                     <Pressable
@@ -641,16 +645,16 @@ export default function RecipeDetail() {
                       onPress={() => setReplyTo({ parentId: rootId, toUserId: c.user_id, toName: c.user_name })}
                       style={styles.replyBtn}
                     >
-                      <Feather name="corner-up-left" size={13} color={theme.color.brand} />
+                      <Feather name="corner-up-left" size={13} color={colors.brand} />
                       <Text style={styles.replyBtnText}>Répondre</Text>
                     </Pressable>
                     {user?.user_id === c.user_id && (
                       <>
                         <Pressable testID={`comment-edit-btn-${c.id}`} onPress={() => startEditComment(c)} style={styles.replyBtn}>
-                          <Feather name="edit-2" size={13} color={theme.color.muted} />
+                          <Feather name="edit-2" size={13} color={colors.muted} />
                         </Pressable>
                         <Pressable testID={`comment-delete-btn-${c.id}`} onPress={() => deleteComment(c)} style={styles.replyBtn}>
-                          <Feather name="trash-2" size={13} color={theme.color.muted} />
+                          <Feather name="trash-2" size={13} color={colors.muted} />
                         </Pressable>
                       </>
                     )}
@@ -672,7 +676,7 @@ export default function RecipeDetail() {
                         <Text style={styles.editActionText}>Annuler</Text>
                       </Pressable>
                       <Pressable testID={`comment-edit-save-${c.id}`} onPress={saveEditComment} disabled={!editText.trim()} style={[styles.editActionBtn, !editText.trim() && { opacity: 0.4 }]}>
-                        <Text style={[styles.editActionText, { color: theme.color.brand, fontWeight: '700' }]}>Enregistrer</Text>
+                        <Text style={[styles.editActionText, { color: colors.brand, fontWeight: '700' }]}>Enregistrer</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -758,113 +762,113 @@ export default function RecipeDetail() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   heroWrap: { height: 420, position: 'relative' },
-  heroPlain: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.color.surfaceSecondary },
+  heroPlain: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surfaceSecondary },
   heroDrawing: { flex: 1, marginBottom: 92 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },
   heroBottom: { position: 'absolute', bottom: 24, left: 24, right: 24 },
   heroBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  cdcBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  cdcText: { color: theme.color.onBrandPrimary, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  category: { color: theme.color.brandSecondary, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
-  title: { fontFamily: theme.serif, fontSize: 32, color: '#fff', marginTop: 6, lineHeight: 36 },
+  cdcBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  cdcText: { color: colors.onBrandPrimary, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  category: { color: colors.brandSecondary, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
+  title: { fontFamily: theme.serif, fontSize: 32, color: colors.onBrandPrimary, marginTop: 6, lineHeight: 36 },
   author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontStyle: 'italic' },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  authorAvatar: { width: 22, height: 22, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  authorAvatarText: { fontSize: 11, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
+  authorAvatar: { width: 22, height: 22, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  authorAvatarText: { fontSize: 11, color: colors.onBrandTertiary, fontFamily: theme.serif },
   photoCredit: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 24, paddingTop: 10,
   },
-  photoCreditText: { fontSize: 11, color: theme.color.muted, fontStyle: 'italic' },
+  photoCreditText: { fontSize: 11, color: colors.muted, fontStyle: 'italic' },
   photoCreditLink: { textDecorationLine: 'underline' },
-  metaRow: { flexDirection: 'row', paddingHorizontal: 24, paddingVertical: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 32 },
+  metaRow: { flexDirection: 'row', paddingHorizontal: 24, paddingVertical: 24, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 32 },
   metaCol: { flex: 1 },
-  metaLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600' },
-  metaVal: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, marginTop: 4 },
+  metaLabel: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
+  metaVal: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, marginTop: 4 },
   likeRow: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, gap: 24 },
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  likeText: { fontSize: 14, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  likeError: { color: theme.color.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 6 },
-  description: { fontSize: 15, color: theme.color.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
+  likeText: { fontSize: 14, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  likeError: { color: colors.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 6 },
+  description: { fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 22, paddingHorizontal: 24, paddingTop: 16, fontStyle: 'italic' },
   costBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginTop: theme.spacing.md, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg,
-    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
   },
   costBtnEmoji: { fontSize: 16 },
-  costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
-  costBadge: { fontSize: 12, color: theme.color.brand, fontWeight: '700' },
+  costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.onSurface },
+  costBadge: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   sheet: {
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
-    backgroundColor: theme.color.surfaceSecondary, borderRadius: theme.radius.lg,
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
   },
-  sheetTitle: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: theme.spacing.md },
+  sheetTitle: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: theme.spacing.md },
   // Label and value side by side, the value taking the width it needs: a
   // conservation note runs several lines, a duration one word.
   sheetRow: { flexDirection: 'row', paddingVertical: theme.spacing.sm, gap: theme.spacing.md },
-  sheetLabel: { width: 116, fontSize: theme.fontSize.sm, color: theme.color.muted },
-  sheetValue: { flex: 1, fontSize: theme.fontSize.base, color: theme.color.onSurface, lineHeight: 20 },
-  sheetSource: { marginTop: theme.spacing.md, fontSize: 11, color: theme.color.muted, fontStyle: 'italic' },
-  segment: { flexDirection: 'row', marginTop: 24, marginHorizontal: 24, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 20 },
+  sheetLabel: { width: 116, fontSize: theme.fontSize.sm, color: colors.muted },
+  sheetValue: { flex: 1, fontSize: theme.fontSize.base, color: colors.onSurface, lineHeight: 20 },
+  sheetSource: { marginTop: theme.spacing.md, fontSize: 11, color: colors.muted, fontStyle: 'italic' },
+  segment: { flexDirection: 'row', marginTop: 24, marginHorizontal: 24, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 20 },
   segBtn: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  segActive: { borderBottomColor: theme.color.brand },
-  segText: { fontSize: 14, color: theme.color.muted, fontWeight: '500' },
-  segTextActive: { color: theme.color.onSurface },
+  segActive: { borderBottomColor: colors.brand },
+  segText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
+  segTextActive: { color: colors.onSurface },
   content: { paddingHorizontal: 24, paddingTop: 24 },
-  ingredientRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border, gap: 12 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.color.brand },
-  ingredientText: { fontSize: 15, color: theme.color.onSurface, flex: 1 },
+  ingredientRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  ingredientText: { fontSize: 15, color: colors.onSurface, flex: 1 },
   stepRow: { flexDirection: 'row', marginBottom: 24, gap: 16 },
-  stepNum: { fontFamily: theme.serif, fontSize: 24, color: theme.color.brand, minWidth: 36 },
-  stepText: { fontSize: 15, color: theme.color.onSurface, lineHeight: 22 },
-  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  timerChipText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '600' },
-  seqBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 12, borderRadius: 8, marginBottom: 24 },
-  seqBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  noteCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 28 },
+  stepNum: { fontFamily: theme.serif, fontSize: 24, color: colors.brand, minWidth: 36 },
+  stepText: { fontSize: 15, color: colors.onSurface, lineHeight: 22 },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
+  seqBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 12, borderRadius: 8, marginBottom: 24 },
+  seqBtnText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '600' },
+  noteCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 28 },
   noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  noteTitle: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface },
-  noteInput: { fontSize: 15, color: theme.color.onSurface, minHeight: 60, textAlignVertical: 'top' },
-  saveNoteBtn: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: theme.color.brand, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 4 },
-  saveNoteText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 16 },
+  noteTitle: { fontSize: 14, fontWeight: '600', color: colors.onSurface },
+  noteInput: { fontSize: 15, color: colors.onSurface, minHeight: 60, textAlignVertical: 'top' },
+  saveNoteBtn: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: colors.brand, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 4 },
+  saveNoteText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '600' },
+  commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 16 },
   commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 8 },
-  commentInput: { flex: 1, backgroundColor: theme.color.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.color.onSurface, minHeight: 44, maxHeight: 120 },
-  commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
-  commentError: { color: theme.color.error, fontSize: 13, marginBottom: 16 },
-  noComments: { color: theme.color.muted, fontSize: 14, fontStyle: 'italic' },
-  replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.color.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
-  replyBannerText: { fontSize: 13, color: theme.color.onBrandTertiary, fontWeight: '500' },
+  commentInput: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
+  commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  commentError: { color: colors.error, fontSize: 13, marginBottom: 16 },
+  noComments: { color: colors.muted, fontSize: 14, fontStyle: 'italic' },
+  replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
+  replyBannerText: { fontSize: 13, color: colors.onBrandTertiary, fontWeight: '500' },
   replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
-  replyBtnText: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  replyBtnText: { fontSize: 12, color: colors.brand, fontWeight: '600' },
   commentActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   sortRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  sortChip: { paddingHorizontal: 14, height: 32, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  sortChipActive: { backgroundColor: theme.color.surfaceInverse, borderColor: theme.color.surfaceInverse },
-  sortChipText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '500' },
-  sortChipTextActive: { color: theme.color.onSurfaceInverse },
-  replyCard: { flexDirection: 'row', gap: 10, marginBottom: 16, marginLeft: 34, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: theme.color.border },
-  replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: theme.color.surfaceTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  replyAvatarText: { color: theme.color.onSurfaceTertiary, fontFamily: theme.serif, fontSize: 14 },
+  sortChip: { paddingHorizontal: 14, height: 32, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  sortChipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
+  sortChipText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '500' },
+  sortChipTextActive: { color: colors.onSurfaceInverse },
+  replyCard: { flexDirection: 'row', gap: 10, marginBottom: 16, marginLeft: 34, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: colors.border },
+  replyAvatar: { width: 30, height: 30, borderRadius: 999, backgroundColor: colors.surfaceTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  replyAvatarText: { color: colors.onSurfaceTertiary, fontFamily: theme.serif, fontSize: 14 },
   commentCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  commentAvatarText: { color: theme.color.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
-  commentName: { fontSize: 14, fontWeight: '600', color: theme.color.onSurface, marginBottom: 2 },
-  commentBody: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20 },
-  editedBadge: { fontSize: 12, color: theme.color.muted, fontStyle: 'italic' },
-  commentHighlighted: { backgroundColor: theme.color.brandTertiary, borderRadius: 8, padding: 8, margin: -8 },
-  replyToLabel: { fontSize: 12, color: theme.color.brand, fontWeight: '500', marginBottom: 2 },
+  commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  commentAvatarText: { color: colors.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
+  commentName: { fontSize: 14, fontWeight: '600', color: colors.onSurface, marginBottom: 2 },
+  commentBody: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
+  editedBadge: { fontSize: 12, color: colors.muted, fontStyle: 'italic' },
+  commentHighlighted: { backgroundColor: colors.brandTertiary, borderRadius: 8, padding: 8, margin: -8 },
+  replyToLabel: { fontSize: 12, color: colors.brand, fontWeight: '500', marginBottom: 2 },
   toggleRepliesBtn: { marginLeft: 34, marginBottom: 16, marginTop: -6 },
-  toggleRepliesText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  commentEditInput: { fontSize: 14, color: theme.color.onSurface, lineHeight: 20, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 10, minHeight: 44, textAlignVertical: 'top' },
+  toggleRepliesText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
+  commentEditInput: { fontSize: 14, color: colors.onSurface, lineHeight: 20, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 10, minHeight: 44, textAlignVertical: 'top' },
   editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16, marginTop: 8 },
   editActionBtn: { paddingVertical: 4 },
-  editActionText: { fontSize: 13, color: theme.color.muted, fontWeight: '600' },
+  editActionText: { fontSize: 13, color: colors.muted, fontWeight: '600' },
 });

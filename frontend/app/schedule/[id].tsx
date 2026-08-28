@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator,
   ScrollView, KeyboardAvoidingView, Platform, Alert, Linking,
@@ -8,7 +8,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { ExportLayout, EXPORT_WIDTH } from '@/src/schedule/ExportLayout';
 import { ScheduleTable } from '@/src/schedule/ScheduleTable';
 import { printSchedule, saveToPhotos, shareSchedule } from '@/src/schedule/export';
@@ -40,6 +41,8 @@ function toDraft(e: ScheduleEmployee): Draft {
 }
 
 export default function ScheduleScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
@@ -176,7 +179,7 @@ export default function ScheduleScreen() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   const numbers = dayNumbers(weekStart);
   const dirty = !computed || JSON.stringify(payload()) !== JSON.stringify({
@@ -194,7 +197,7 @@ export default function ScheduleScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="schedule-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{weekTitle(weekStart)}</Text>
         <View style={{ width: 40 }} />
@@ -227,7 +230,7 @@ export default function ScheduleScreen() {
                 grid cannot shrink to a phone's width without becoming unreadable.
               */}
               <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingRight: 20 }}>
-                <ScheduleTable schedule={computed} width={1180} scale={1} />
+                <ScheduleTable schedule={computed} width={1180} scale={1} themed />
               </ScrollView>
               {computed.notes ? (
                 <View style={styles.previewNote}>
@@ -251,14 +254,14 @@ export default function ScheduleScreen() {
           <Text style={styles.label}>SEMAINE (DIMANCHE)</Text>
           <View style={styles.weekRow}>
             <Pressable testID="week-prev" onPress={() => setWeekStart(w => addDays(w, -7))} style={styles.weekBtn}>
-              <Feather name="chevron-left" size={18} color={theme.color.onSurface} />
+              <Feather name="chevron-left" size={18} color={colors.onSurface} />
             </Pressable>
             <TextInput
               testID="week-start" value={weekStart} onChangeText={setWeekStart}
-              placeholder="AAAA-MM-JJ" placeholderTextColor={theme.color.muted} style={styles.weekInput}
+              placeholder="AAAA-MM-JJ" placeholderTextColor={colors.muted} style={styles.weekInput}
             />
             <Pressable testID="week-next" onPress={() => setWeekStart(w => addDays(w, 7))} style={styles.weekBtn}>
-              <Feather name="chevron-right" size={18} color={theme.color.onSurface} />
+              <Feather name="chevron-right" size={18} color={colors.onSurface} />
             </Pressable>
           </View>
 
@@ -276,11 +279,11 @@ export default function ScheduleScreen() {
                     testID={`name-${ri}`}
                     value={row.name}
                     onChangeText={v => setRows(prev => prev.map((r, i) => (i === ri ? { ...r, name: v } : r)))}
-                    placeholder="Nom" placeholderTextColor={theme.color.muted}
+                    placeholder="Nom" placeholderTextColor={colors.muted}
                     style={styles.nameInput}
                   />
                   <Pressable testID={`remove-${ri}`} onPress={() => removeRow(ri)} style={styles.removeBtn}>
-                    <Feather name="x" size={18} color={theme.color.muted} />
+                    <Feather name="x" size={18} color={colors.muted} />
                   </Pressable>
                 </View>
 
@@ -329,14 +332,14 @@ export default function ScheduleScreen() {
                         testID={`start-${ri}-${picker.day}`}
                         value={row.days[picker.day].start}
                         onChangeText={v => patchDay(ri, picker.day, { start: v, off: false })}
-                        placeholder="début" placeholderTextColor={theme.color.muted} style={styles.timeInput}
+                        placeholder="début" placeholderTextColor={colors.muted} style={styles.timeInput}
                       />
                       <Text style={styles.arrow}>→</Text>
                       <TextInput
                         testID={`end-${ri}-${picker.day}`}
                         value={row.days[picker.day].end}
                         onChangeText={v => patchDay(ri, picker.day, { end: v, off: false })}
-                        placeholder="fin" placeholderTextColor={theme.color.muted} style={styles.timeInput}
+                        placeholder="fin" placeholderTextColor={colors.muted} style={styles.timeInput}
                       />
                       <Pressable
                         testID={`clear-${ri}-${picker.day}`}
@@ -373,7 +376,7 @@ export default function ScheduleScreen() {
             testID="add-person" onPress={addRow} disabled={rows.length >= MAX_EMPLOYEES}
             style={[styles.addBtn, rows.length >= MAX_EMPLOYEES && { opacity: 0.4 }]}
           >
-            <Feather name="plus" size={16} color={theme.color.brand} />
+            <Feather name="plus" size={16} color={colors.brand} />
             <Text style={styles.addBtnText}>
               Ajouter une personne ({rows.length}/{MAX_EMPLOYEES})
             </Text>
@@ -383,7 +386,7 @@ export default function ScheduleScreen() {
           <TextInput
             testID="schedule-notes" value={notes} onChangeText={setNotes} multiline
             placeholder="Ex : Jeudi 5, Armand off, rattrapage heures supp."
-            placeholderTextColor={theme.color.muted}
+            placeholderTextColor={colors.muted}
             style={[styles.notesInput, { minHeight: 64 }]}
           />
 
@@ -409,9 +412,9 @@ export default function ScheduleScreen() {
             testID="schedule-save" onPress={save} disabled={saving}
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
           >
-            {saving ? <ActivityIndicator color="#fff" /> : (
+            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
               <>
-                <Feather name="check" size={17} color="#fff" />
+                <Feather name="check" size={17} color={colors.onBrandPrimary} />
                 <Text style={styles.saveText}>Enregistrer</Text>
               </>
             )}
@@ -438,15 +441,15 @@ export default function ScheduleScreen() {
                     style={[styles.exportBtn, (busy !== null || dirty) && { opacity: 0.45 }]}
                   >
                     {busy === key
-                      ? <ActivityIndicator size="small" color={theme.color.brand} />
-                      : <Feather name={icon as any} size={18} color={theme.color.brand} />}
+                      ? <ActivityIndicator size="small" color={colors.brand} />
+                      : <Feather name={icon as any} size={18} color={colors.brand} />}
                     <Text style={styles.exportText}>{label}</Text>
                   </Pressable>
                 ))}
               </View>
 
               <Pressable testID="schedule-duplicate" onPress={duplicate} style={styles.secondaryBtn}>
-                <Feather name="copy" size={15} color={theme.color.onSurface} />
+                <Feather name="copy" size={15} color={colors.onSurface} />
                 <Text style={styles.secondaryText}>Dupliquer sur la semaine suivante</Text>
               </Pressable>
 
@@ -475,79 +478,79 @@ export default function ScheduleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 16, color: theme.color.onSurface },
+  headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 16, color: colors.onSurface },
   body: { padding: 20, paddingBottom: 60 },
   viewSwitch: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12 },
-  viewBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
-  viewBtnOn: { backgroundColor: theme.color.brand },
-  viewText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
-  viewTextOn: { color: '#fff' },
+  viewBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
+  viewBtnOn: { backgroundColor: colors.brand },
+  viewText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
+  viewTextOn: { color: colors.onBrandPrimary },
   previewBody: { padding: 20, paddingBottom: 60 },
-  previewTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
-  previewSub: { fontSize: 12, color: theme.color.muted, marginTop: 4, marginBottom: 16 },
-  previewNote: { marginTop: 16, borderWidth: 1, borderColor: theme.color.border, borderRadius: 8, padding: 14 },
-  previewNoteLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.muted, fontWeight: '700', marginBottom: 6 },
-  previewNoteText: { fontSize: 14, color: theme.color.onSurface, lineHeight: 20 },
-  label: { fontSize: 11, letterSpacing: 2, color: theme.color.muted, fontWeight: '600', marginBottom: 8 },
-  hint: { fontSize: 13, color: theme.color.muted, fontStyle: 'italic' },
+  previewTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
+  previewSub: { fontSize: 12, color: colors.muted, marginTop: 4, marginBottom: 16 },
+  previewNote: { marginTop: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 14 },
+  previewNoteLabel: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '700', marginBottom: 6 },
+  previewNoteText: { fontSize: 14, color: colors.onSurface, lineHeight: 20 },
+  label: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: 8 },
+  hint: { fontSize: 13, color: colors.muted, fontStyle: 'italic' },
   weekRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  weekBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: theme.color.surfaceSecondary },
-  weekInput: { flex: 1, fontSize: 16, color: theme.color.onSurface, textAlign: 'center', paddingVertical: 12, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8 },
-  personCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 10, padding: 12, marginBottom: 12 },
+  weekBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: colors.surfaceSecondary },
+  weekInput: { flex: 1, fontSize: 16, color: colors.onSurface, textAlign: 'center', paddingVertical: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 8 },
+  personCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 10, padding: 12, marginBottom: 12 },
   personTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  nameInput: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface, paddingVertical: 8 },
+  nameInput: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, paddingVertical: 8 },
   removeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   daysRow: { flexDirection: 'row', gap: 4, marginTop: 8 },
-  dayCell: { flex: 1, minHeight: 62, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: theme.color.surface, paddingVertical: 5 },
-  dayCellOn: { backgroundColor: theme.color.brandTertiary },
-  dayCellOff: { backgroundColor: theme.color.surfaceTertiary },
-  dayLabel: { fontSize: 9, letterSpacing: 0.5, color: theme.color.muted, fontWeight: '700' },
-  dayNum: { fontSize: 9, color: theme.color.muted },
-  dayValue: { fontSize: 10, color: theme.color.onSurface, fontWeight: '600' },
-  dayValueOff: { color: theme.color.muted },
-  longPressHint: { fontSize: 10, color: theme.color.muted, marginTop: 6 },
-  picker: { marginTop: 10, backgroundColor: theme.color.surface, borderRadius: 8, padding: 10 },
-  pickerTitle: { fontSize: 12, color: theme.color.muted, fontWeight: '700', marginBottom: 8 },
+  dayCell: { flex: 1, minHeight: 62, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.surface, paddingVertical: 5 },
+  dayCellOn: { backgroundColor: colors.brandTertiary },
+  dayCellOff: { backgroundColor: colors.surfaceTertiary },
+  dayLabel: { fontSize: 9, letterSpacing: 0.5, color: colors.muted, fontWeight: '700' },
+  dayNum: { fontSize: 9, color: colors.muted },
+  dayValue: { fontSize: 10, color: colors.onSurface, fontWeight: '600' },
+  dayValueOff: { color: colors.muted },
+  longPressHint: { fontSize: 10, color: colors.muted, marginTop: 6 },
+  picker: { marginTop: 10, backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
+  pickerTitle: { fontSize: 12, color: colors.muted, fontWeight: '700', marginBottom: 8 },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  preset: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: theme.color.brandTertiary },
-  presetText: { fontSize: 12, color: theme.color.onBrandTertiary, fontWeight: '700' },
+  preset: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: colors.brandTertiary },
+  presetText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '700' },
   customRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
-  timeInput: { flex: 1, fontSize: 15, color: theme.color.onSurface, backgroundColor: theme.color.surfaceSecondary, borderRadius: 6, paddingVertical: 10, textAlign: 'center' },
-  arrow: { color: theme.color.muted },
-  clearBtn: { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 6, borderWidth: 1, borderColor: theme.color.borderStrong },
-  clearText: { fontSize: 12, color: theme.color.onSurface, fontWeight: '600' },
+  timeInput: { flex: 1, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, borderRadius: 6, paddingVertical: 10, textAlign: 'center' },
+  arrow: { color: colors.muted },
+  clearBtn: { paddingHorizontal: 12, paddingVertical: 11, borderRadius: 6, borderWidth: 1, borderColor: colors.borderStrong },
+  clearText: { fontSize: 12, color: colors.onSurface, fontWeight: '600' },
   personFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   overtimeBox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  overtimeLabel: { fontSize: 11, color: theme.color.muted },
-  overtimeInput: { width: 74, fontSize: 14, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 6, paddingVertical: 8, textAlign: 'center' },
-  personTotal: { fontFamily: theme.serif, fontSize: 20, color: theme.color.brand },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: theme.color.borderStrong },
-  addBtnText: { fontSize: 14, color: theme.color.brand, fontWeight: '600' },
-  notesInput: { fontSize: 15, color: theme.color.onSurface, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 12, textAlignVertical: 'top' },
-  totalsCard: { marginTop: 24, backgroundColor: theme.color.surfaceInverse, borderRadius: 10, padding: 16 },
-  totalsLabel: { fontSize: 10, letterSpacing: 2, color: theme.color.brandSecondary, fontWeight: '700' },
-  totalsValue: { fontFamily: theme.serif, fontSize: 34, color: theme.color.onSurfaceInverse, marginTop: 2 },
+  overtimeLabel: { fontSize: 11, color: colors.muted },
+  overtimeInput: { width: 74, fontSize: 14, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 6, paddingVertical: 8, textAlign: 'center' },
+  personTotal: { fontFamily: theme.serif, fontSize: 20, color: colors.brand },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
+  addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
+  notesInput: { fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 12, textAlignVertical: 'top' },
+  totalsCard: { marginTop: 24, backgroundColor: colors.surfaceInverse, borderRadius: 10, padding: 16 },
+  totalsLabel: { fontSize: 10, letterSpacing: 2, color: colors.brandSecondary, fontWeight: '700' },
+  totalsValue: { fontFamily: theme.serif, fontSize: 34, color: colors.onSurfaceInverse, marginTop: 2 },
   dayTotals: { flexDirection: 'row', marginTop: 12, gap: 4 },
   dayTotal: { flex: 1, alignItems: 'center' },
-  dayTotalLabel: { fontSize: 9, color: theme.color.brandSecondary, fontWeight: '700' },
-  dayTotalValue: { fontSize: 11, color: theme.color.onSurfaceInverse, marginTop: 2 },
-  error: { color: theme.color.error, fontSize: 13, marginTop: 16, lineHeight: 18 },
-  flash: { color: theme.color.success, fontSize: 13, marginTop: 16, lineHeight: 18, fontWeight: '600' },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 16, borderRadius: 8, marginTop: 22 },
-  saveText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  dirtyHint: { fontSize: 12, color: theme.color.muted, textAlign: 'center', marginTop: 14 },
+  dayTotalLabel: { fontSize: 9, color: colors.brandSecondary, fontWeight: '700' },
+  dayTotalValue: { fontSize: 11, color: colors.onSurfaceInverse, marginTop: 2 },
+  error: { color: colors.error, fontSize: 13, marginTop: 16, lineHeight: 18 },
+  flash: { color: colors.success, fontSize: 13, marginTop: 16, lineHeight: 18, fontWeight: '600' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: 8, marginTop: 22 },
+  saveText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '700' },
+  dirtyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 14 },
   exportRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  exportBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.color.borderStrong },
-  exportText: { fontSize: 12, color: theme.color.onSurface, fontWeight: '600' },
-  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 8, backgroundColor: theme.color.surfaceSecondary, marginTop: 10 },
-  secondaryText: { fontSize: 14, color: theme.color.onSurface, fontWeight: '600' },
+  exportBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong },
+  exportText: { fontSize: 12, color: colors.onSurface, fontWeight: '600' },
+  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 8, backgroundColor: colors.surfaceSecondary, marginTop: 10 },
+  secondaryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 4 },
-  deleteText: { color: theme.color.error, fontSize: 13, fontWeight: '600' },
+  deleteText: { color: colors.error, fontSize: 13, fontWeight: '600' },
   // Off-screen rather than transparent: html2canvas honours opacity, so an
   // opacity of 0 would capture a blank image.
   offscreen: { position: 'absolute', left: -20000, top: 0 },

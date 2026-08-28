@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,24 +10,28 @@ import { AdSlot } from '@/src/ads';
 import { avatarUrl } from '@/src/avatar';
 import { formatDuration } from '@/src/format';
 import { recipeImage, recipeImageSource } from '@/src/products';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
 
-function AuthorAvatar({ name, picture }: { name?: string; picture?: string | null }) {
-  const uri = avatarUrl(picture, API_BASE);
-  return (
-    <View style={styles.authorAvatar}>
-      {uri ? (
-        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-      ) : (
-        <Text style={styles.authorAvatarText}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
-      )}
-    </View>
-  );
-}
-
 export default function Home() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const AuthorAvatar = ({ name, picture }: { name?: string; picture?: string | null }) => {
+    const uri = avatarUrl(picture, API_BASE);
+    return (
+      <View style={styles.authorAvatar}>
+        {uri ? (
+          <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        ) : (
+          <Text style={styles.authorAvatarText}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
+        )}
+      </View>
+    );
+  };
+
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,13 +56,13 @@ export default function Home() {
   const classics = withPhoto.filter(r => !r.is_user_submitted).slice(1, 8);
   const community = withPhoto.filter((r: any) => r.is_user_submitted).slice(0, 6);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.color.brand} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         <View style={styles.header}>
@@ -68,13 +72,13 @@ export default function Home() {
 
         <Pressable testID="calculator-card" onPress={() => router.push('/calculator')} style={styles.calcCard}>
           <View style={styles.calcIcon}>
-            <Feather name="percent" size={20} color={theme.color.brand} />
+            <Feather name="percent" size={20} color={colors.brand} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.calcTitle}>Calculateur du boulanger</Text>
             <Text style={styles.calcSub}>Adaptez vos quantités par hydratation</Text>
           </View>
-          <Feather name="chevron-right" size={20} color={theme.color.muted} />
+          <Feather name="chevron-right" size={20} color={colors.muted} />
         </Pressable>
 
         <Pressable testID="cost-calculator-card" onPress={() => router.push('/cost/new')} style={styles.calcCard}>
@@ -85,7 +89,7 @@ export default function Home() {
             <Text style={styles.calcTitle}>Coût de revient</Text>
             <Text style={styles.calcSub}>Prix matières, marge, prix de vente</Text>
           </View>
-          <Feather name="chevron-right" size={20} color={theme.color.muted} />
+          <Feather name="chevron-right" size={20} color={colors.muted} />
         </Pressable>
 
         {featured && (
@@ -112,7 +116,7 @@ export default function Home() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.cdcHeaderRow}>
-                <Feather name="award" size={18} color={theme.color.brand} />
+                <Feather name="award" size={18} color={colors.brand} />
                 <Text style={styles.sectionTitle}>Coups de cœur</Text>
               </View>
             </View>
@@ -121,7 +125,7 @@ export default function Home() {
                 <Pressable key={r.id} testID={`cdc-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
                   <View>
                     <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
-                    <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>
+                    <View style={styles.cardBadge}><Feather name="award" size={11} color={colors.onBrandPrimary} /></View>
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
                   <Text style={styles.classicMeta}>{(r as any).like_count} {"j'aime"}</Text>
@@ -162,7 +166,7 @@ export default function Home() {
                 <Pressable key={r.id} testID={`community-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
                   <View>
                     <Image source={recipeImageSource(r, API_BASE)} style={styles.classicImage} contentFit="cover" />
-                    {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color="#fff" /></View>}
+                    {(r as any).coup_de_coeur && <View style={styles.cardBadge}><Feather name="award" size={11} color={colors.onBrandPrimary} /></View>}
                   </View>
                   <Text style={styles.classicTitle}>{r.title}</Text>
                   <View style={styles.authorRow}>
@@ -179,31 +183,31 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
-  brandLabel: { fontSize: 11, letterSpacing: 4, color: theme.color.muted, fontWeight: '500' },
-  headerTitle: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurface, marginTop: 4 },
-  calcCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, padding: 16, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, gap: 14 },
-  calcIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center' },
-  calcTitle: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
-  calcSub: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
-  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
+  brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '500' },
+  headerTitle: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
+  calcCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, padding: 16, backgroundColor: colors.surfaceSecondary, borderRadius: 8, gap: 14 },
+  calcIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  calcTitle: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
+  calcSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.surfaceSecondary },
   heroContent: { position: 'absolute', bottom: 20, left: 20, right: 20 },
-  heroBadge: { color: theme.color.brandSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '600', marginBottom: 6 },
-  heroTitle: { fontFamily: theme.serif, fontSize: 28, color: '#fff', lineHeight: 32 },
+  heroBadge: { color: colors.brandSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '600', marginBottom: 6 },
+  heroTitle: { fontFamily: theme.serif, fontSize: 28, color: colors.onBrandPrimary, lineHeight: 32 },
   heroMeta: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 6 },
   section: { marginTop: 40 },
   cdcHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
+  cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
-  sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: theme.color.onSurface },
+  sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: colors.onSurface },
   classicCard: { width: 180 },
-  classicImage: { width: 180, height: 180, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
-  classicTitle: { fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, marginTop: 10 },
-  classicMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
+  classicImage: { width: 180, height: 180, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  classicTitle: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginTop: 10 },
+  classicMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  authorAvatar: { width: 18, height: 18, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  authorAvatarText: { fontSize: 10, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
+  authorAvatar: { width: 18, height: 18, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  authorAvatarText: { fontSize: 10, color: colors.onBrandTertiary, fontFamily: theme.serif },
 });

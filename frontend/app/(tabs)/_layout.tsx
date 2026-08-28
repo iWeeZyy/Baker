@@ -1,23 +1,32 @@
+import { useMemo } from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '@/src/auth';
-import { theme } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
+import { type ThemeColors } from '@/src/theme';
+
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+});
 
 export default function TabsLayout() {
   const { user, loading } = useAuth();
-  if (loading) return <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   if (!user) return <Redirect href="/auth" />;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.color.brand,
-        tabBarInactiveTintColor: theme.color.muted,
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
-          backgroundColor: theme.color.surface,
-          borderTopColor: theme.color.border,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           height: 82,
           paddingTop: 8,
@@ -36,4 +45,3 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
-const styles = StyleSheet.create({ center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface } });

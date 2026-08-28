@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { computeColumns, dayWidth } from './columns';
 import { DAY_LABELS_LONG, DAYS, dayNumbers, formatHours, type Schedule } from './model';
+import { useTheme } from '../ThemeContext';
+import type { ThemeColors } from '../theme';
 
 /**
  * The schedule grid, used both for the exported page and the in-app preview.
@@ -13,12 +16,17 @@ import { DAY_LABELS_LONG, DAYS, dayNumbers, formatHours, type Schedule } from '.
  * edges, each cell supplies its right and bottom. Nothing overlaps, so no rule
  * is ever doubled.
  */
-export function ScheduleTable({ schedule, width, scale = 1 }: {
+export function ScheduleTable({ schedule, width, scale = 1, themed = false }: {
   schedule: Schedule;
   width: number;
   /** Multiplies type and row height; 1 suits a printed page. */
   scale?: number;
+  /** True only for the in-app preview: follows the current theme instead of the fixed print palette used by the export (photo/PDF), which must never depend on the device's theme. */
+  themed?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(themed ? colors : null), [themed, colors]);
+
   const numbers = dayNumbers(schedule.week_start);
   const anyOvertime = schedule.employees.some(e => (e.overtime_minutes || 0) > 0);
   const cols = computeColumns(width, anyOvertime);
@@ -126,52 +134,61 @@ export function ScheduleTable({ schedule, width, scale = 1 }: {
 
 export { DAYS };
 
-// Baker's own palette, kept light enough to print cleanly in colour or grey.
-const INK = '#2A1F1A';
-const MUTED = '#8B7D72';
-const LINE = '#D8CEC2';
-const BAND = '#F3EFEA';
-const SUBTLE = '#FAF8F5';
-const ACCENT_BG = '#F0DAC6';
-const ACCENT_INK = '#8B4527';
+// The export (photo/PDF) is always rendered with this fixed palette, whatever
+// the device's current theme — kept light enough to print cleanly in colour
+// or grey. The in-app preview (themed=true) swaps these for theme tokens.
+const PRINT = {
+  ink: '#2A1F1A', muted: '#8B7D72', line: '#D8CEC2', band: '#F3EFEA', subtle: '#FAF8F5',
+  accentBg: '#F0DAC6', accentInk: '#8B4527', frameBg: '#FFFFFF', timeText: '#4A3D36',
+  off: '#E3DCD2', offHours: '#EDE7DF', totalCell: '#FBF4EC', grandTotalText: '#FFFFFF',
+};
 
-const styles = StyleSheet.create({
-  // The frame draws the top and left edges; cells draw their right and bottom.
-  // That way every rule is exactly one pixel and never doubles.
-  frame: {
-    borderTopWidth: 1, borderLeftWidth: 1, borderColor: LINE,
-    borderRadius: 10, overflow: 'hidden', backgroundColor: '#FFFFFF',
-  },
-  row: { flexDirection: 'row' },
-  cell: {
-    alignItems: 'center', justifyContent: 'center',
-    borderRightWidth: 1, borderBottomWidth: 1, borderColor: LINE,
-    paddingHorizontal: 2, backgroundColor: '#FFFFFF',
-  },
-  text: { color: INK, textAlign: 'center' },
-  head: { backgroundColor: BAND },
-  headText: { fontWeight: '700', letterSpacing: 0.3 },
-  nameHeadText: { fontWeight: '700', letterSpacing: 1, color: MUTED, textAlign: 'left' },
-  dayNum: { color: MUTED, marginTop: 1 },
-  sub: { backgroundColor: SUBTLE },
-  // Tight padding: these labels sit in the narrowest columns of the grid.
-  subCell: { paddingHorizontal: 1 },
-  subText: { color: MUTED, fontWeight: '600' },
-  nameCellAlign: { alignItems: 'flex-start', paddingLeft: 10 },
-  nameCell: { alignItems: 'flex-start', paddingLeft: 10, backgroundColor: SUBTLE },
-  nameText: { fontWeight: '700', textAlign: 'left' },
-  timeText: { color: '#4A3D36' },
-  hoursText: { fontWeight: '700' },
-  mutedText: { color: MUTED },
-  off: { backgroundColor: '#E3DCD2' },
-  offHours: { backgroundColor: '#EDE7DF' },
-  totalHead: { backgroundColor: ACCENT_BG },
-  totalHeadText: { color: ACCENT_INK, fontWeight: '700' },
-  totalCell: { backgroundColor: '#FBF4EC' },
-  totalText: { color: ACCENT_INK, fontWeight: '700' },
-  footer: { backgroundColor: BAND },
-  footerLabel: { fontWeight: '700', textAlign: 'left' },
-  footerText: { fontWeight: '700' },
-  grandTotal: { backgroundColor: ACCENT_INK },
-  grandTotalText: { color: '#FFFFFF', fontWeight: '700' },
-});
+const makeStyles = (colors: ThemeColors | null) => {
+  const p = colors ? {
+    ink: colors.onSurface, muted: colors.muted, line: colors.border, band: colors.surfaceSecondary,
+    subtle: colors.surface, accentBg: colors.brandTertiary, accentInk: colors.onBrandTertiary,
+    frameBg: colors.surface, timeText: colors.onSurfaceSecondary, off: colors.surfaceTertiary,
+    offHours: colors.surfaceSecondary, totalCell: colors.brandTertiary, grandTotalText: colors.onBrandPrimary,
+  } : PRINT;
+
+  return StyleSheet.create({
+    // The frame draws the top and left edges; cells draw their right and bottom.
+    // That way every rule is exactly one pixel and never doubles.
+    frame: {
+      borderTopWidth: 1, borderLeftWidth: 1, borderColor: p.line,
+      borderRadius: 10, overflow: 'hidden', backgroundColor: p.frameBg,
+    },
+    row: { flexDirection: 'row' },
+    cell: {
+      alignItems: 'center', justifyContent: 'center',
+      borderRightWidth: 1, borderBottomWidth: 1, borderColor: p.line,
+      paddingHorizontal: 2, backgroundColor: p.frameBg,
+    },
+    text: { color: p.ink, textAlign: 'center' },
+    head: { backgroundColor: p.band },
+    headText: { fontWeight: '700', letterSpacing: 0.3 },
+    nameHeadText: { fontWeight: '700', letterSpacing: 1, color: p.muted, textAlign: 'left' },
+    dayNum: { color: p.muted, marginTop: 1 },
+    sub: { backgroundColor: p.subtle },
+    // Tight padding: these labels sit in the narrowest columns of the grid.
+    subCell: { paddingHorizontal: 1 },
+    subText: { color: p.muted, fontWeight: '600' },
+    nameCellAlign: { alignItems: 'flex-start', paddingLeft: 10 },
+    nameCell: { alignItems: 'flex-start', paddingLeft: 10, backgroundColor: p.subtle },
+    nameText: { fontWeight: '700', textAlign: 'left' },
+    timeText: { color: p.timeText },
+    hoursText: { fontWeight: '700' },
+    mutedText: { color: p.muted },
+    off: { backgroundColor: p.off },
+    offHours: { backgroundColor: p.offHours },
+    totalHead: { backgroundColor: p.accentBg },
+    totalHeadText: { color: p.accentInk, fontWeight: '700' },
+    totalCell: { backgroundColor: p.totalCell },
+    totalText: { color: p.accentInk, fontWeight: '700' },
+    footer: { backgroundColor: p.band },
+    footerLabel: { fontWeight: '700', textAlign: 'left' },
+    footerText: { fontWeight: '700' },
+    grandTotal: { backgroundColor: p.accentInk },
+    grandTotalText: { color: p.grandTotalText, fontWeight: '700' },
+  });
+};

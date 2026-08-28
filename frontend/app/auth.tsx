@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/src/auth';
 import { FAMILY_TILES } from '@/src/families';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 export default function AuthScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -60,22 +63,22 @@ export default function AuthScreen() {
           {mode === 'signup' && (
             <View style={styles.field}>
               <Text style={styles.label}>Nom</Text>
-              <TextInput testID="input-name" value={name} onChangeText={setName} placeholder="Votre nom" placeholderTextColor={theme.color.muted} style={styles.input} />
+              <TextInput testID="input-name" value={name} onChangeText={setName} placeholder="Votre nom" placeholderTextColor={colors.muted} style={styles.input} />
             </View>
           )}
           <View style={styles.field}>
             <Text style={styles.label}>Email</Text>
-            <TextInput testID="input-email" value={email} onChangeText={setEmail} placeholder="email@exemple.com" placeholderTextColor={theme.color.muted} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+            <TextInput testID="input-email" value={email} onChangeText={setEmail} placeholder="email@exemple.com" placeholderTextColor={colors.muted} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
           </View>
           <View style={styles.field}>
             <Text style={styles.label}>Mot de passe</Text>
-            <TextInput testID="input-password" value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor={theme.color.muted} style={styles.input} secureTextEntry />
+            <TextInput testID="input-password" value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor={colors.muted} style={styles.input} secureTextEntry />
           </View>
 
           {error ? <Text style={styles.error} testID="auth-error">{error}</Text> : null}
 
           <Pressable testID="submit-auth" onPress={submit} disabled={loading} style={[styles.primaryBtn, loading && { opacity: 0.6 }]}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
+            {loading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
           </Pressable>
         </View>
       </ScrollView>
@@ -83,22 +86,22 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: { flexGrow: 1, backgroundColor: theme.color.surface },
-  hero: { height: 320, position: 'relative', backgroundColor: theme.color.surfaceSecondary },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  scroll: { flexGrow: 1, backgroundColor: colors.surface },
+  hero: { height: 320, position: 'relative', backgroundColor: colors.surfaceSecondary },
   heroContent: { position: 'absolute', bottom: 24, left: 24, right: 24 },
-  brandLabel: { fontSize: 12, letterSpacing: 4, color: theme.color.onSurfaceInverse, marginBottom: 8, fontWeight: '500' },
-  heroTitle: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurfaceInverse, lineHeight: 36 },
+  brandLabel: { fontSize: 12, letterSpacing: 4, color: colors.onSurfaceInverse, marginBottom: 8, fontWeight: '500' },
+  heroTitle: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurfaceInverse, lineHeight: 36 },
   form: { padding: 24, paddingBottom: 48 },
-  tabs: { flexDirection: 'row', backgroundColor: theme.color.surfaceSecondary, borderRadius: 4, padding: 4, marginBottom: 24 },
+  tabs: { flexDirection: 'row', backgroundColor: colors.surfaceSecondary, borderRadius: 4, padding: 4, marginBottom: 24 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 4 },
-  tabActive: { backgroundColor: theme.color.surface },
-  tabText: { fontSize: 14, color: theme.color.muted, fontWeight: '500' },
-  tabTextActive: { color: theme.color.onSurface },
+  tabActive: { backgroundColor: colors.surface },
+  tabText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
+  tabTextActive: { color: colors.onSurface },
   field: { marginBottom: 16 },
-  label: { fontSize: 12, color: theme.color.muted, marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' },
-  input: { fontSize: 16, color: theme.color.onSurface, borderBottomWidth: 1, borderBottomColor: theme.color.borderStrong, paddingVertical: 10 },
-  primaryBtn: { backgroundColor: theme.color.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
-  primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
-  error: { color: theme.color.error, fontSize: 13, marginBottom: 8 },
+  label: { fontSize: 12, color: colors.muted, marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' },
+  input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10 },
+  primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
+  primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
+  error: { color: colors.error, fontSize: 13, marginBottom: 8 },
 });

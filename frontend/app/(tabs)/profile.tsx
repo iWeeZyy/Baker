@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,8 @@ import { confirmAsync } from '@/src/confirm';
 import { openInstagram, parseInstagramUsername } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { formatRelativeDate } from '@/src/relativeDate';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 const BIO_MAX_LENGTH = 300;
 const PROFESSION_MAX_LENGTH = 60;
@@ -29,6 +30,8 @@ type MyComment = {
 };
 
 export default function Profile() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, logout, refreshUser, updateProfile } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'mine' | 'favorites' | 'comments'>('mine');
@@ -230,9 +233,14 @@ export default function Profile() {
               <Text style={styles.avatarText}>{initial}</Text>
             )}
           </Pressable>
-          <Pressable testID="logout-btn" onPress={logout} style={styles.logoutBtn}>
-            <Feather name="log-out" size={18} color={theme.color.onSurfaceSecondary} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable testID="settings-btn" onPress={() => router.push('/settings' as any)} style={styles.logoutBtn}>
+              <Feather name="settings" size={18} color={colors.onSurfaceSecondary} />
+            </Pressable>
+            <Pressable testID="logout-btn" onPress={logout} style={styles.logoutBtn}>
+              <Feather name="log-out" size={18} color={colors.onSurfaceSecondary} />
+            </Pressable>
+          </View>
         </View>
         <Text style={styles.name}>{user?.name || 'Boulanger'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
@@ -252,7 +260,7 @@ export default function Profile() {
             onPress={() => openInstagram(user!.instagram_username as string)}
             style={styles.instagramRow}
           >
-            <Feather name="instagram" size={15} color={theme.color.brand} />
+            <Feather name="instagram" size={15} color={colors.brand} />
             <Text style={styles.instagramText}>Instagram @{user.instagram_username}</Text>
           </Pressable>
         )}
@@ -263,7 +271,7 @@ export default function Profile() {
           </Pressable>
           {user?.picture && (
             <Pressable testID="delete-avatar-link" onPress={deleteAvatar}>
-              <Text style={[styles.avatarLink, { color: theme.color.error }]}>Supprimer la photo</Text>
+              <Text style={[styles.avatarLink, { color: colors.error }]}>Supprimer la photo</Text>
             </Pressable>
           )}
           {!editingProfile && (
@@ -282,7 +290,7 @@ export default function Profile() {
               value={bioDraft}
               onChangeText={setBioDraft}
               placeholder="Écrire une description…"
-              placeholderTextColor={theme.color.muted}
+              placeholderTextColor={colors.muted}
               style={styles.bioInput}
               multiline
               maxLength={BIO_MAX_LENGTH}
@@ -295,7 +303,7 @@ export default function Profile() {
               value={instagramDraft}
               onChangeText={setInstagramDraft}
               placeholder="@moncompte"
-              placeholderTextColor={theme.color.muted}
+              placeholderTextColor={colors.muted}
               style={styles.editInput}
               autoCapitalize="none"
               autoCorrect={false}
@@ -310,7 +318,7 @@ export default function Profile() {
               value={professionDraft}
               onChangeText={setProfessionDraft}
               placeholder="Boulanger, Pâtissier…"
-              placeholderTextColor={theme.color.muted}
+              placeholderTextColor={colors.muted}
               style={styles.editInput}
               maxLength={PROFESSION_MAX_LENGTH}
             />
@@ -336,7 +344,7 @@ export default function Profile() {
                 <Text style={styles.editCancelText}>Annuler</Text>
               </Pressable>
               <Pressable testID="save-profile-btn" disabled={profileSaving} onPress={saveProfile} style={[styles.editSaveBtn, profileSaving && { opacity: 0.6 }]}>
-                {profileSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.editSaveText}>Enregistrer</Text>}
+                {profileSaving ? <ActivityIndicator color={colors.onBrandPrimary} size="small" /> : <Text style={styles.editSaveText}>Enregistrer</Text>}
               </Pressable>
             </View>
           </View>
@@ -362,7 +370,7 @@ export default function Profile() {
               <View style={styles.creationsEmpty}>
                 <Text style={styles.creationsEmptyText}>Partagez vos réalisations avec la communauté.</Text>
                 <Pressable testID="empty-add-creation-btn" onPress={() => router.push('/creation/new' as any)} style={styles.addCreationBtn}>
-                  <Feather name="plus" size={14} color="#fff" />
+                  <Feather name="plus" size={14} color={colors.onBrandPrimary} />
                   <Text style={styles.addCreationBtnText}>Ajouter une création</Text>
                 </Pressable>
               </View>
@@ -400,10 +408,10 @@ export default function Profile() {
                 </Pressable>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable testID={`team-invite-accept-${inv.id}`} onPress={() => respondTeamInvite(inv.id, true)} style={styles.acceptBtn}>
-                    <Feather name="check" size={16} color="#fff" />
+                    <Feather name="check" size={16} color={colors.onBrandPrimary} />
                   </Pressable>
                   <Pressable testID={`team-invite-decline-${inv.id}`} onPress={() => respondTeamInvite(inv.id, false)} style={styles.declineBtn}>
-                    <Feather name="x" size={16} color={theme.color.onSurfaceSecondary} />
+                    <Feather name="x" size={16} color={colors.onSurfaceSecondary} />
                   </Pressable>
                 </View>
               </View>
@@ -431,7 +439,7 @@ export default function Profile() {
               <View style={styles.creationsEmpty}>
                 <Text style={styles.creationsEmptyText}>Votre Team est vide.{'\n'}Ajoutez les personnes avec qui vous travaillez.</Text>
                 <Pressable testID="empty-add-team-btn" onPress={() => router.push('/team/add' as any)} style={styles.addCreationBtn}>
-                  <Feather name="plus" size={14} color="#fff" />
+                  <Feather name="plus" size={14} color={colors.onBrandPrimary} />
                   <Text style={styles.addCreationBtnText}>Ajouter à ma Team</Text>
                 </Pressable>
               </View>
@@ -470,7 +478,7 @@ export default function Profile() {
 
       {tab === 'comments' ? (
         !commentsLoaded ? (
-          <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+          <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
         ) : (
           <FlatList
             data={myComments}
@@ -507,7 +515,7 @@ export default function Profile() {
             }}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Feather name="message-circle" size={40} color={theme.color.muted} />
+                <Feather name="message-circle" size={40} color={colors.muted} />
                 <Text style={styles.emptyTitle}>Aucun commentaire</Text>
                 <Text style={styles.emptySubtitle}>Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes.</Text>
                 <Pressable testID="empty-comments-btn" onPress={() => router.push('/(tabs)/recipes' as any)} style={styles.emptyBtn}>
@@ -517,13 +525,13 @@ export default function Profile() {
             }
             ListFooterComponent={commentsHasMore ? (
               <Pressable testID="comments-load-more" onPress={loadMoreComments} disabled={commentsLoadingMore} style={styles.loadMoreBtn}>
-                {commentsLoadingMore ? <ActivityIndicator size="small" color={theme.color.brand} /> : <Text style={styles.loadMoreText}>Charger plus</Text>}
+                {commentsLoadingMore ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={styles.loadMoreText}>Charger plus</Text>}
               </Pressable>
             ) : null}
           />
         )
       ) : loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
           data={items}
@@ -540,7 +548,7 @@ export default function Profile() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name={tab === 'mine' ? 'edit-3' : 'bookmark'} size={40} color={theme.color.muted} />
+              <Feather name={tab === 'mine' ? 'edit-3' : 'bookmark'} size={40} color={colors.muted} />
               <Text style={styles.emptyTitle}>{tab === 'mine' ? "Vous n'avez pas encore partagé de recette" : 'Aucune recette sauvegardée'}</Text>
               {tab === 'mine' && (
                 <Pressable testID="empty-share-btn" onPress={() => router.push('/share')} style={styles.emptyBtn}>
@@ -576,7 +584,7 @@ export default function Profile() {
               disabled={uploading}
               style={[styles.previewConfirmBtn, uploading && { opacity: 0.6 }]}
             >
-              {uploading ? <ActivityIndicator color="#fff" /> : <Text style={styles.previewConfirmText}>Utiliser cette photo</Text>}
+              {uploading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.previewConfirmText}>Utiliser cette photo</Text>}
             </Pressable>
             <Pressable testID="avatar-cancel-btn" disabled={uploading} onPress={() => { setPendingImage(null); setAvatarError(null); }} style={styles.previewCancelBtn}>
               <Text style={styles.previewCancelText}>Annuler</Text>
@@ -588,93 +596,94 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  avatar: { width: 72, height: 72, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarText: { fontSize: 28, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  logoutBtn: { width: 40, height: 40, borderRadius: 999, borderWidth: 1, borderColor: theme.color.border, alignItems: 'center', justifyContent: 'center' },
-  name: { fontFamily: theme.serif, fontSize: 28, color: theme.color.onSurface, marginTop: 14 },
-  email: { fontSize: 13, color: theme.color.muted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  avatar: { width: 72, height: 72, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { fontSize: 28, color: colors.onBrandTertiary, fontFamily: theme.serif },
+  logoutBtn: { width: 40, height: 40, borderRadius: 999, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  name: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 14 },
+  email: { fontSize: 13, color: colors.muted, marginTop: 2 },
   tabs: { flexDirection: 'row', marginTop: 24, gap: 24 },
   tab: { paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabActive: { borderBottomColor: theme.color.brand },
-  tabText: { fontSize: 14, color: theme.color.muted, fontWeight: '500' },
-  tabTextActive: { color: theme.color.onSurface },
+  tabActive: { borderBottomColor: colors.brand },
+  tabText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
+  tabTextActive: { color: colors.onSurface },
   card: { flex: 1 },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
-  cardTitle: { fontFamily: theme.serif, fontSize: 17, color: theme.color.onSurface, marginTop: 10 },
-  cardMeta: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
+  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
+  cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: 14, color: theme.color.muted, textAlign: 'center', paddingHorizontal: 40 },
-  emptySubtitle: { fontSize: 13, color: theme.color.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
-  emptyBtn: { marginTop: 16, backgroundColor: theme.color.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
-  emptyBtnText: { color: '#fff', fontWeight: '600' },
-  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 14 },
-  commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: theme.color.surfaceTertiary },
-  commentCardKind: { fontSize: 13, fontWeight: '600', color: theme.color.onSurface },
-  commentCardReplyTo: { fontSize: 12, color: theme.color.brand, fontWeight: '500', marginTop: 2 },
-  commentCardBody: { fontSize: 13, color: theme.color.onSurfaceSecondary, lineHeight: 18, marginTop: 4 },
+  emptyTitle: { fontSize: 14, color: colors.muted, textAlign: 'center', paddingHorizontal: 40 },
+  emptySubtitle: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
+  emptyBtn: { marginTop: 16, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
+  emptyBtnText: { color: colors.onBrandPrimary, fontWeight: '600' },
+  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14 },
+  commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceTertiary },
+  commentCardKind: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
+  commentCardReplyTo: { fontSize: 12, color: colors.brand, fontWeight: '500', marginTop: 2 },
+  commentCardBody: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18, marginTop: 4 },
   commentCardFooter: { flexDirection: 'row', gap: 16, marginTop: 8 },
-  commentCardMeta: { fontSize: 12, color: theme.color.muted },
+  commentCardMeta: { fontSize: 12, color: colors.muted },
   loadMoreBtn: { alignItems: 'center', paddingVertical: 14 },
-  loadMoreText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
+  loadMoreText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
   avatarLinksRow: { flexDirection: 'row', gap: 20, marginTop: 10, flexWrap: 'wrap' },
-  avatarLink: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  avatarError: { fontSize: 13, color: theme.color.error, marginTop: 8 },
-  profession: { fontSize: 13, color: theme.color.brand, fontWeight: '700', marginTop: 6 },
-  bio: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
+  avatarLink: { fontSize: 13, color: colors.brand, fontWeight: '600' },
+  avatarError: { fontSize: 13, color: colors.error, marginTop: 8 },
+  profession: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 6 },
+  bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  instagramText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
-  editProfileCard: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 16, marginTop: 14 },
-  editLabel: { fontSize: 12, color: theme.color.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
-  bioInput: { fontSize: 14, color: theme.color.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: theme.color.surface, borderRadius: 8, padding: 10 },
-  charCount: { fontSize: 11, color: theme.color.muted, textAlign: 'right', marginTop: 4 },
-  editInput: { fontSize: 14, color: theme.color.onSurface, backgroundColor: theme.color.surface, borderRadius: 8, padding: 10 },
+  instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
+  editProfileCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 16, marginTop: 14 },
+  editLabel: { fontSize: 12, color: colors.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
+  bioInput: { fontSize: 14, color: colors.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
+  charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
+  editInput: { fontSize: 14, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
   editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
   editCancelBtn: { paddingVertical: 10, paddingHorizontal: 14 },
-  editCancelText: { fontSize: 14, color: theme.color.muted, fontWeight: '600' },
-  editSaveBtn: { backgroundColor: theme.color.brand, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
-  editSaveText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  editCancelText: { fontSize: 14, color: colors.muted, fontWeight: '600' },
+  editSaveBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  editSaveText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 14 },
   creationsSection: { marginTop: 20 },
   creationsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  creationsTitle: { fontSize: 13, letterSpacing: 1, color: theme.color.onSurface, fontWeight: '700' },
-  creationsSeeAll: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  creationsTitle: { fontSize: 13, letterSpacing: 1, color: colors.onSurface, fontWeight: '700' },
+  creationsSeeAll: { fontSize: 12, color: colors.brand, fontWeight: '600' },
   creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.color.surfaceSecondary },
+  creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   creationTileImage: { width: '100%', height: '100%' },
-  creationsEmpty: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 12, padding: 20, alignItems: 'center', gap: 12 },
-  creationsEmptyText: { fontSize: 13, color: theme.color.muted, textAlign: 'center' },
-  addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
-  addCreationBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  creationsEmpty: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 20, alignItems: 'center', gap: 12 },
+  creationsEmptyText: { fontSize: 13, color: colors.muted, textAlign: 'center' },
+  addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
+  addCreationBtnText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 13 },
   visibilitySegment: { flexDirection: 'row', gap: 6 },
-  visibilityBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999, backgroundColor: theme.color.surface },
-  visibilityBtnOn: { backgroundColor: theme.color.brand },
-  visibilityBtnText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
-  visibilityBtnTextOn: { color: '#fff' },
-  countBadge: { backgroundColor: theme.color.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  countBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  visibilityBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999, backgroundColor: colors.surface },
+  visibilityBtnOn: { backgroundColor: colors.brand },
+  visibilityBtnText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '600' },
+  visibilityBtnTextOn: { color: colors.onBrandPrimary },
+  countBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  countBadgeText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
   teamInviteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 10 },
   teamInviteLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  teamAvatarSmall: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  teamAvatarSmallText: { fontSize: 14, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  teamInviteText: { flex: 1, fontSize: 13, color: theme.color.onSurfaceSecondary, lineHeight: 18 },
-  teamInviteName: { fontWeight: '700', color: theme.color.onSurface },
-  acceptBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.success, alignItems: 'center', justifyContent: 'center' },
-  declineBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  teamAvatarSmall: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarSmallText: { fontSize: 14, color: colors.onBrandTertiary, fontFamily: theme.serif },
+  teamInviteText: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18 },
+  teamInviteName: { fontWeight: '700', color: colors.onSurface },
+  acceptBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' },
+  declineBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   teamChip: { alignItems: 'center', width: 72 },
-  teamAvatar: { width: 56, height: 56, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  teamAvatarText: { fontSize: 20, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  teamChipName: { fontSize: 12, color: theme.color.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
-  teamChipRole: { fontSize: 10, color: theme.color.muted, marginTop: 1, textAlign: 'center' },
+  teamAvatar: { width: 56, height: 56, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarText: { fontSize: 20, color: colors.onBrandTertiary, fontFamily: theme.serif },
+  teamChipName: { fontSize: 12, color: colors.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+  teamChipRole: { fontSize: 10, color: colors.muted, marginTop: 1, textAlign: 'center' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  previewCard: { backgroundColor: theme.color.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
-  previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, marginBottom: 20 },
-  previewConfirmBtn: { backgroundColor: theme.color.brand, borderRadius: 999, paddingVertical: 14, alignItems: 'center', width: '100%' },
-  previewConfirmText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  previewCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
+  previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: colors.surfaceSecondary, marginBottom: 20 },
+  previewConfirmBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingVertical: 14, alignItems: 'center', width: '100%' },
+  previewConfirmText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 15 },
   previewCancelBtn: { paddingVertical: 14, alignItems: 'center', width: '100%' },
-  previewCancelText: { color: theme.color.muted, fontWeight: '500', fontSize: 14 },
+  previewCancelText: { color: colors.muted, fontWeight: '500', fontSize: 14 },
 });

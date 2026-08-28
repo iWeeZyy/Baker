@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,8 @@ import { confirmAsync } from '@/src/confirm';
 import { usePlan } from '@/src/plan';
 import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { SwipeableRow } from '@/src/SwipeableRow';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { endBakeActivity } from '@/modules/bakers-live-activity';
 import { syncWidgetData } from '@/src/widgetData';
 
@@ -40,6 +41,8 @@ export function formatDate(iso: string) {
 type Mode = 'production' | 'staff';
 
 export default function Planning() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { user } = useAuth();
   const { plan, reload: reloadPlan } = usePlan();
@@ -149,7 +152,7 @@ export default function Planning() {
             <Text style={styles.cardDate}>{formatDate(p.date)}</Text>
             {p.target_time ? (
               <View style={styles.timePill}>
-                <Feather name="clock" size={11} color={theme.color.onBrandTertiary} />
+                <Feather name="clock" size={11} color={colors.onBrandTertiary} />
                 <Text style={styles.timePillText}>{p.target_time}</Text>
               </View>
             ) : null}
@@ -165,7 +168,7 @@ export default function Planning() {
               {p.total_pieces != null ? ` · ${p.total_pieces} pièces` : ''}
             </Text>
             {p.steps_total > 0 && (
-              <Text style={[styles.cardMeta, progress === 100 && { color: theme.color.success }]}>
+              <Text style={[styles.cardMeta, progress === 100 && { color: colors.success }]}>
                 {p.steps_done}/{p.steps_total} étapes
               </Text>
             )}
@@ -208,7 +211,7 @@ export default function Planning() {
             onPress={() => router.push('/pro' as any)}
             style={styles.quotaBanner}
           >
-            <Feather name="info" size={14} color={theme.color.onSurfaceSecondary} />
+            <Feather name="info" size={14} color={colors.onSurfaceSecondary} />
             <Text style={styles.quotaText}>
               {plan.productions_remaining} production{(plan.productions_remaining ?? 0) > 1 ? 's' : ''} gratuite
               {(plan.productions_remaining ?? 0) > 1 ? 's' : ''} restante
@@ -219,10 +222,10 @@ export default function Planning() {
         )}
 
         {loading ? (
-          <ActivityIndicator color={theme.color.brand} style={{ marginTop: 40 }} />
+          <ActivityIndicator color={colors.brand} style={{ marginTop: 40 }} />
         ) : error ? (
           <View style={styles.emptyBox}>
-            <Feather name="wifi-off" size={34} color={theme.color.muted} />
+            <Feather name="wifi-off" size={34} color={colors.muted} />
             <Text style={styles.emptyText}>{error}</Text>
             <Pressable testID="planning-retry" onPress={load} style={styles.retryBtn}>
               <Text style={styles.retryText}>Réessayer</Text>
@@ -231,7 +234,7 @@ export default function Planning() {
         ) : mode === 'staff' ? (
           schedules.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Feather name="users" size={38} color={theme.color.muted} />
+              <Feather name="users" size={38} color={colors.muted} />
               <Text style={styles.emptyTitle}>Aucun emploi du temps</Text>
               <Text style={styles.emptyText}>
                 Planifiez la semaine de votre équipe :{'\n'}
@@ -274,7 +277,7 @@ export default function Planning() {
           )
         ) : productions.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Feather name="calendar" size={38} color={theme.color.muted} />
+            <Feather name="calendar" size={38} color={colors.muted} />
             <Text style={styles.emptyTitle}>Aucune production planifiée</Text>
             <Text style={styles.emptyText}>
               Préparez votre journée : choisissez vos recettes et vos quantités,{'\n'}
@@ -304,43 +307,43 @@ export default function Planning() {
         onPress={() => router.push((mode === 'staff' ? '/schedule/new' : '/production/new') as any)}
         style={styles.fab}
       >
-        <Feather name="plus" size={20} color="#fff" />
+        <Feather name="plus" size={20} color={colors.onBrandPrimary} />
         <Text style={styles.fabText}>{mode === 'staff' ? 'Nouvel emploi du temps' : 'Nouvelle production'}</Text>
       </Pressable>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
-  brandLabel: { fontSize: 11, letterSpacing: 4, color: theme.color.muted, fontWeight: '600' },
-  title: { fontFamily: theme.serif, fontSize: 32, color: theme.color.onSurface, marginTop: 4 },
-  quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: theme.color.surfaceSecondary, borderRadius: 8 },
-  quotaText: { flex: 1, fontSize: 12, color: theme.color.onSurfaceSecondary },
-  quotaLink: { fontSize: 12, color: theme.color.brand, fontWeight: '700' },
+  brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '600' },
+  title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
+  quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: 8 },
+  quotaText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
+  quotaLink: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginTop: 12 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary },
-  segBtnOn: { backgroundColor: theme.color.brand },
-  segText: { fontSize: 13, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: '#fff' },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
+  segBtnOn: { backgroundColor: colors.brand },
+  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
+  segTextOn: { color: colors.onBrandPrimary },
   section: { paddingHorizontal: 24, marginTop: 24 },
-  sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, marginBottom: 12 },
-  card: { backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16 },
+  sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 12 },
+  card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  cardDate: { flex: 1, fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface, textTransform: 'capitalize' },
-  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.color.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
-  timePillText: { fontSize: 11, color: theme.color.onBrandTertiary, fontWeight: '700' },
-  cardRecipes: { fontSize: 14, color: theme.color.onSurfaceSecondary, marginTop: 6, lineHeight: 19 },
+  cardDate: { flex: 1, fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, textTransform: 'capitalize' },
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+  timePillText: { fontSize: 11, color: colors.onBrandTertiary, fontWeight: '700' },
+  cardRecipes: { fontSize: 14, color: colors.onSurfaceSecondary, marginTop: 6, lineHeight: 19 },
   cardMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  cardMeta: { fontSize: 12, color: theme.color.muted },
-  progressTrack: { height: 4, backgroundColor: theme.color.surfaceTertiary, borderRadius: 999, marginTop: 10, overflow: 'hidden' },
-  progressFill: { height: 4, backgroundColor: theme.color.brand, borderRadius: 999 },
+  cardMeta: { fontSize: 12, color: colors.muted },
+  progressTrack: { height: 4, backgroundColor: colors.surfaceTertiary, borderRadius: 999, marginTop: 10, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: colors.brand, borderRadius: 999 },
   emptyBox: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, marginTop: 70 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong },
-  retryText: { fontSize: 14, color: theme.color.onSurface, fontWeight: '600' },
-  fab: { position: 'absolute', left: 24, right: 24, bottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.color.brand, paddingVertical: 16, borderRadius: 999 },
-  fabText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
+  retryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
+  fab: { position: 'absolute', left: 24, right: 24, bottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: 999 },
+  fabText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '700' },
 });

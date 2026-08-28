@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import type { RawMaterial } from '@/src/cost/costCalc';
 
 function unitPriceOf(m: RawMaterial): { value: number; label: string } | null {
@@ -21,6 +22,8 @@ function unitPriceOf(m: RawMaterial): { value: number; label: string } | null {
  * enregistré dans l'historique, qui reste figé à son propre prix).
  */
 export default function RawMaterials() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,26 +53,26 @@ export default function RawMaterials() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="materials-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Matières premières</Text>
         <Pressable testID="materials-add" onPress={() => router.push('/cost/material-form')} style={styles.iconBtn}>
-          <Feather name="plus" size={22} color={theme.color.brand} />
+          <Feather name="plus" size={22} color={colors.brand} />
         </Pressable>
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : materials.length === 0 ? (
         <View style={styles.emptyBox}>
-          <Feather name="shopping-bag" size={38} color={theme.color.muted} />
+          <Feather name="shopping-bag" size={38} color={colors.muted} />
           <Text style={styles.emptyTitle}>Aucune matière première</Text>
           <Text style={styles.emptyText}>
             Enregistrez vos prix d&apos;achat : farine, beurre, sucre…{'\n'}
             Bakers calcule le prix au kilo, au litre ou à la pièce.
           </Text>
           <Pressable testID="materials-add-empty" onPress={() => router.push('/cost/material-form')} style={styles.addBtn}>
-            <Feather name="plus" size={16} color="#fff" />
+            <Feather name="plus" size={16} color={colors.onBrandPrimary} />
             <Text style={styles.addBtnText}>Ajouter une matière première</Text>
           </Pressable>
         </View>
@@ -102,7 +105,7 @@ export default function RawMaterials() {
                     </Text>
                   )}
                   <Pressable testID={`material-delete-${m.id}`} onPress={() => remove(m)} hitSlop={10} style={{ marginTop: 10 }}>
-                    <Feather name="trash-2" size={16} color={theme.color.muted} />
+                    <Feather name="trash-2" size={16} color={colors.muted} />
                   </Pressable>
                 </View>
               </Pressable>
@@ -114,21 +117,21 @@ export default function RawMaterials() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface },
+  title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.color.brand, paddingHorizontal: 20, paddingVertical: 13, borderRadius: 999, marginTop: 8 },
-  addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: theme.color.surfaceSecondary, borderRadius: 8, padding: 16 },
-  name: { fontSize: 16, fontWeight: '600', color: theme.color.onSurface },
-  meta: { fontSize: 13, color: theme.color.onSurfaceSecondary, marginTop: 4 },
-  metaSecondary: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
+  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand, paddingHorizontal: 20, paddingVertical: 13, borderRadius: 999, marginTop: 8 },
+  addBtnText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '600' },
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
+  name: { fontSize: 16, fontWeight: '600', color: colors.onSurface },
+  meta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },
+  metaSecondary: { fontSize: 12, color: colors.muted, marginTop: 2 },
   right: { alignItems: 'flex-end' },
-  unitPrice: { fontFamily: theme.serif, fontSize: 17, color: theme.color.brand },
+  unitPrice: { fontFamily: theme.serif, fontSize: 17, color: colors.brand },
 });

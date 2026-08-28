@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,11 +6,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useAuth } from '@/src/auth';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 type CreationStub = { id: string; title: string; category: string; photos: string[]; like_count: number };
 
 export default function CreationsGallery() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const { user } = useAuth();
@@ -30,14 +33,14 @@ export default function CreationsGallery() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="gallery-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{isMine ? 'Mes créations' : 'Créations'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
         <FlatList
           data={items}
@@ -57,13 +60,13 @@ export default function CreationsGallery() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: theme.serif, fontSize: 20, color: theme.color.onSurface },
-  tile: { flex: 1, aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.color.surfaceSecondary },
+  title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
+  tile: { flex: 1, aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   tileImage: { width: '100%', height: '100%' },
-  empty: { textAlign: 'center', color: theme.color.muted, marginTop: 60 },
+  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

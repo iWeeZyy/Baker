@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,13 +9,16 @@ import { ActionSheet } from '@/src/ActionSheet';
 import { useAuth } from '@/src/auth';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
-import { theme } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 
 const ROLE_OPTIONS = ['Boulanger', 'Pâtissier', 'Apprenti', 'Responsable', 'Chef', 'Tourier', 'Chocolatier', 'Traiteur', 'Autre'];
 
 type Member = { user_id: string; name: string; picture?: string | null; role: string | null; since: string };
 
 export default function TeamList() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const { user } = useAuth();
@@ -86,7 +89,7 @@ export default function TeamList() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable testID="team-list-back" onPress={() => router.back()} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={theme.color.onSurface} />
+          <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{isMine ? 'Ma Team' : 'Team'}</Text>
         <View style={{ width: 40 }} />
@@ -94,13 +97,13 @@ export default function TeamList() {
 
       {visible && (
         <View style={styles.searchWrap}>
-          <Feather name="search" size={16} color={theme.color.muted} />
+          <Feather name="search" size={16} color={colors.muted} />
           <TextInput
             testID="team-list-search"
             value={query}
             onChangeText={setQuery}
             placeholder={isMine ? 'Rechercher dans ma Team' : 'Rechercher un membre'}
-            placeholderTextColor={theme.color.muted}
+            placeholderTextColor={colors.muted}
             style={styles.searchInput}
             autoCapitalize="none"
           />
@@ -109,14 +112,14 @@ export default function TeamList() {
 
       {!visible ? (
         <View style={styles.center}>
-          <Feather name="lock" size={34} color={theme.color.muted} />
+          <Feather name="lock" size={34} color={colors.muted} />
           <Text style={styles.emptyText}>Cette Team est privée.</Text>
         </View>
       ) : loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.color.brand} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : members.length === 0 ? (
         <View style={styles.center}>
-          <Feather name="users" size={34} color={theme.color.muted} />
+          <Feather name="users" size={34} color={colors.muted} />
           <Text style={styles.emptyText}>
             {query.trim() ? 'Aucun membre trouvé.' : isMine ? 'Votre Team est vide.' : 'Cette Team est vide.'}
           </Text>
@@ -128,7 +131,7 @@ export default function TeamList() {
           contentContainerStyle={{ paddingBottom: 40 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.color.brand} style={{ marginTop: 16 }} /> : null}
+          ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} /> : null}
           renderItem={({ item }) => (
             <Pressable testID={`team-list-member-${item.user_id}`} onPress={() => router.push(`/baker/${item.user_id}` as any)} style={styles.row}>
               <View style={styles.avatar}>
@@ -144,7 +147,7 @@ export default function TeamList() {
               </View>
               {isMine && (
                 <Pressable testID={`team-list-menu-${item.user_id}`} onPress={() => setMenuFor(item)} style={styles.menuBtn}>
-                  <Feather name="more-horizontal" size={20} color={theme.color.muted} />
+                  <Feather name="more-horizontal" size={20} color={colors.muted} />
                 </Pressable>
               )}
             </Pressable>
@@ -171,19 +174,19 @@ export default function TeamList() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.color.surface },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.color.border },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: theme.color.onSurface },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: theme.color.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 42 },
-  searchInput: { flex: 1, fontSize: 14, color: theme.color.onSurface },
-  emptyText: { fontSize: 14, color: theme.color.muted, textAlign: 'center', lineHeight: 20 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.color.border },
-  avatar: { width: 44, height: 44, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarText: { fontSize: 18, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
-  rowName: { fontSize: 15, fontWeight: '600', color: theme.color.onSurface },
-  rowRole: { fontSize: 12, color: theme.color.muted, marginTop: 2 },
+  title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 42 },
+  searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
+  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  avatar: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { fontSize: 18, color: colors.onBrandTertiary, fontFamily: theme.serif },
+  rowName: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
+  rowRole: { fontSize: 12, color: colors.muted, marginTop: 2 },
   menuBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });

@@ -1,9 +1,10 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Feather } from '@expo/vector-icons';
-import { theme } from './theme';
+import { type ThemeColors } from './theme';
+import { useTheme } from './ThemeContext';
 
 type Props = {
   ref?: React.RefObject<SwipeableMethods | null>;
@@ -27,6 +28,8 @@ type Props = {
 export function SwipeableRow({
   ref, editLabel = 'Modifier', deleteLabel = 'Supprimer', onEdit, onDelete, onSwipeableWillOpen, onSwipeableClose, children,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <ReanimatedSwipeable
       ref={ref}
@@ -39,11 +42,11 @@ export function SwipeableRow({
       renderRightActions={() => (
         <>
           <Pressable testID="swipe-action-delete" onPress={onDelete} style={[styles.action, styles.deleteAction]}>
-            <Feather name="trash-2" size={17} color="#fff" />
+            <Feather name="trash-2" size={17} color={colors.onBrandPrimary} />
             <Text style={styles.actionText}>{deleteLabel}</Text>
           </Pressable>
           <Pressable testID="swipe-action-edit" onPress={onEdit} style={[styles.action, styles.editAction]}>
-            <Feather name="edit-2" size={17} color="#fff" />
+            <Feather name="edit-2" size={17} color={colors.onBrandPrimary} />
             <Text style={styles.actionText}>{editLabel}</Text>
           </Pressable>
         </>
@@ -54,10 +57,10 @@ export function SwipeableRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { marginBottom: 12 },
   action: { width: 84, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  editAction: { backgroundColor: theme.color.brandSecondary },
-  deleteAction: { backgroundColor: theme.color.error },
-  actionText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  editAction: { backgroundColor: colors.brandSecondary },
+  deleteAction: { backgroundColor: colors.error },
+  actionText: { fontSize: 12, color: colors.onBrandPrimary, fontWeight: '700' },
 });
