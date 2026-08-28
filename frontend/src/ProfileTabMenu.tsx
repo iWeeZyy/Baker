@@ -22,7 +22,7 @@ import { useTheme } from '@/src/ThemeContext';
 
 const TAB_BAR_HEIGHT = 82;
 
-type MenuItem = { key: string; label: string; icon: keyof typeof Feather.glyphMap; route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following'; showBadge?: boolean };
+type MenuItem = { key: string; label: string; icon: keyof typeof Feather.glyphMap; route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement'; showBadge?: boolean };
 
 export function ProfileTabButton() {
   const { colors } = useTheme();
@@ -38,7 +38,7 @@ export function ProfileTabButton() {
   // Abonnements aussi, pour que l'utilisateur comprenne que ces pages en
   // dépendent — comparaison stricte, pas startsWith, pour ne matcher que
   // ces trois routes précises.
-  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following';
+  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following' || pathname === '/classement';
 
   const loadUnreadCount = () => {
     api('/notifications/unread-count').then(r => setUnreadCount(r.count)).catch(() => {});
@@ -70,6 +70,10 @@ export function ProfileTabButton() {
     { key: 'profile', label: 'Profil', icon: 'user', route: '/(tabs)/profile' },
     { key: 'friends', label: 'Amis', icon: 'users', route: '/(tabs)/friends' },
     { key: 'following', label: 'Abonnements', icon: 'rss', route: '/(tabs)/following', showBadge: unreadCount > 0 },
+    // "award" est déjà l'icône du badge "coup de cœur" (contenu le plus
+    // aimé) ailleurs dans l'app — cohérent avec un classement, pas une
+    // icône inventée pour l'occasion.
+    { key: 'classement', label: 'Classement', icon: 'award', route: '/classement' },
   ];
 
   const select = (item: MenuItem) => {

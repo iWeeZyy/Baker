@@ -30,6 +30,7 @@ from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 import production
 import staff
 import costing
+import leaderboard
 import imaging
 import moderation
 import text_moderation
@@ -1843,6 +1844,88 @@ async def get_feed(before: Optional[str] = None, user: dict = Depends(get_curren
     items = items[:FEED_PAGE_SIZE]
     return {"items": items, "has_more": has_more}
 
+# ---------- Classement ----------
+# Calcul à la demande (pas de tâche de fond, pas de cache) : à l'échelle de
+# cette app, une agrégation par requête reste largement assez rapide, et
+# c'est le même choix déjà fait pour le fil et les compteurs de likes.
+# La logique de score/période vit dans leaderboard.py (testée isolément,
+# sans DB) ; ces routes ne font que résoudre les profils/recettes/créations
+# des lignes réellement affichées, jamais de l'ensemble du classement calculé
+# en mémoire.
+
+@api_router.get("/leaderboard/creators")
+async def leaderboard_creators(period: str = "week", limit: int = leaderboard.DEFAULT_LIMIT, user: dict = Depends(get_current_user)):
+    if period not in leaderboard.PERIOD_DAYS:
+        raise HTTPException(400, "Période invalide")
+    top, my_rank = await leaderboard.compute_creator_rankings(db, period, user["user_id"], limit)
+    user_ids = [row["user_id"] for row in top]
+    users = {}
+    if user_ids:
+        async for u in db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "password_hash": 0}):
+            users[u["user_id"]] = u
+    following_set = await _following_set(user["user_id"], user_ids)
+    items = []
+    for row in top:
+        u = users.get(row["user_id"])
+        if not u:
+            continue
+        pu = _public_user(u)
+        pu["following"] = row["user_id"] in following_set
+        pu["score"] = row["score"]
+        pu["rank"] = row["rank"]
+        items.append(pu)
+    return {"period": period, "top": items, "my_rank": my_rank}
+
+@api_router.get("/leaderboard/recipes")
+async def leaderboard_recipes(period: str = "week", limit: int = leaderboard.DEFAULT_LIMIT, user: dict = Depends(get_current_user)):
+    if period not in leaderboard.PERIOD_DAYS:
+        raise HTTPException(400, "Période invalide")
+    ranked = await leaderboard.compute_recipe_rankings(db, period, limit)
+    ids = [row["id"] for row in ranked]
+    docs = {}
+    if ids:
+        async for d in db.recipes.find({"id": {"$in": ids}}, {"_id": 0}):
+            docs[d["id"]] = d
+    pictures = await _pictures_by_user_id([d.get("author_id") for d in docs.values()])
+    items = []
+    for row in ranked:
+        d = docs.get(row["id"])
+        if not d:
+            continue
+        items.append({
+            "id": d["id"], "title": d["title"], "category": d.get("category"),
+            "image_path": d.get("image_path"), "image_url": d.get("image_url"), "product": d.get("product"),
+            "author_id": d.get("author_id"), "author_name": d.get("author_name"),
+            "author_picture": pictures.get(d.get("author_id")),
+            "like_count": row["score"], "rank": row["rank"],
+        })
+    return {"period": period, "items": items}
+
+@api_router.get("/leaderboard/creations")
+async def leaderboard_creations(period: str = "week", limit: int = leaderboard.DEFAULT_LIMIT, user: dict = Depends(get_current_user)):
+    if period not in leaderboard.PERIOD_DAYS:
+        raise HTTPException(400, "Période invalide")
+    ranked = await leaderboard.compute_creation_rankings(db, period, limit)
+    ids = [row["id"] for row in ranked]
+    docs = {}
+    if ids:
+        async for d in db.creations.find({"id": {"$in": ids}}, {"_id": 0}):
+            docs[d["id"]] = d
+    pictures = await _pictures_by_user_id([d.get("user_id") for d in docs.values()])
+    items = []
+    for row in ranked:
+        d = docs.get(row["id"])
+        if not d:
+            continue
+        items.append({
+            "id": d["id"], "title": d["title"], "category": d.get("category"),
+            "photos": d.get("photos") or [],
+            "user_id": d.get("user_id"), "user_name": d.get("user_name"),
+            "user_picture": pictures.get(d.get("user_id")),
+            "like_count": row["score"], "rank": row["rank"],
+        })
+    return {"period": period, "items": items}
+
 # ---------- Notifications ----------
 # Système minimal : consultées à l'ouverture de l'app, aucun push mobile
 # (aucun jeton APNs/FCM stocké nulle part). Fan-out à l'écriture, à trois
@@ -3016,6 +3099,15 @@ async def startup():
     # déjà existante de public_profile() sur author_id.
     await db.recipes.create_index([("author_id", 1), ("created_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    # Classement : les index composés ci-dessus (author_id/user_id en tête)
+    # ne servent pas un filtre "tous les auteurs, période X" — un index sur
+    # created_at seul le sert directement pour chaque collection agrégée.
+    await db.recipes.create_index("created_at")
+    await db.creations.create_index("created_at")
+    await db.likes.create_index("created_at")
+    await db.creation_likes.create_index("created_at")
+    await db.comments.create_index("created_at")
+    await db.follows.create_index("created_at")
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on
