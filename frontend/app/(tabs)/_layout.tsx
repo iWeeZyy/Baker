@@ -3,6 +3,7 @@ import { Tabs, Redirect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '@/src/auth';
+import { ProfileTabButton } from '@/src/ProfileTabMenu';
 import { useTheme } from '@/src/ThemeContext';
 import { type ThemeColors } from '@/src/theme';
 
@@ -40,9 +41,9 @@ export default function TabsLayout() {
       <Tabs.Screen name="tips" options={{ title: 'Astuces', tabBarIcon: ({ color }) => <Feather name="zap" size={20} color={color} /> }} />
       <Tabs.Screen name="planning" options={{ title: 'Planning', tabBarIcon: ({ color }) => <Feather name="calendar" size={20} color={color} /> }} />
       <Tabs.Screen name="assistant" options={{ title: 'Assistant', tabBarIcon: ({ color }) => <Feather name="message-circle" size={20} color={color} /> }} />
-      <Tabs.Screen name="friends" options={{ title: 'Amis', tabBarIcon: ({ color }) => <Feather name="users" size={20} color={color} /> }} />
-      <Tabs.Screen name="following" options={{ title: 'Abonnements', tabBarIcon: ({ color }) => <Feather name="rss" size={20} color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} /> }} />
+      <Tabs.Screen name="friends" options={{ href: null }} />
+      <Tabs.Screen name="following" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarButton: () => <ProfileTabButton /> }} />
     </Tabs>
   );
 }
