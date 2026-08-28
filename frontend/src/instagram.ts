@@ -5,7 +5,7 @@
  * tout autre domaine. Ne stocke jamais l'URL, seulement le nom d'utilisateur
  * — l'URL se reconstruit à l'affichage via `instagramProfileUrl()`.
  */
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 
 const USERNAME_RE = /^[A-Za-z0-9._]{1,30}$/;
 const INSTAGRAM_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
@@ -48,23 +48,20 @@ export function instagramProfileUrl(username: string): string {
 }
 
 /**
- * Ouvre le profil dans l'app Instagram si elle est installée (schéma
- * documenté `instagram://user?username=...`), sinon dans le navigateur.
- * Aucun précédent de ce genre n'existait dans l'app avant cette fonction —
- * borné ici, jamais un mécanisme de repli générique inventé ailleurs.
+ * Ouvre le profil Instagram. Un seul lien https, jamais un schéma
+ * personnalisé `instagram://` : Instagram a abandonné ce schéma il y a
+ * plusieurs années (plus rien ne garantit son format), et le vérifier via
+ * `Linking.canOpenURL` échoue silencieusement de toute façon tant que
+ * `instagram` n'est pas déclaré dans `LSApplicationQueriesSchemes` côté iOS
+ * — ce qui faisait rester l'utilisateur dans Bakers au lieu de basculer
+ * vers Instagram. instagram.com gère les Universal Links (iOS) / App Links
+ * (Android) : ouvrir ce lien https suffit à ce que le système bascule
+ * lui-même vers l'app Instagram si elle est installée, sinon le navigateur
+ * — aucun schéma ni permission supplémentaire à gérer.
  */
 export async function openInstagram(username: string): Promise<void> {
-  const appUrl = `instagram://user?username=${encodeURIComponent(username)}`;
-  const webUrl = instagramProfileUrl(username);
   try {
-    if (Platform.OS !== 'web') {
-      const canOpenApp = await Linking.canOpenURL(appUrl);
-      if (canOpenApp) {
-        await Linking.openURL(appUrl);
-        return;
-      }
-    }
-    await Linking.openURL(webUrl);
+    await Linking.openURL(instagramProfileUrl(username));
   } catch {
     // Silencieux : un lien externe qui échoue ne doit jamais faire planter l'app.
   }
