@@ -16,6 +16,8 @@ import { formatRelativeDate } from '@/src/relativeDate';
 import { theme } from '@/src/theme';
 
 const BIO_MAX_LENGTH = 300;
+const PROFESSION_MAX_LENGTH = 60;
+const TEAM_VISIBILITY_OPTIONS: [string, string][] = [['public', 'Publique'], ['authenticated', 'Connectés'], ['private', 'Privée']];
 
 type PendingImage = { uri: string; name: string };
 
@@ -47,6 +49,11 @@ export default function Profile() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [creations, setCreations] = useState<{ id: string; title: string; category: string; photos: string[]; like_count: number }[]>([]);
+  const [professionDraft, setProfessionDraft] = useState('');
+  const [visibilityDraft, setVisibilityDraft] = useState<'public' | 'authenticated' | 'private'>('public');
+  const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; picture?: string | null; role: string | null }[]>([]);
+  const [teamCount, setTeamCount] = useState(0);
+  const [teamInvites, setTeamInvites] = useState<{ id: string; from_user: { user_id: string; name: string; picture?: string | null }; role: string | null }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +65,29 @@ export default function Profile() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const loadTeam = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [t, inv] = await Promise.all([
+        api(`/users/${user.user_id}/team?limit=6`),
+        api('/team/invites'),
+      ]);
+      setTeamMembers(t.members);
+      setTeamCount(t.count);
+      setTeamInvites(inv);
+    } catch (e) { console.warn(e); }
+  }, [user]);
+
+  useFocusEffect(useCallback(() => { loadTeam(); }, [loadTeam]));
+
+  const respondTeamInvite = async (inviteId: string, accept: boolean) => {
+    setTeamInvites(prev => prev.filter(i => i.id !== inviteId));
+    try {
+      await api(`/team/invites/${inviteId}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
+      if (accept) loadTeam();
+    } catch (e) { console.warn(e); loadTeam(); }
+  };
 
   const loadComments = useCallback(async () => {
     try {
@@ -159,6 +189,8 @@ export default function Profile() {
     setProfileError(null);
     setBioDraft(user?.bio || '');
     setInstagramDraft(user?.instagram_username ? `@${user.instagram_username}` : '');
+    setProfessionDraft(user?.profession || '');
+    setVisibilityDraft(user?.team_visibility || 'public');
     setEditingProfile(true);
   };
 
@@ -175,8 +207,11 @@ export default function Profile() {
       await updateProfile({
         bio: bioDraft.trim(),
         instagram_username: instagramDraft.trim() ? (parseInstagramUsername(instagramDraft) || '') : '',
+        profession: professionDraft.trim(),
+        team_visibility: visibilityDraft,
       });
       setEditingProfile(false);
+      loadTeam();
     } catch (e: any) {
       setProfileError(e.message || 'Enregistrement impossible. Vérifiez votre connexion et réessayez.');
     } finally {
@@ -201,6 +236,10 @@ export default function Profile() {
         </View>
         <Text style={styles.name}>{user?.name || 'Boulanger'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
+
+        {!editingProfile && !!user?.profession && (
+          <Text style={styles.profession} testID="profile-profession">{user.profession}</Text>
+        )}
 
         {/* Bio + Instagram : rien n'est affiché si les deux sont vides,
             jamais un bloc creux. */}
@@ -264,6 +303,32 @@ export default function Profile() {
             {instagramDraftError && (
               <Text style={styles.avatarError} testID="instagram-format-error">Nom d’utilisateur ou lien Instagram invalide.</Text>
             )}
+
+            <Text style={styles.editLabel}>Profession</Text>
+            <TextInput
+              testID="profession-input"
+              value={professionDraft}
+              onChangeText={setProfessionDraft}
+              placeholder="Boulanger, Pâtissier…"
+              placeholderTextColor={theme.color.muted}
+              style={styles.editInput}
+              maxLength={PROFESSION_MAX_LENGTH}
+            />
+
+            <Text style={styles.editLabel}>Visibilité de ma Team</Text>
+            <View style={styles.visibilitySegment}>
+              {TEAM_VISIBILITY_OPTIONS.map(([key, label]) => (
+                <Pressable
+                  key={key}
+                  testID={`team-visibility-${key}`}
+                  onPress={() => setVisibilityDraft(key as any)}
+                  style={[styles.visibilityBtn, visibilityDraft === key && styles.visibilityBtnOn]}
+                >
+                  <Text style={[styles.visibilityBtnText, visibilityDraft === key && styles.visibilityBtnTextOn]}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
             {profileError && <Text style={styles.avatarError} testID="profile-error">{profileError}</Text>}
 
             <View style={styles.editActionsRow}>
@@ -306,6 +371,83 @@ export default function Profile() {
                 {creations.slice(0, 6).map(c => (
                   <Pressable key={c.id} testID={`creation-tile-${c.id}`} onPress={() => router.push(`/creation/${c.id}` as any)} style={styles.creationTile}>
                     <Image source={{ uri: `${API_BASE}/files/${c.photos[0]}` }} style={styles.creationTileImage} contentFit="cover" />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {!editingProfile && teamInvites.length > 0 && (
+          <View style={styles.creationsSection}>
+            <View style={styles.creationsHeaderRow}>
+              <Text style={styles.creationsTitle}>Invitations Team</Text>
+              <View style={styles.countBadge}><Text style={styles.countBadgeText}>{teamInvites.length}</Text></View>
+            </View>
+            {teamInvites.map(inv => (
+              <View key={inv.id} style={styles.teamInviteRow} testID={`team-invite-${inv.id}`}>
+                <Pressable onPress={() => router.push(`/baker/${inv.from_user.user_id}` as any)} style={styles.teamInviteLeft}>
+                  <View style={styles.teamAvatarSmall}>
+                    {avatarUrl(inv.from_user.picture, API_BASE) ? (
+                      <Image source={{ uri: avatarUrl(inv.from_user.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                    ) : (
+                      <Text style={styles.teamAvatarSmallText}>{(inv.from_user.name || '?').slice(0, 1).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.teamInviteText} numberOfLines={2}>
+                    <Text style={styles.teamInviteName}>{inv.from_user.name}</Text> souhaite vous ajouter à sa Team
+                  </Text>
+                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable testID={`team-invite-accept-${inv.id}`} onPress={() => respondTeamInvite(inv.id, true)} style={styles.acceptBtn}>
+                    <Feather name="check" size={16} color="#fff" />
+                  </Pressable>
+                  <Pressable testID={`team-invite-decline-${inv.id}`} onPress={() => respondTeamInvite(inv.id, false)} style={styles.declineBtn}>
+                    <Feather name="x" size={16} color={theme.color.onSurfaceSecondary} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!editingProfile && (
+          <View style={styles.creationsSection}>
+            <View style={styles.creationsHeaderRow}>
+              <Text style={styles.creationsTitle}>Ma Team</Text>
+              {teamCount > 0 && (
+                teamCount > 6 ? (
+                  <Pressable testID="see-all-team" onPress={() => router.push(`/team/${user?.user_id}` as any)}>
+                    <Text style={styles.creationsSeeAll}>Voir toute la Team ({teamCount})</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable testID="add-team-link" onPress={() => router.push('/team/add' as any)}>
+                    <Text style={styles.creationsSeeAll}>+ Ajouter</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+            {teamCount === 0 ? (
+              <View style={styles.creationsEmpty}>
+                <Text style={styles.creationsEmptyText}>Votre Team est vide.{'\n'}Ajoutez les personnes avec qui vous travaillez.</Text>
+                <Pressable testID="empty-add-team-btn" onPress={() => router.push('/team/add' as any)} style={styles.addCreationBtn}>
+                  <Feather name="plus" size={14} color="#fff" />
+                  <Text style={styles.addCreationBtnText}>Ajouter à ma Team</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.teamRow}>
+                {teamMembers.map(m => (
+                  <Pressable key={m.user_id} testID={`team-member-${m.user_id}`} onPress={() => router.push(`/baker/${m.user_id}` as any)} style={styles.teamChip}>
+                    <View style={styles.teamAvatar}>
+                      {avatarUrl(m.picture, API_BASE) ? (
+                        <Image source={{ uri: avatarUrl(m.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                      ) : (
+                        <Text style={styles.teamAvatarText}>{(m.name || '?').slice(0, 1).toUpperCase()}</Text>
+                      )}
+                    </View>
+                    <Text style={styles.teamChipName} numberOfLines={1}>{m.name}</Text>
+                    {!!m.role && <Text style={styles.teamChipRole} numberOfLines={1}>{m.role}</Text>}
                   </Pressable>
                 ))}
               </View>
@@ -482,6 +624,7 @@ const styles = StyleSheet.create({
   avatarLinksRow: { flexDirection: 'row', gap: 20, marginTop: 10, flexWrap: 'wrap' },
   avatarLink: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
   avatarError: { fontSize: 13, color: theme.color.error, marginTop: 8 },
+  profession: { fontSize: 13, color: theme.color.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   instagramText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
@@ -506,6 +649,27 @@ const styles = StyleSheet.create({
   creationsEmptyText: { fontSize: 13, color: theme.color.muted, textAlign: 'center' },
   addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
   addCreationBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  visibilitySegment: { flexDirection: 'row', gap: 6 },
+  visibilityBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999, backgroundColor: theme.color.surface },
+  visibilityBtnOn: { backgroundColor: theme.color.brand },
+  visibilityBtnText: { fontSize: 12, color: theme.color.onSurfaceSecondary, fontWeight: '600' },
+  visibilityBtnTextOn: { color: '#fff' },
+  countBadge: { backgroundColor: theme.color.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  countBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  teamInviteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 10 },
+  teamInviteLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  teamAvatarSmall: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarSmallText: { fontSize: 14, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
+  teamInviteText: { flex: 1, fontSize: 13, color: theme.color.onSurfaceSecondary, lineHeight: 18 },
+  teamInviteName: { fontWeight: '700', color: theme.color.onSurface },
+  acceptBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.success, alignItems: 'center', justifyContent: 'center' },
+  declineBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  teamChip: { alignItems: 'center', width: 72 },
+  teamAvatar: { width: 56, height: 56, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarText: { fontSize: 20, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
+  teamChipName: { fontSize: 12, color: theme.color.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+  teamChipRole: { fontSize: 10, color: theme.color.muted, marginTop: 1, textAlign: 'center' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   previewCard: { backgroundColor: theme.color.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
   previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: theme.color.surfaceSecondary, marginBottom: 20 },

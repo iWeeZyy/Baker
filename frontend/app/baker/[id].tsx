@@ -17,11 +17,17 @@ export default function BakerProfile() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; picture?: string | null; role: string | null }[]>([]);
 
   const load = useCallback(async () => {
     try {
       const d = await api(`/users/${id}/profile`);
       setData(d);
+      if (d.team_visible && d.team_count > 0) {
+        api(`/users/${id}/team?limit=6`).then(t => setTeamMembers(t.members)).catch(() => {});
+      } else {
+        setTeamMembers([]);
+      }
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
   }, [id]);
@@ -66,7 +72,7 @@ export default function BakerProfile() {
     </SafeAreaView>
   );
 
-  const { user, recipes, recipe_count, total_likes, friend_status, creations } = data;
+  const { user, recipes, recipe_count, total_likes, friend_status, creations, team_count, team_visible } = data;
   const initial = (user.name || '?').slice(0, 1).toUpperCase();
   const memberSince = user.created_at ? new Date(user.created_at.endsWith?.('Z') || user.created_at.includes?.('+') ? user.created_at : user.created_at + 'Z').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
 
@@ -124,6 +130,7 @@ export default function BakerProfile() {
             </View>
             <Text style={styles.name} testID="baker-name">{user.name}</Text>
             {memberSince && <Text style={styles.since}>Boulanger depuis {memberSince}</Text>}
+            {!!user.profession && <Text style={styles.profession} testID="baker-profession">{user.profession}</Text>}
             {!!user.bio && <Text style={styles.bio} testID="baker-bio">{user.bio}</Text>}
             {!!user.instagram_username && (
               <Pressable testID="baker-instagram-link" onPress={() => openInstagram(user.instagram_username)} style={styles.instagramRow}>
@@ -142,6 +149,15 @@ export default function BakerProfile() {
                 <Text style={styles.statVal}>{total_likes}</Text>
                 <Text style={styles.statLabel}>J'AIME REÇUS</Text>
               </View>
+              {team_visible && (
+                <>
+                  <View style={styles.statDivider} />
+                  <View style={styles.stat}>
+                    <Text style={styles.statVal}>{team_count}</Text>
+                    <Text style={styles.statLabel}>TEAM</Text>
+                  </View>
+                </>
+              )}
             </View>
 
             <FriendAction />
@@ -163,6 +179,38 @@ export default function BakerProfile() {
                     </Pressable>
                   ))}
                 </View>
+              </View>
+            )}
+
+            {team_visible && (
+              <View style={styles.creationsSection}>
+                <View style={styles.creationsHeaderRow}>
+                  <Text style={styles.creationsTitle}>Team</Text>
+                  {team_count > 6 && (
+                    <Pressable testID="see-all-baker-team" onPress={() => router.push(`/team/${user.user_id}` as any)}>
+                      <Text style={styles.creationsSeeAll}>Voir tout ({team_count})</Text>
+                    </Pressable>
+                  )}
+                </View>
+                {team_count === 0 ? (
+                  <Text style={styles.creationsEmptyInline} testID="baker-team-empty">Cette Team est vide.</Text>
+                ) : (
+                  <View style={styles.teamRow}>
+                    {teamMembers.map(m => (
+                      <Pressable key={m.user_id} testID={`baker-team-member-${m.user_id}`} onPress={() => router.push(`/baker/${m.user_id}` as any)} style={styles.teamChip}>
+                        <View style={styles.teamAvatar}>
+                          {avatarUrl(m.picture, API_BASE) ? (
+                            <Image source={{ uri: avatarUrl(m.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                          ) : (
+                            <Text style={styles.teamAvatarText}>{(m.name || '?').slice(0, 1).toUpperCase()}</Text>
+                          )}
+                        </View>
+                        <Text style={styles.teamChipName} numberOfLines={1}>{m.name}</Text>
+                        {!!m.role && <Text style={styles.teamChipRole} numberOfLines={1}>{m.role}</Text>}
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
 
@@ -194,6 +242,7 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 34, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
   name: { fontFamily: theme.serif, fontSize: 28, color: theme.color.onSurface, marginTop: 14 },
   since: { fontSize: 13, color: theme.color.muted, marginTop: 4, fontStyle: 'italic' },
+  profession: { fontSize: 13, color: theme.color.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: theme.color.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   instagramText: { fontSize: 13, color: theme.color.brand, fontWeight: '600' },
@@ -215,6 +264,13 @@ const styles = StyleSheet.create({
   creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.color.surfaceSecondary },
   creationTileImage: { width: '100%', height: '100%' },
+  creationsEmptyInline: { fontSize: 13, color: theme.color.muted, textAlign: 'center', paddingVertical: 8 },
+  teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center' },
+  teamChip: { alignItems: 'center', width: 72 },
+  teamAvatar: { width: 56, height: 56, borderRadius: 999, backgroundColor: theme.color.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarText: { fontSize: 20, color: theme.color.onBrandTertiary, fontFamily: theme.serif },
+  teamChipName: { fontSize: 12, color: theme.color.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+  teamChipRole: { fontSize: 10, color: theme.color.muted, marginTop: 1, textAlign: 'center' },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },

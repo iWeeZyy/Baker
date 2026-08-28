@@ -184,14 +184,22 @@ class AuthResponse(BaseModel):
     token: str
     user: dict
 
+TEAM_VISIBILITY_OPTIONS = ["public", "authenticated", "private"]
+
 class UserProfileUpdate(BaseModel):
     # Une chaîne vide signifie "supprimer ce champ" (converti en None avant
     # stockage) — c'est ce qui couvre la suppression de la bio/Instagram,
     # pas un champ séparé.
     bio: Optional[str] = None
     instagram_username: Optional[str] = None
+    profession: Optional[str] = None
+    # Pas de notion d'"effacer" : une visibilité a toujours une valeur par
+    # défaut ("public"), contrairement à bio/instagram qui peuvent être
+    # absents. Omis = inchangé ; fourni = doit être l'une des 3 valeurs.
+    team_visibility: Optional[str] = None
 
 BIO_MAX_LENGTH = 300
+PROFESSION_MAX_LENGTH = 60
 
 class Recipe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -271,6 +279,19 @@ class FriendRequestInput(BaseModel):
 
 class RespondInput(BaseModel):
     accept: bool
+
+TEAM_ROLE_MAX_LENGTH = 40
+# Suggestions affichées côté client (chips + "Autre" en texte libre) — le
+# backend ne valide qu'une longueur, jamais l'appartenance à cette liste,
+# pour ne pas bloquer un rôle "Autre : ..." saisi librement.
+ROLE_OPTIONS = ["Boulanger", "Pâtissier", "Apprenti", "Responsable", "Chef", "Tourier", "Chocolatier", "Traiteur", "Autre"]
+
+class TeamInviteInput(BaseModel):
+    user_id: str
+    role: Optional[str] = None
+
+class TeamRoleInput(BaseModel):
+    role: Optional[str] = None
 
 class MessageInput(BaseModel):
     content: str
@@ -365,13 +386,18 @@ async def register(inp: RegisterInput):
         "picture": None,
         "bio": None,
         "instagram_username": None,
+        "profession": None,
+        "team_visibility": "public",
         "created_at": datetime.now(timezone.utc),
     }
     await db.users.insert_one(user_doc)
     token = sign_jwt(user_id)
     user_doc.pop("password_hash", None)
     user_doc.pop("_id", None)
-    return {"token": token, "user": {"user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None, "bio": None, "instagram_username": None}}
+    return {"token": token, "user": {
+        "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None,
+        "bio": None, "instagram_username": None, "profession": None, "team_visibility": "public",
+    }}
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(inp: LoginInput):
@@ -384,6 +410,7 @@ async def login(inp: LoginInput):
     return {"token": token, "user": {
         "user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
+        "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
     }}
 
 @api_router.get("/auth/me")
@@ -391,6 +418,7 @@ async def me(user: dict = Depends(get_current_user)):
     return {
         "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
+        "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
     }
 
 @api_router.put("/auth/me")
@@ -421,12 +449,28 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
             except ValueError:
                 raise HTTPException(422, "Nom d'utilisateur ou lien Instagram invalide.")
 
+    if inp.profession is not None:
+        profession = inp.profession.strip()
+        if not profession:
+            updates["profession"] = None
+        else:
+            if len(profession) > PROFESSION_MAX_LENGTH:
+                raise HTTPException(422, f"La profession ne peut pas dépasser {PROFESSION_MAX_LENGTH} caractères.")
+            updates["profession"] = profession
+
+    if inp.team_visibility is not None:
+        if inp.team_visibility not in TEAM_VISIBILITY_OPTIONS:
+            raise HTTPException(422, "Visibilité Team invalide.")
+        updates["team_visibility"] = inp.team_visibility
+
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
 
     return {
         "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
         "bio": updates.get("bio", user.get("bio")), "instagram_username": updates.get("instagram_username", user.get("instagram_username")),
+        "profession": updates.get("profession", user.get("profession")),
+        "team_visibility": updates.get("team_visibility", user.get("team_visibility") or "public"),
     }
 
 @api_router.post("/auth/logout")
@@ -1193,6 +1237,7 @@ def _public_user(u: dict) -> dict:
     return {
         "user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture"),
         "bio": u.get("bio"), "instagram_username": u.get("instagram_username"),
+        "profession": u.get("profession"),
     }
 
 @api_router.get("/users/search")
@@ -1200,14 +1245,16 @@ async def search_users(q: str = "", user: dict = Depends(get_current_user)):
     q = (q or "").strip()
     if len(q) < 2:
         return []
+    regex = {"$regex": re.escape(q), "$options": "i"}
     cursor = db.users.find(
-        {"name": {"$regex": re.escape(q), "$options": "i"}, "user_id": {"$ne": user["user_id"]}},
+        {"$or": [{"name": regex}, {"profession": regex}], "user_id": {"$ne": user["user_id"]}},
         {"_id": 0, "password_hash": 0},
     ).limit(20)
     out = []
     for u in await cursor.to_list(20):
         pu = _public_user(u)
         pu["friend_status"] = await _friend_status(user["user_id"], u["user_id"])
+        pu["team_status"] = await _team_status(user["user_id"], u["user_id"])
         out.append(pu)
     return out
 
@@ -1226,6 +1273,9 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
     creation_counts = await _creation_like_counts([c["id"] for c in creation_docs])
     creations = [_creation_stub(c, creation_counts.get(c["id"], 0)) for c in creation_docs]
 
+    team_visible = _team_visible_to(u, user["user_id"])
+    team_count = await db.team_members.count_documents({"users": user_id}) if team_visible else 0
+
     return {
         "user": pu,
         "recipes": docs,
@@ -1233,6 +1283,8 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
         "total_likes": total_likes,
         "creations": creations,
         "friend_status": await _friend_status(user["user_id"], user_id),
+        "team_count": team_count,
+        "team_visible": team_visible,
     }
 
 @api_router.post("/friends/request")
@@ -1325,6 +1377,206 @@ async def remove_friend(friend_id: str, user: dict = Depends(get_current_user)):
         ]
     })
     return {"status": "removed"}
+
+# ---------- Team ----------
+# Relation professionnelle (collègues, apprentis, responsables…), distincte
+# des Amis — un collègue n'est pas forcément un ami, donc ses propres
+# collections plutôt qu'une réutilisation de db.friendships. Le patron
+# (une seule relation par paire, invitation/acceptation, retrait
+# bidirectionnel, dédoublonnage applicatif sur les invitations) est copié
+# à l'identique de Friends ci-dessus.
+
+def _team_pair_key(a: str, b: str) -> str:
+    return "|".join(sorted([a, b]))
+
+async def _are_team(a: str, b: str) -> bool:
+    return bool(await db.team_members.find_one({"pair_key": _team_pair_key(a, b)}))
+
+async def _upsert_team_membership(a: str, b: str, role_a_for_b: Optional[str] = None, role_b_for_a: Optional[str] = None) -> None:
+    """Crée la relation si elle n'existe pas encore, sinon met à jour les
+    rôles fournis (None = ne touche pas ce champ). Le rôle est asymétrique
+    par construction : roles[a] est le libellé que *a* donne à *b* dans SA
+    Team, indépendant de ce que *b* donne à *a* dans la sienne."""
+    pk = _team_pair_key(a, b)
+    existing = await db.team_members.find_one({"pair_key": pk})
+    if existing:
+        updates = {}
+        if role_a_for_b is not None:
+            updates[f"roles.{a}"] = role_a_for_b
+        if role_b_for_a is not None:
+            updates[f"roles.{b}"] = role_b_for_a
+        if updates:
+            await db.team_members.update_one({"pair_key": pk}, {"$set": updates})
+        return
+    try:
+        await db.team_members.insert_one({
+            "id": str(uuid.uuid4()),
+            "users": sorted([a, b]),
+            "pair_key": pk,
+            "roles": {a: role_a_for_b, b: role_b_for_a},
+            "created_at": datetime.now(timezone.utc),
+        })
+    except DuplicateKeyError:
+        await _upsert_team_membership(a, b, role_a_for_b, role_b_for_a)
+
+async def _team_status(me: str, other: str) -> str:
+    if me == other:
+        return "me"
+    if await _are_team(me, other):
+        return "team"
+    if await db.team_invites.find_one({"from_user_id": me, "to_user_id": other, "status": "pending"}):
+        return "pending_sent"
+    if await db.team_invites.find_one({"from_user_id": other, "to_user_id": me, "status": "pending"}):
+        return "pending_received"
+    return "none"
+
+def _team_visible_to(owner: dict, viewer_id: str) -> bool:
+    if owner["user_id"] == viewer_id:
+        return True
+    # "public" et "authenticated" sont équivalents aujourd'hui : aucun accès
+    # anonyme n'existe dans cette app (chaque route exige un JWT), donc tout
+    # visiteur est déjà "connecté". La distinction reste posée pour un futur
+    # accès non authentifié sans qu'il faille retoucher ce calcul.
+    return (owner.get("team_visibility") or "public") != "private"
+
+def _team_member_stub(other_user: dict, role: Optional[str], since) -> dict:
+    return {
+        "user_id": other_user["user_id"], "name": other_user.get("name") or "Boulanger",
+        "picture": other_user.get("picture"), "role": role, "since": since,
+    }
+
+TEAM_PAGE_SIZE = 30
+
+@api_router.post("/team/invite")
+async def send_team_invite(inp: TeamInviteInput, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    target = inp.user_id
+    role = (inp.role or "").strip() or None
+    if role and len(role) > TEAM_ROLE_MAX_LENGTH:
+        raise HTTPException(422, f"Le rôle ne peut pas dépasser {TEAM_ROLE_MAX_LENGTH} caractères.")
+    if target == me:
+        raise HTTPException(400, "Impossible de s'ajouter soi-même")
+    target_user = await db.users.find_one({"user_id": target}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if await _are_team(me, target):
+        return {"status": "team"}
+    # Si l'autre a déjà envoyé une invitation en attente, l'accepter directement
+    # plutôt que d'en créer une deuxième (même logique que send_friend_request).
+    rev = await db.team_invites.find_one({"from_user_id": target, "to_user_id": me, "status": "pending"})
+    if rev:
+        await db.team_invites.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
+        await _upsert_team_membership(me, target, role_a_for_b=role, role_b_for_a=rev.get("role"))
+        return {"status": "team"}
+    existing = await db.team_invites.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
+    if existing:
+        return {"status": "pending_sent"}
+    await db.team_invites.insert_one({
+        "id": str(uuid.uuid4()),
+        "from_user_id": me,
+        "to_user_id": target,
+        "role": role,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+    })
+    return {"status": "pending_sent"}
+
+@api_router.get("/team/invites")
+async def team_incoming_invites(user: dict = Depends(get_current_user)):
+    reqs = await db.team_invites.find({"to_user_id": user["user_id"], "status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    out = []
+    for r in reqs:
+        u = await db.users.find_one({"user_id": r["from_user_id"]}, {"_id": 0, "password_hash": 0})
+        if u:
+            out.append({"id": r["id"], "from_user": _public_user(u), "role": r.get("role"), "created_at": r["created_at"]})
+    return out
+
+@api_router.post("/team/invites/{invite_id}/respond")
+async def respond_team_invite(invite_id: str, inp: RespondInput, user: dict = Depends(get_current_user)):
+    req = await db.team_invites.find_one({"id": invite_id, "to_user_id": user["user_id"], "status": "pending"})
+    if not req:
+        raise HTTPException(404, "Invitation introuvable")
+    new_status = "accepted" if inp.accept else "declined"
+    await db.team_invites.update_one({"id": invite_id}, {"$set": {"status": new_status}})
+    if inp.accept:
+        await _upsert_team_membership(req["from_user_id"], user["user_id"], role_a_for_b=req.get("role"))
+        return {"status": "team"}
+    return {"status": "declined"}
+
+@api_router.put("/team/members/{member_user_id}")
+async def update_team_role(member_user_id: str, inp: TeamRoleInput, user: dict = Depends(get_current_user)):
+    """Met à jour le rôle QUE J'ATTRIBUE à ce membre dans MA Team — jamais
+    celui d'un autre compte : aucun paramètre ne permet de cibler la
+    relation de quelqu'un d'autre, l'identité vient uniquement du JWT."""
+    me = user["user_id"]
+    if not await _are_team(me, member_user_id):
+        raise HTTPException(404, "Cette personne ne fait pas partie de votre Team.")
+    role = (inp.role or "").strip() or None
+    if role and len(role) > TEAM_ROLE_MAX_LENGTH:
+        raise HTTPException(422, f"Le rôle ne peut pas dépasser {TEAM_ROLE_MAX_LENGTH} caractères.")
+    await db.team_members.update_one({"pair_key": _team_pair_key(me, member_user_id)}, {"$set": {f"roles.{me}": role}})
+    return {"role": role}
+
+@api_router.delete("/team/members/{member_user_id}")
+async def remove_team_member(member_user_id: str, user: dict = Depends(get_current_user)):
+    me = user["user_id"]
+    await db.team_members.delete_one({"pair_key": _team_pair_key(me, member_user_id)})
+    # Purge les invitations résiduelles des deux côtés, pour qu'une future
+    # invitation reparte de zéro (même logique que remove_friend).
+    await db.team_invites.delete_many({
+        "$or": [
+            {"from_user_id": me, "to_user_id": member_user_id},
+            {"from_user_id": member_user_id, "to_user_id": me},
+        ]
+    })
+    return {"status": "removed"}
+
+@api_router.get("/users/{user_id}/team")
+async def user_team(user_id: str, q: str = "", limit: int = TEAM_PAGE_SIZE, before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    owner = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not owner:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if not _team_visible_to(owner, user["user_id"]):
+        return {"members": [], "count": 0, "visible": False, "has_more": False}
+
+    total = await db.team_members.count_documents({"users": user_id})
+    needle = q.strip().lower()
+
+    if needle:
+        # Recherche : un lot borné plutôt qu'un curseur, comme /users/search —
+        # aucune recherche de ce projet ne combine texte libre et pagination.
+        docs = await db.team_members.find({"users": user_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        has_more = False
+    else:
+        limit = max(1, min(limit, 100))
+        q_filter: dict = {"users": user_id}
+        if before:
+            try:
+                cursor_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(400, "Paramètre 'before' invalide")
+            q_filter["created_at"] = {"$lt": cursor_dt}
+        docs = await db.team_members.find(q_filter, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+        has_more = len(docs) == limit
+
+    other_ids = [x for d in docs for x in d["users"] if x != user_id]
+    others = {}
+    if other_ids:
+        async for u in db.users.find({"user_id": {"$in": other_ids}}, {"_id": 0, "password_hash": 0}):
+            others[u["user_id"]] = u
+
+    members = []
+    for d in docs:
+        other_id = next((x for x in d["users"] if x != user_id), None)
+        other_user = others.get(other_id)
+        if not other_user:
+            continue
+        role = (d.get("roles") or {}).get(user_id)
+        if needle and needle not in (other_user.get("name") or "").lower() and needle not in (role or "").lower():
+            continue
+        members.append(_team_member_stub(other_user, role, d["created_at"]))
+
+    return {"members": members, "count": total, "visible": True, "has_more": has_more}
 
 # ---------- Messages ----------
 MESSAGES_PAGE_SIZE = 50
@@ -2416,6 +2668,12 @@ async def startup():
     await db.creations.create_index([("user_id", 1), ("created_at", -1)])
     await db.creation_likes.create_index([("user_id", 1), ("creation_id", 1)], unique=True)
     await db.creation_likes.create_index("creation_id")
+    await db.team_members.create_index("users")
+    # Empêche deux relations Team pour la même paire (course entre deux
+    # acceptations concurrentes) — même garde-fou que friendships.pair_key.
+    await db.team_members.create_index("pair_key", unique=True)
+    await db.team_invites.create_index([("to_user_id", 1), ("status", 1)])
+    await db.team_invites.create_index([("from_user_id", 1), ("status", 1)])
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on
