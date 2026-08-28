@@ -10,6 +10,8 @@ export type User = {
   picture?: string;
   bio?: string | null;
   instagram_username?: string | null;
+  profession?: string | null;
+  team_visibility?: 'public' | 'authenticated' | 'private';
 };
 
 type AuthCtx = {
@@ -19,7 +21,7 @@ type AuthCtx = {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  updateProfile: (fields: { bio?: string; instagram_username?: string }) => Promise<void>;
+  updateProfile: (fields: { bio?: string; instagram_username?: string; profession?: string; team_visibility?: string }) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
