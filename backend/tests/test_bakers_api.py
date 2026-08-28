@@ -3,6 +3,7 @@ import os
 import io
 import pytest
 import requests
+from PIL import Image
 
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'http://localhost:8000').rstrip('/')
 API = f"{BASE_URL}/api"
@@ -162,10 +163,13 @@ class TestChat:
 # --- Upload ---
 class TestUpload:
     def test_upload_image(self, token):
-        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        files = {"file": ("test.png", io.BytesIO(png), "image/png")}
+        # POST /upload décode et redimensionne désormais l'image (voir
+        # backend/CLAUDE.md, "Créations") — un PNG réel, pas un en-tête PNG
+        # tronqué, pour exercer le vrai chemin plutôt que le rejet 400.
+        buf = io.BytesIO()
+        Image.new("RGB", (200, 150), (180, 90, 40)).save(buf, format="PNG")
+        buf.seek(0)
+        files = {"file": ("test.png", buf, "image/png")}
         r = requests.post(f"{API}/upload", files=files, headers=auth_headers(token), timeout=60)
-        # Storage might fail in preview; accept 200 or 500 flagged
-        assert r.status_code in (200, 500), r.text
-        if r.status_code == 200:
-            assert "path" in r.json()
+        assert r.status_code == 200, r.text
+        assert "path" in r.json()

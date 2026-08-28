@@ -335,6 +335,19 @@ class CostHistoryInput(BaseModel):
     sale_price_ht: Optional[float] = None
     vat_rate: Optional[float] = None
 
+# Liste fixe et volontairement différente de families.CATEGORIES (recettes) :
+# "Traiteur" n'a pas d'équivalent côté recette, réutiliser la hiérarchie des
+# familles perdrait cette information plutôt que de l'exprimer.
+CREATION_CATEGORIES = ["Pain", "Viennoiserie", "Pâtisserie", "Traiteur", "Autre"]
+CREATION_DESCRIPTION_MAX_LENGTH = 500
+
+class CreationInput(BaseModel):
+    title: str
+    description: str = ""
+    category: str
+    recipe_id: Optional[str] = None
+    photos: List[str] = Field(default_factory=list)
+
 # ---------- Auth Endpoints ----------
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
@@ -981,6 +994,169 @@ async def save_note(recipe_id: str, inp: NoteInput, user: dict = Depends(get_cur
     )
     return {"content": inp.content}
 
+# ---------- Creations ----------
+# Galerie de réalisations sur le profil : réutilise le stockage d'images, la
+# forme exacte du système de likes des recettes (voir _like_counts et
+# toggle_like plus haut) et text_moderation.classify_comment — pas une
+# deuxième mécanique de likes ni un deuxième système de modération. Les
+# commentaires ne sont volontairement pas branchés ici : le système actuel
+# est lié à recipe_id, et personne ne demande de le rendre générique
+# aujourd'hui ; le document ci-dessous ne porte donc aucun champ dédié aux
+# commentaires, pour ne pas figer une forme qui devrait de toute façon
+# changer le jour où cette extension arrivera.
+
+async def _creation_like_counts(creation_ids):
+    # Même forme que _like_counts (recettes) : un aller-retour groupé, jamais
+    # une requête par création affichée.
+    counts = {}
+    if not creation_ids:
+        return counts
+    pipeline = [
+        {"$match": {"creation_id": {"$in": creation_ids}}},
+        {"$group": {"_id": "$creation_id", "c": {"$sum": 1}}},
+    ]
+    async for row in db.creation_likes.aggregate(pipeline):
+        counts[row["_id"]] = row["c"]
+    return counts
+
+def _creation_stub(c: dict, like_count: int) -> dict:
+    """Forme légère utilisée dans les listes (profil, /creations/mine) —
+    jamais le document complet, pour ne pas répéter la description sur
+    chaque vignette de la grille."""
+    return {
+        "id": c["id"], "title": c["title"], "category": c.get("category"),
+        "photos": c.get("photos") or [], "like_count": like_count,
+        "created_at": c.get("created_at"),
+    }
+
+async def _creation_detail(c: dict) -> dict:
+    pictures = await _pictures_by_user_id([c["user_id"]])
+    like_count = await db.creation_likes.count_documents({"creation_id": c["id"]})
+    out = {
+        "id": c["id"], "user_id": c["user_id"], "user_name": c.get("user_name"),
+        "user_picture": pictures.get(c["user_id"]),
+        "title": c["title"], "description": c.get("description") or "",
+        "category": c.get("category"), "photos": c.get("photos") or [],
+        "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
+        "like_count": like_count,
+    }
+    # Jamais de lien cassé : si recipe_id ne pointe plus vers rien (recette
+    # retirée du seed), le champ est simplement absent — la création continue
+    # d'exister, le bouton "Voir la recette" disparaît côté client.
+    recipe_id = c.get("recipe_id")
+    if recipe_id:
+        recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0, "id": 1, "title": 1})
+        if recipe:
+            out["recipe"] = {"id": recipe["id"], "title": recipe["title"]}
+    return out
+
+def _validate_creation_input(inp: CreationInput):
+    if not inp.title.strip():
+        raise HTTPException(422, "Le nom de la création est obligatoire.")
+    if inp.category not in CREATION_CATEGORIES:
+        raise HTTPException(422, "Catégorie invalide.")
+    if len(inp.description) > CREATION_DESCRIPTION_MAX_LENGTH:
+        raise HTTPException(422, f"La description ne peut pas dépasser {CREATION_DESCRIPTION_MAX_LENGTH} caractères.")
+    if not inp.photos:
+        raise HTTPException(422, "Ajoutez au moins une photo.")
+
+@api_router.get("/creations/mine")
+async def my_creations(user: dict = Depends(get_current_user)):
+    docs = await db.creations.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    counts = await _creation_like_counts([d["id"] for d in docs])
+    return [_creation_stub(d, counts.get(d["id"], 0)) for d in docs]
+
+@api_router.post("/creations")
+async def create_creation(inp: CreationInput, user: dict = Depends(get_current_user)):
+    _validate_creation_input(inp)
+    if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Recette introuvable")
+
+    moderation_result = text_moderation.classify_comment(f"{inp.title} {inp.description}".strip())
+    doc = {
+        "id": str(uuid.uuid4()), "user_id": user["user_id"], "user_name": user.get("name") or "Boulanger",
+        "title": inp.title.strip(), "description": inp.description.strip(), "category": inp.category,
+        "recipe_id": inp.recipe_id, "photos": inp.photos,
+        "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc),
+    }
+    await _moderate_and_flag(moderation_result, "creation", doc["id"], user["user_id"])
+    await db.creations.insert_one(doc)
+    return await _creation_detail(doc)
+
+@api_router.get("/creations/{creation_id}")
+async def get_creation(creation_id: str, user: dict = Depends(get_current_user)):
+    c = await db.creations.find_one({"id": creation_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Création introuvable")
+    out = await _creation_detail(c)
+    liked = await db.creation_likes.find_one({"user_id": user["user_id"], "creation_id": creation_id})
+    out["liked"] = bool(liked)
+    return out
+
+@api_router.put("/creations/{creation_id}")
+async def update_creation(creation_id: str, inp: CreationInput, user: dict = Depends(get_current_user)):
+    c = await db.creations.find_one({"id": creation_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Création introuvable")
+    if c["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Vous ne pouvez modifier que vos propres créations")
+    _validate_creation_input(inp)
+    if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Recette introuvable")
+
+    moderation_result = text_moderation.classify_comment(f"{inp.title} {inp.description}".strip())
+    await _moderate_and_flag(moderation_result, "creation", creation_id, user["user_id"])
+
+    # Les photos retirées du nouveau tableau sont supprimées du stockage —
+    # même principe que le remplacement de l'avatar : pas de fichier orphelin.
+    removed = set(c.get("photos") or []) - set(inp.photos)
+    for path in removed:
+        await run_in_threadpool(delete_object, path)
+
+    updates = {
+        "title": inp.title.strip(), "description": inp.description.strip(), "category": inp.category,
+        "recipe_id": inp.recipe_id, "photos": inp.photos, "updated_at": datetime.now(timezone.utc),
+    }
+    await db.creations.update_one({"id": creation_id}, {"$set": updates})
+    updated = {**c, **updates}
+    return await _creation_detail(updated)
+
+@api_router.delete("/creations/{creation_id}")
+async def delete_creation(creation_id: str, user: dict = Depends(get_current_user)):
+    c = await db.creations.find_one({"id": creation_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Création introuvable")
+    if c["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Vous ne pouvez supprimer que vos propres créations")
+    for path in c.get("photos") or []:
+        await run_in_threadpool(delete_object, path)
+    await db.creations.delete_one({"id": creation_id})
+    await db.creation_likes.delete_many({"creation_id": creation_id})
+    return {"deleted": True}
+
+@api_router.get("/creations/{creation_id}/likes")
+async def get_creation_likes(creation_id: str, user: dict = Depends(get_current_user)):
+    count = await db.creation_likes.count_documents({"creation_id": creation_id})
+    liked = await db.creation_likes.find_one({"user_id": user["user_id"], "creation_id": creation_id})
+    return {"count": count, "liked": bool(liked)}
+
+@api_router.post("/creations/{creation_id}/like")
+async def toggle_creation_like(creation_id: str, user: dict = Depends(get_current_user)):
+    if not await db.creations.find_one({"id": creation_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Création introuvable")
+    existing = await db.creation_likes.find_one({"user_id": user["user_id"], "creation_id": creation_id})
+    if existing:
+        await db.creation_likes.delete_one({"user_id": user["user_id"], "creation_id": creation_id})
+        liked = False
+    else:
+        try:
+            await db.creation_likes.insert_one({"user_id": user["user_id"], "creation_id": creation_id, "created_at": datetime.now(timezone.utc)})
+        except DuplicateKeyError:
+            pass
+        liked = True
+    count = await db.creation_likes.count_documents({"creation_id": creation_id})
+    return {"liked": liked, "count": count}
+
 # ---------- Friends ----------
 def _pair(a: str, b: str):
     return sorted([a, b])
@@ -1045,11 +1221,17 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
     total_likes = sum(d.get("like_count", 0) for d in docs)
     pu = _public_user(u)
     pu["created_at"] = u.get("created_at")
+
+    creation_docs = await db.creations.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    creation_counts = await _creation_like_counts([c["id"] for c in creation_docs])
+    creations = [_creation_stub(c, creation_counts.get(c["id"], 0)) for c in creation_docs]
+
     return {
         "user": pu,
         "recipes": docs,
         "recipe_count": len(docs),
         "total_likes": total_likes,
+        "creations": creations,
         "friend_status": await _friend_status(user["user_id"], user_id),
     }
 
@@ -2064,13 +2246,30 @@ async def families(include_empty: bool = False):
 # ---------- Image Upload ----------
 @api_router.post("/upload")
 async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    ext = (file.filename or "img.jpg").split(".")[-1].lower()
-    if ext not in ("jpg", "jpeg", "png", "webp", "heic"):
-        ext = "jpg"
-    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    data = await file.read()
-    content_type = file.content_type or f"image/{ext}"
-    await run_in_threadpool(put_object, path, data, content_type)
+    """Point d'upload générique (photo de couverture de recette, photos de
+    création…). Redimensionne/compresse via `imaging.prepare_display` et
+    applique la même politique de modération que l'avatar (seul BLOCKED est
+    refusé — une photo de pain, de viennoiserie ou de personne ordinaire ne
+    doit jamais être bloquée pour une simple ambiguïté). La sortie est
+    toujours un JPEG, donc le chemin porte toujours `.jpg`, quel que soit le
+    format d'origine — même convention que `prepare_avatar`."""
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(400, "Fichier vide")
+    if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
+        raise HTTPException(413, "Image trop volumineuse (12 Mo max)")
+
+    try:
+        display_bytes = await run_in_threadpool(imaging.prepare_display, raw_bytes)
+    except Exception:
+        raise HTTPException(400, "Fichier image invalide")
+
+    result = await run_in_threadpool(moderation.analyze, display_bytes)
+    if result.level == moderation.BLOCKED:
+        raise HTTPException(422, "Cette image ne peut pas être utilisée.")
+
+    path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.jpg"
+    await run_in_threadpool(put_object, path, display_bytes, "image/jpeg")
     return {"path": path}
 
 @api_router.get("/files/{path:path}")
@@ -2214,6 +2413,9 @@ async def startup():
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
+    await db.creations.create_index([("user_id", 1), ("created_at", -1)])
+    await db.creation_likes.create_index([("user_id", 1), ("creation_id", 1)], unique=True)
+    await db.creation_likes.create_index("creation_id")
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on

@@ -66,7 +66,7 @@ export default function BakerProfile() {
     </SafeAreaView>
   );
 
-  const { user, recipes, recipe_count, total_likes, friend_status } = data;
+  const { user, recipes, recipe_count, total_likes, friend_status, creations } = data;
   const initial = (user.name || '?').slice(0, 1).toUpperCase();
   const memberSince = user.created_at ? new Date(user.created_at.endsWith?.('Z') || user.created_at.includes?.('+') ? user.created_at : user.created_at + 'Z').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
 
@@ -146,6 +146,26 @@ export default function BakerProfile() {
 
             <FriendAction />
 
+            {creations?.length > 0 && (
+              <View style={styles.creationsSection}>
+                <View style={styles.creationsHeaderRow}>
+                  <Text style={styles.creationsTitle}>Créations</Text>
+                  {creations.length > 6 && (
+                    <Pressable testID="see-all-baker-creations" onPress={() => router.push(`/creations/${user.user_id}` as any)}>
+                      <Text style={styles.creationsSeeAll}>Voir tout ({creations.length})</Text>
+                    </Pressable>
+                  )}
+                </View>
+                <View style={styles.creationsGrid}>
+                  {creations.slice(0, 6).map((c: any) => (
+                    <Pressable key={c.id} testID={`baker-creation-tile-${c.id}`} onPress={() => router.push(`/creation/${c.id}` as any)} style={styles.creationTile}>
+                      <Image source={{ uri: `${API_BASE}/files/${c.photos[0]}` }} style={styles.creationTileImage} contentFit="cover" />
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <Text style={styles.sectionTitle}>Ses recettes</Text>
           </View>
         }
@@ -188,6 +208,13 @@ const styles = StyleSheet.create({
   removeFriendBtn: { marginTop: 10, paddingVertical: 6, paddingHorizontal: 12 },
   removeFriendText: { color: theme.color.error, fontSize: 12, fontWeight: '500' },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: theme.color.onSurface, alignSelf: 'flex-start', marginTop: 32, marginBottom: 8 },
+  creationsSection: { alignSelf: 'stretch', marginTop: 28 },
+  creationsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  creationsTitle: { fontSize: 13, letterSpacing: 1, color: theme.color.onSurface, fontWeight: '700' },
+  creationsSeeAll: { fontSize: 12, color: theme.color.brand, fontWeight: '600' },
+  creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.color.surfaceSecondary },
+  creationTileImage: { width: '100%', height: '100%' },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: theme.color.brand, alignItems: 'center', justifyContent: 'center' },
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: theme.color.surfaceSecondary },
