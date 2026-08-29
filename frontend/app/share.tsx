@@ -6,9 +6,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { type Family } from '@/src/families';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
@@ -29,6 +31,7 @@ export default function ShareRecipe() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const params = useLocalSearchParams<{
     prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string;
     // Ajoutés pour "Adapter la recette" — une adaptation prérempli plus de
@@ -125,7 +128,7 @@ export default function ShareRecipe() {
     }
     setSubmitting(true);
     try {
-      await api('/recipes', {
+      const created = await api('/recipes', {
         method: 'POST',
         body: JSON.stringify({
           title: title.trim(),
@@ -145,6 +148,8 @@ export default function ShareRecipe() {
           technical: params.prefillTechnical ? JSON.parse(params.prefillTechnical) : null,
         }),
       });
+      showGamificationToast(created.gamification);
+      refreshUser();
       router.replace('/(tabs)/profile');
     } catch (e: any) {
       setError(e.message || 'Erreur');

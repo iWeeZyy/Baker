@@ -5,10 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { avatarUrl } from '@/src/avatar';
 import { subscribeRealtime } from '@/src/realtime';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 // Fallback poll in case the realtime socket is down; the socket refreshes
 // this list near-instantly when a message arrives while connected.
@@ -36,6 +38,7 @@ export default function Friends() {
   };
 
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -80,7 +83,7 @@ export default function Friends() {
     try {
       const res = await api('/friends/request', { method: 'POST', body: JSON.stringify({ user_id: u.user_id }) });
       setResults(prev => prev.map(r => r.user_id === u.user_id ? { ...r, friend_status: res.status === 'friends' ? 'friends' : 'pending_sent' } : r));
-      if (res.status === 'friends') load();
+      if (res.status === 'friends') { load(); showGamificationToast(res.gamification); refreshUser(); }
     } catch (e) { console.warn(e); }
   };
 
@@ -102,9 +105,9 @@ export default function Friends() {
 
   const respond = async (req: RequestRow, accept: boolean) => {
     try {
-      await api(`/friends/requests/${req.id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
+      const res = await api(`/friends/requests/${req.id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
       setRequests(prev => prev.filter(r => r.id !== req.id));
-      if (accept) load();
+      if (accept) { load(); showGamificationToast(res.gamification); refreshUser(); }
     } catch (e) { console.warn(e); }
   };
 

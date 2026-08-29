@@ -37,6 +37,8 @@ import text_moderation
 import scan
 import recipe_adapt
 import instagram
+import gamification
+import badges
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -465,6 +467,7 @@ async def me(user: dict = Depends(get_current_user)):
         "notify_new_follower": user.get("notify_new_follower", True),
         "notify_new_recipe": user.get("notify_new_recipe", True),
         "notify_new_creation": user.get("notify_new_creation", True),
+        "level_detail": await gamification.get_level_detail(db, user["user_id"]),
     }
 
 @api_router.put("/auth/me")
@@ -626,11 +629,15 @@ async def enrich_recipes(docs):
     ids = [d["id"] for d in docs]
     counts = await _like_counts(ids)
     top = await _global_top_liked()
-    pictures = await _pictures_by_user_id([d.get("author_id") for d in docs])
+    author_ids = [d.get("author_id") for d in docs]
+    pictures = await _pictures_by_user_id(author_ids)
+    levels = await _levels_by_user_id(author_ids)
     for d in docs:
         d["like_count"] = counts.get(d["id"], 0)
         d["coup_de_coeur"] = d["id"] in top
         d["author_picture"] = pictures.get(d.get("author_id"))
+        author_id = d.get("author_id")
+        d["author_level"] = (levels.get(author_id) or _LEVEL_ONE) if author_id else None
     return docs
 
 @api_router.get("/recipes")
@@ -709,6 +716,7 @@ async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current
     await db.recipes.insert_one(doc)
     doc.pop("_id", None)
     await _notify_followers_of_new_post(user["user_id"], user.get("name"), "new_recipe", doc["id"], "notify_new_recipe")
+    doc["gamification"] = await _award_gamification(user["user_id"], "recipe_published", doc["id"])
     return doc
 
 # ---------- Recipe scan ----------
@@ -1049,6 +1057,10 @@ async def toggle_like(recipe_id: str, user: dict = Depends(get_current_user)):
         owner_id = recipe.get("author_id") if recipe else None
         if owner_id and owner_id != user["user_id"]:
             await _upsert_like_notification(owner_id, recipe_id, actor_id=user["user_id"], actor_name=user.get("name"), data={"content_kind": "recipe"})
+            await _award_gamification(
+                owner_id, "like_received", f"recipe:{recipe_id}:{user['user_id']}",
+                meta={"content_type": "recipe"},
+            )
     count = await db.likes.count_documents({"recipe_id": recipe_id})
     return {"liked": liked, "count": count}
 
@@ -1075,10 +1087,13 @@ async def get_comments(recipe_id: str):
     # La photo affichée est celle de l'auteur aujourd'hui, jamais celle
     # figée sur le document au moment du commentaire (user_picture) — sinon
     # un commentaire garderait à vie l'ancienne photo de son auteur.
-    pictures = await _pictures_by_user_id([d.get("user_id") for d in docs])
+    author_ids = [d.get("user_id") for d in docs]
+    pictures = await _pictures_by_user_id(author_ids)
+    levels = await _levels_by_user_id(author_ids)
     for d in docs:
         d["like_count"] = counts.get(d["id"], 0)
         d["user_picture"] = pictures.get(d.get("user_id"))
+        d["user_level"] = levels.get(d.get("user_id")) or _LEVEL_ONE
     return docs
 
 @api_router.get("/recipes/{recipe_id}/comments/likes/mine")
@@ -1158,12 +1173,14 @@ async def add_comment(recipe_id: str, inp: CommentInput, user: dict = Depends(ge
     notif_data = {"recipe_id": recipe_id, "comment_id": doc["id"]}
     if owner_id and owner_id != user["user_id"]:
         await _create_notification(owner_id, "new_comment", actor_id=user["user_id"], actor_name=doc["user_name"], target_id=recipe_id, data=notif_data)
+        await _award_gamification(owner_id, "comment_received", doc["id"])
     if doc["parent_id"]:
         root = await db.comments.find_one({"id": doc["parent_id"]}, {"_id": 0, "user_id": 1})
         root_author_id = root.get("user_id") if root else None
         if root_author_id and root_author_id != user["user_id"] and root_author_id != owner_id:
             await _create_notification(root_author_id, "new_comment_reply", actor_id=user["user_id"], actor_name=doc["user_name"], target_id=recipe_id, data=notif_data)
 
+    doc["gamification"] = await _award_gamification(user["user_id"], "comment_written", doc["id"])
     return doc
 
 @api_router.put("/recipes/{recipe_id}/comments/{comment_id}")
@@ -1351,7 +1368,9 @@ async def create_creation(inp: CreationInput, user: dict = Depends(get_current_u
     await _moderate_and_flag(moderation_result, "creation", doc["id"], user["user_id"])
     await db.creations.insert_one(doc)
     await _notify_followers_of_new_post(user["user_id"], user.get("name"), "new_creation", doc["id"], "notify_new_creation")
-    return await _creation_detail(doc)
+    result = await _creation_detail(doc)
+    result["gamification"] = await _award_gamification(user["user_id"], "creation_published", doc["id"])
+    return result
 
 @api_router.get("/creations/{creation_id}")
 async def get_creation(creation_id: str, user: dict = Depends(get_current_user)):
@@ -1428,6 +1447,10 @@ async def toggle_creation_like(creation_id: str, user: dict = Depends(get_curren
         owner_id = creation.get("user_id")
         if owner_id and owner_id != user["user_id"]:
             await _upsert_like_notification(owner_id, creation_id, actor_id=user["user_id"], actor_name=user.get("name"), data={"content_kind": "creation"})
+            await _award_gamification(
+                owner_id, "like_received", f"creation:{creation_id}:{user['user_id']}",
+                meta={"content_type": "creation"},
+            )
     count = await db.creation_likes.count_documents({"creation_id": creation_id})
     return {"liked": liked, "count": count}
 
@@ -1548,11 +1571,12 @@ async def create_collection(inp: CollectionInput, user: dict = Depends(get_curre
         "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc),
     }
     await db.collections.insert_one(doc)
+    gam = await _award_gamification(user["user_id"], "collection_created", doc["id"])
     # `insert_one` mute `doc` en place pour y ajouter un `_id` Mongo — jamais
     # sérialisable tel quel, donc on ne le renvoie jamais directement (même
     # précaution que `_creation_detail`, qui reconstruit toujours un dict
     # explicite plutôt que d'étaler un document venant d'`insert_one`).
-    return {k: v for k, v in doc.items() if k != "_id"} | {"recipe_count": 0}
+    return {k: v for k, v in doc.items() if k != "_id"} | {"recipe_count": 0, "gamification": gam}
 
 @api_router.put("/collections/{collection_id}")
 async def update_collection(collection_id: str, inp: CollectionInput, user: dict = Depends(get_current_user)):
@@ -1660,8 +1684,15 @@ def _pair_key(a: str, b: str) -> str:
 async def _are_friends(a: str, b: str) -> bool:
     return bool(await db.friendships.find_one({"pair_key": _pair_key(a, b)}))
 
-async def _create_friendship(a: str, b: str) -> None:
-    """Idempotent: the unique pair_key index makes concurrent calls safe."""
+async def _create_friendship(a: str, b: str) -> dict:
+    """Idempotent: the unique pair_key index makes concurrent calls safe.
+
+    Une petite quantité d'XP pour chacun des deux côtés (section 11 de la
+    demande) — dédupliquée par paire *et* par bénéficiaire, donc jamais
+    réattribuée même si cette fonction est rappelée pour la même paire
+    (idempotence déjà garantie par l'index unique de `db.friendships`).
+    Retourne le résultat XP du côté `a` (toujours l'appelant à chaque site
+    d'appel), pour qu'une route puisse l'inclure dans sa propre réponse."""
     try:
         await db.friendships.insert_one({
             "users": _pair(a, b),
@@ -1670,6 +1701,10 @@ async def _create_friendship(a: str, b: str) -> None:
         })
     except DuplicateKeyError:
         pass
+    pair_key = _pair_key(a, b)
+    result_a = await _award_gamification(a, "friend_made", f"{pair_key}:{a}")
+    await _award_gamification(b, "friend_made", f"{pair_key}:{b}")
+    return result_a
 
 async def _friend_status(me: str, other: str) -> str:
     if me == other:
@@ -1682,12 +1717,59 @@ async def _friend_status(me: str, other: str) -> str:
         return "pending_received"
     return "none"
 
-def _public_user(u: dict) -> dict:
-    return {
+def _public_user(u: dict, level: Optional[dict] = None) -> dict:
+    """`level` (compact {level, title}) n'est inclus que si l'appelant l'a
+    résolu — jamais une valeur "Niveau 1" par défaut qui serait fausse pour
+    un utilisateur qui a réellement progressé : les écrans qui n'ont pas
+    besoin d'afficher le niveau (Amis, Team, Messagerie) n'incluent
+    simplement pas ce champ plutôt que d'en émettre un inexact."""
+    out = {
         "user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture"),
         "bio": u.get("bio"), "instagram_username": u.get("instagram_username"),
         "profession": u.get("profession"),
     }
+    if level is not None:
+        out["level"] = level
+    return out
+
+async def _levels_by_user_id(user_ids) -> Dict[str, dict]:
+    """Niveau compact ({level, title}) pour un ensemble d'utilisateurs, en un
+    seul aller-retour — même patron que `_pictures_by_user_id`, pour ne
+    jamais transformer une liste d'utilisateurs affichés en N requêtes.
+    Un utilisateur sans aucune ligne `user_levels` (aucune action XP encore)
+    est simplement absent du dict — l'appelant retombe alors sur Niveau 1 en
+    résolvant `gamification.level_for_xp(0)` lui-même si besoin."""
+    levels: Dict[str, dict] = {}
+    ids = [uid for uid in set(user_ids) if uid]
+    if not ids:
+        return levels
+    async for row in db.user_levels.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "xp": 1}):
+        detail = gamification.level_for_xp(row.get("xp") or 0)
+        levels[row["user_id"]] = {"level": detail["level"], "title": detail["title"]}
+    return levels
+
+_LEVEL_ONE = {"level": gamification.LEVELS[0]["level"], "title": gamification.LEVELS[0]["title"]}
+
+async def _badges_preview(user_id: str, limit: int = 4) -> list:
+    """Badges représentatifs pour l'aperçu compact d'un profil (le favori
+    d'abord, puis les plus récemment débloqués) — jamais la liste complète,
+    réponse à la section 15 ("quelques badges représentatifs", pas toute la
+    progression). Même patron capé que l'aperçu des Créations (6 récentes +
+    "Voir tout")."""
+    level_row = await db.user_levels.find_one({"user_id": user_id}, {"_id": 0, "favorite_badge_id": 1})
+    favorite_id = (level_row or {}).get("favorite_badge_id")
+    docs = await db.user_badges.find({"user_id": user_id}, {"_id": 0}).sort("unlocked_at", -1).to_list(limit + 1)
+    ordered, seen = [], set()
+    if favorite_id and favorite_id in badges._BY_ID:
+        ordered.append(favorite_id)
+        seen.add(favorite_id)
+    for d in docs:
+        if len(ordered) >= limit:
+            break
+        if d["badge_id"] not in seen:
+            ordered.append(d["badge_id"])
+            seen.add(d["badge_id"])
+    return [badges.public_badge(badges._BY_ID[bid], unlocked=True) for bid in ordered]
 
 @api_router.get("/users/search")
 async def search_users(q: str = "", user: dict = Depends(get_current_user)):
@@ -1700,10 +1782,12 @@ async def search_users(q: str = "", user: dict = Depends(get_current_user)):
         {"_id": 0, "password_hash": 0},
     ).limit(20)
     docs = await cursor.to_list(20)
-    following_set = await _following_set(user["user_id"], [u["user_id"] for u in docs])
+    ids = [u["user_id"] for u in docs]
+    following_set = await _following_set(user["user_id"], ids)
+    levels = await _levels_by_user_id(ids)
     out = []
     for u in docs:
-        pu = _public_user(u)
+        pu = _public_user(u, levels.get(u["user_id"], _LEVEL_ONE))
         pu["friend_status"] = await _friend_status(user["user_id"], u["user_id"])
         pu["team_status"] = await _team_status(user["user_id"], u["user_id"])
         pu["following"] = u["user_id"] in following_set
@@ -1718,7 +1802,8 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
     docs = await db.recipes.find({"author_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
     docs = await enrich_recipes(docs)
     total_likes = sum(d.get("like_count", 0) for d in docs)
-    pu = _public_user(u)
+    level_detail = await gamification.get_level_detail(db, user_id)
+    pu = _public_user(u, {"level": level_detail["level"], "title": level_detail["title"]})
     pu["created_at"] = u.get("created_at")
 
     creation_docs = await db.creations.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
@@ -1745,6 +1830,12 @@ async def public_profile(user_id: str, user: dict = Depends(get_current_user)):
         # Directionnel (contrairement à _is_blocked, qui vérifie les deux sens) —
         # c'est ce qui permet à l'écran d'afficher "Bloquer" ou "Débloquer".
         "blocked_by_me": bool(await db.blocks.find_one({"blocker_id": user["user_id"], "blocked_id": user_id})) if user["user_id"] != user_id else False,
+        # Présent pour tout le monde (donnée non sensible, comme bio/profession)
+        # — seul le FRONT choisit de n'afficher la barre/les chiffres que sur
+        # son propre profil (section 15), jamais une restriction serveur.
+        "level_detail": level_detail,
+        "badges_preview": await _badges_preview(user_id),
+        "badge_count": await db.user_badges.count_documents({"user_id": user_id}),
     }
 
 @api_router.post("/friends/request")
@@ -1763,17 +1854,17 @@ async def send_friend_request(inp: FriendRequestInput, user: dict = Depends(get_
     # Demo bots accept instantly — nobody is on the other side to tap "accept",
     # and their whole purpose is to make the app testable with a single account.
     if target_user.get("is_bot"):
-        await _create_friendship(me, target)
-        return {"status": "friends"}
+        gam = await _create_friendship(me, target)
+        return {"status": "friends", "gamification": gam}
     # If the other user already sent a pending request, accept it directly
     rev = await db.friend_requests.find_one({"from_user_id": target, "to_user_id": me, "status": "pending"})
     if rev:
         await db.friend_requests.update_one({"id": rev["id"]}, {"$set": {"status": "accepted"}})
-        await _create_friendship(me, target)
+        gam = await _create_friendship(me, target)
         # target avait envoyé la demande initiale ; de son point de vue,
         # c'est bien une acceptation, pas une nouvelle demande.
         await _create_notification(target, "friend_request_accepted", actor_id=me, actor_name=user.get("name"))
-        return {"status": "friends"}
+        return {"status": "friends", "gamification": gam}
     existing = await db.friend_requests.find_one({"from_user_id": me, "to_user_id": target, "status": "pending"})
     if existing:
         return {"status": "pending_sent"}
@@ -1809,9 +1900,9 @@ async def respond_request(request_id: str, inp: RespondInput, user: dict = Depen
     new_status = "accepted" if inp.accept else "declined"
     await db.friend_requests.update_one({"id": request_id}, {"$set": {"status": new_status}})
     if inp.accept:
-        await _create_friendship(user["user_id"], req["from_user_id"])
+        gam = await _create_friendship(user["user_id"], req["from_user_id"])
         await _create_notification(req["from_user_id"], "friend_request_accepted", actor_id=user["user_id"], actor_name=user.get("name"))
-        return {"status": "friends"}
+        return {"status": "friends", "gamification": gam}
     return {"status": "declined"}
 
 @api_router.get("/friends")
@@ -2142,6 +2233,7 @@ async def toggle_follow(user_id: str, user: dict = Depends(get_current_user)):
             pass
         following = True
         await _create_notification(user_id, "new_follower", actor_id=me, actor_name=user.get("name"))
+        await _award_gamification(user_id, "new_follower", f"{me}:{user_id}")
     count = await _follower_count(user_id)
     return {"following": following, "follower_count": count}
 
@@ -2368,16 +2460,28 @@ async def leaderboard_creators(period: str = "week", limit: int = leaderboard.DE
         async for u in db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "password_hash": 0}):
             users[u["user_id"]] = u
     following_set = await _following_set(user["user_id"], user_ids)
+    levels = await _levels_by_user_id(user_ids)
     items = []
     for row in top:
         u = users.get(row["user_id"])
         if not u:
             continue
-        pu = _public_user(u)
+        pu = _public_user(u, levels.get(row["user_id"], _LEVEL_ONE))
         pu["following"] = row["user_id"] in following_set
         pu["score"] = row["score"]
         pu["rank"] = row["rank"]
         items.append(pu)
+    # Niveau et classement restent deux systèmes séparés (section 24) : ceci
+    # n'affecte jamais le score/rang lui-même, seulement l'affichage — et
+    # débloque paresseusement les badges "Top N" pour l'appelant, la seule
+    # famille de badge qui n'a de sens qu'au moment où le classement est
+    # calculé (voir badges.check_leaderboard_badges).
+    rank_badges = await badges.check_leaderboard_badges(db, user["user_id"], my_rank["rank"] if my_rank else None)
+    for bd in rank_badges:
+        await _create_notification(
+            user["user_id"], "badge_unlocked", actor_id=user["user_id"], actor_name=None, target_id=bd["id"],
+            data={"name": bd["name"], "icon": bd["icon"], "description": bd["description"]},
+        )
     return {"period": period, "top": items, "my_rank": my_rank}
 
 @api_router.get("/leaderboard/recipes")
@@ -2429,6 +2533,48 @@ async def leaderboard_creations(period: str = "week", limit: int = leaderboard.D
             "like_count": row["score"], "rank": row["rank"],
         })
     return {"period": period, "items": items}
+
+# ---------- Niveaux / Badges ----------
+# Incrémental (voir gamification.py/badges.py) : rien n'est recalculé pour
+# l'ensemble des utilisateurs à l'ouverture d'une de ces routes, seulement
+# la progression de l'appelant/de l'utilisateur ciblé.
+
+@api_router.get("/users/{user_id}/badges")
+async def user_badges_page(user_id: str, user: dict = Depends(get_current_user)):
+    if not await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}):
+        raise HTTPException(404, "Utilisateur introuvable")
+    unlocked_docs = await db.user_badges.find({"user_id": user_id}, {"_id": 0}).to_list(200)
+    unlocked_at = {d["badge_id"]: d["unlocked_at"] for d in unlocked_docs}
+    items = []
+    for b in badges.BADGES:
+        is_unlocked = b["id"] in unlocked_at
+        entry = badges.public_badge(b, is_unlocked)
+        entry["unlocked_at"] = unlocked_at.get(b["id"])
+        if not is_unlocked and not b.get("hidden"):
+            entry["progress"] = await badges.badge_progress(db, user_id, b)
+        items.append(entry)
+    level_row = await db.user_levels.find_one({"user_id": user_id}, {"_id": 0, "favorite_badge_id": 1})
+    return {"badges": items, "favorite_badge_id": (level_row or {}).get("favorite_badge_id")}
+
+class FavoriteBadgeInput(BaseModel):
+    badge_id: Optional[str] = None
+
+@api_router.put("/users/me/badges/favorite")
+async def set_favorite_badge(inp: FavoriteBadgeInput, user: dict = Depends(get_current_user)):
+    """Un utilisateur ne peut choisir en favori qu'un badge qu'il a déjà
+    obtenu — jamais un badge arbitraire (section 33 : aucune confiance
+    cliente sur ce qui est débloqué). `badge_id: null` retire le favori."""
+    if inp.badge_id is not None:
+        if inp.badge_id not in badges._BY_ID:
+            raise HTTPException(404, "Badge introuvable")
+        if not await db.user_badges.find_one({"user_id": user["user_id"], "badge_id": inp.badge_id}):
+            raise HTTPException(403, "Vous n'avez pas encore obtenu ce badge")
+    await db.user_levels.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"favorite_badge_id": inp.badge_id, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"favorite_badge_id": inp.badge_id}
 
 # ---------- Notifications ----------
 # Système minimal : consultées à l'ouverture de l'app, aucun push mobile
@@ -2500,6 +2646,35 @@ async def _notify_followers_of_new_post(author_id: str, author_name: Optional[st
         for uid in enabled_ids
     ]
     await db.notifications.insert_many(docs)
+
+async def _award_gamification(user_id: str, kind: str, event_key: str, meta: Optional[dict] = None) -> dict:
+    """Point d'appel unique pour toute action XP-éligible (voir
+    gamification.py/badges.py) : attribue l'XP (avec sa propre déduplication
+    et ses plafonds anti-abus), débloque les badges concernés, et notifie
+    l'utilisateur qui progresse — que ce soit lui-même (a publié, a commenté)
+    ou un tiers (a reçu un like/un commentaire/un abonné) : dans les deux cas
+    une notification est créée ici, jamais seulement un retour de fonction,
+    conformément aux sections 22/23 de la demande. Retourne un résumé
+    {"leveled_up", "badges_unlocked"} que la route appelante peut inclure
+    telle quelle dans sa réponse pour un toast immédiat côté acteur — sans
+    jamais faire confiance à autre chose qu'à ce module pour la légitimité
+    de l'XP elle-même."""
+    now = datetime.now(timezone.utc)
+    result = await gamification.award_xp(db, user_id, kind, event_key, meta)
+    badges_unlocked: list = []
+    if result["awarded"]:
+        badges_unlocked = await badges.check_badges_after_event(db, user_id, kind, context={"hour_utc": now.hour})
+        if result["leveled_up"]:
+            await _create_notification(user_id, "level_up", actor_id=user_id, actor_name=None, data=result["leveled_up"])
+        for bd in badges_unlocked:
+            await _create_notification(
+                user_id, "badge_unlocked", actor_id=user_id, actor_name=None, target_id=bd["id"],
+                data={"name": bd["name"], "icon": bd["icon"], "description": bd["description"]},
+            )
+    return {
+        "leveled_up": result["leveled_up"],
+        "badges_unlocked": [{"id": bd["id"], "name": bd["name"], "icon": bd["icon"]} for bd in badges_unlocked],
+    }
 
 @api_router.get("/notifications")
 async def list_notifications(limit: int = NOTIFICATIONS_PAGE_SIZE, before: Optional[str] = None, user: dict = Depends(get_current_user)):
@@ -3775,6 +3950,15 @@ async def startup():
     await db.creation_likes.create_index("created_at")
     await db.comments.create_index("created_at")
     await db.follows.create_index("created_at")
+    # Niveaux/Badges : le registre d'événements XP est dédupliqué par
+    # event_key (empêche toute réattribution, quel que soit le nombre de
+    # fois où l'action déclenchante se répète) ; le composé (user_id, kind,
+    # created_at) sert à la fois le plafond journalier et la progression des
+    # badges à seuil, sans nouvel index par badge.
+    await db.user_levels.create_index("user_id", unique=True)
+    await db.user_xp_events.create_index("event_key", unique=True)
+    await db.user_xp_events.create_index([("user_id", 1), ("kind", 1), ("created_at", -1)])
+    await db.user_badges.create_index([("user_id", 1), ("badge_id", 1)], unique=True)
 
     # Seed/sync built-in recipes: content (incl. image_url) is kept in sync with
     # RECIPES_SEED on every startup, so a fix to seed_data.py reaches the DB on

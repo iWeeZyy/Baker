@@ -6,8 +6,10 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
@@ -142,6 +144,7 @@ export default function ScanRecipe() {
   );
 
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [phase, setPhase] = useState<'capture' | 'analyzing' | 'verify'>('capture');
   const [pages, setPages] = useState<Page[]>([]);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -332,6 +335,8 @@ export default function ScanRecipe() {
           image_path: imagePath,
         }),
       });
+      showGamificationToast(doc.gamification);
+      refreshUser();
       router.replace(`/recipe/${doc.id}`);
     } catch (e: any) {
       setSubmitError(e.message || 'Erreur');

@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { LevelBadge } from '@/src/gamification/LevelBadge';
 
 type Period = 'week' | 'month' | 'year' | 'all';
 type Category = 'creators' | 'recipes' | 'creations';
@@ -17,7 +18,7 @@ type Category = 'creators' | 'recipes' | 'creations';
 const PERIODS: [Period, string][] = [['week', 'Cette semaine'], ['month', 'Ce mois-ci'], ['year', 'Cette année'], ['all', 'Depuis toujours']];
 const CATEGORIES: [Category, string][] = [['creators', 'Créateurs'], ['recipes', 'Recettes'], ['creations', 'Créations']];
 
-type CreatorRow = { user_id: string; name: string; picture?: string | null; following: boolean; score: number; rank: number };
+type CreatorRow = { user_id: string; name: string; picture?: string | null; following: boolean; score: number; rank: number; level?: { level: number; title: string } };
 type MyRank = { rank: number; score: number } | null;
 type RecipeRow = { id: string; title: string; category?: string; image_path?: string | null; image_url?: string | null; product?: string | null; author_id: string; author_name?: string; author_picture?: string | null; like_count: number; rank: number };
 type CreationRow = { id: string; title: string; category?: string; photos: string[]; user_id: string; user_name?: string; user_picture?: string | null; like_count: number; rank: number };
@@ -141,6 +142,7 @@ export default function Classement() {
             <Avatar name={row.name} picture={row.picture} />
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName}>{row.name}</Text>
+              <LevelBadge level={row.level} compact />
               <Text style={styles.rowMeta}>{row.score} points</Text>
             </View>
             <FollowPill row={row} />

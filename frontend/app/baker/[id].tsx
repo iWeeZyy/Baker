@@ -11,6 +11,7 @@ import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { LevelBadge } from '@/src/gamification/LevelBadge';
 
 export default function BakerProfile() {
   const { colors } = useTheme();
@@ -221,6 +222,7 @@ export default function BakerProfile() {
               )}
             </View>
             <Text style={styles.name} testID="baker-name">{user.name}</Text>
+            <LevelBadge level={user.level} />
             {memberSince && <Text style={styles.since}>Boulanger depuis {memberSince}</Text>}
             {!!user.profession && <Text style={styles.profession} testID="baker-profession">{user.profession}</Text>}
             {!!user.bio && <Text style={styles.bio} testID="baker-bio">{user.bio}</Text>}
@@ -266,6 +268,16 @@ export default function BakerProfile() {
                 </>
               )}
             </ScrollView>
+
+            {data.badges_preview?.length > 0 && (
+              <View style={styles.badgesPreviewRow} testID="baker-badges-preview">
+                {data.badges_preview.map((b: any) => (
+                  <Pressable key={b.id} onPress={() => router.push(`/badge/${b.id}` as any)} style={styles.badgePreviewIconWrap}>
+                    <Text style={styles.badgePreviewIcon}>{b.icon}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
             <View style={styles.actionsColumn}>
               <FollowAction />
@@ -360,6 +372,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   since: { fontSize: 13, color: colors.muted, marginTop: 4, fontStyle: 'italic' },
   profession: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
+  badgesPreviewRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  badgePreviewIconWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  badgePreviewIcon: { fontSize: 17 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 20, paddingHorizontal: 4 },

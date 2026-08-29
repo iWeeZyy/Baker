@@ -17,12 +17,15 @@ import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { LevelBadge } from '@/src/gamification/LevelBadge';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type Comment = {
   id: string; user_id: string; user_name: string; user_picture?: string | null; content: string;
   created_at: string; edited_at?: string | null; parent_id?: string | null;
   reply_to_user_id?: string | null; reply_to_user_name?: string | null;
   like_count?: number; liked?: boolean;
+  user_level?: { level: number; title: string };
 };
 
 type CommentSort = 'likes' | 'newest' | 'oldest';
@@ -204,7 +207,7 @@ export default function RecipeDetail() {
   const [noteSaved, setNoteSaved] = useState(true);
   const [loading, setLoading] = useState(true);
   const [costInfo, setCostInfo] = useState<{ available: boolean; cost_per_piece?: number } | null>(null);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const loadCommunity = useCallback(async () => {
     try {
@@ -315,6 +318,8 @@ export default function RecipeDetail() {
       });
       setComments(prev => [...prev, { ...c, like_count: 0, liked: false }]);
       if (parent) setExpandedRoots(prev => new Set(prev).add(parent));
+      showGamificationToast(c.gamification);
+      refreshUser();
     } catch (e: any) {
       setCommentError(e.message || 'Erreur');
     }
@@ -468,6 +473,7 @@ export default function RecipeDetail() {
                   )}
                 </View>
                 <Text style={styles.author}>{recipe.author_name}</Text>
+                <LevelBadge level={recipe.author_level} compact style={styles.authorLevel} />
               </View>
             )}
           </View>
@@ -718,7 +724,10 @@ export default function RecipeDetail() {
                           )}
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.commentName}>{c.user_name}</Text>
+                          <View style={styles.commentNameRow}>
+                            <Text style={styles.commentName}>{c.user_name}</Text>
+                            <LevelBadge level={c.user_level} compact />
+                          </View>
                           {renderBody(c)}
                           {renderActions(c, c.id)}
                         </View>
@@ -738,7 +747,10 @@ export default function RecipeDetail() {
                             )}
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.commentName}>{r.user_name}</Text>
+                            <View style={styles.commentNameRow}>
+                              <Text style={styles.commentName}>{r.user_name}</Text>
+                              <LevelBadge level={r.user_level} compact />
+                            </View>
                             {r.reply_to_user_name && r.reply_to_user_name !== c.user_name && (
                               <Text style={styles.replyToLabel}>↳ Réponse à {r.reply_to_user_name}</Text>
                             )}
@@ -797,6 +809,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onBrandPrimary, marginTop: 6, lineHeight: 36 },
   author: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontStyle: 'italic' },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  // Littéral, pas un token de thème : ce texte flotte sur la photo du héros
+  // (fond invariant), pas sur la surface de l'app — même discipline déjà
+  // appliquée à `author` juste au-dessus.
+  authorLevel: { color: 'rgba(255,255,255,0.7)', fontStyle: 'italic' },
   authorAvatar: { width: 22, height: 22, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   authorAvatarText: { fontSize: 11, color: colors.onBrandTertiary, fontFamily: theme.serif },
   photoCredit: {
@@ -879,7 +895,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   commentCard: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   commentAvatar: { width: 38, height: 38, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   commentAvatarText: { color: colors.onBrandTertiary, fontFamily: theme.serif, fontSize: 16 },
-  commentName: { fontSize: 14, fontWeight: '600', color: colors.onSurface, marginBottom: 2 },
+  commentName: { fontSize: 14, fontWeight: '600', color: colors.onSurface },
+  commentNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   commentBody: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
   editedBadge: { fontSize: 12, color: colors.muted, fontStyle: 'italic' },
   commentHighlighted: { backgroundColor: colors.brandTertiary, borderRadius: 8, padding: 8, margin: -8 },

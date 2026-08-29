@@ -14,9 +14,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type PreviewRecipe = { id: string; image_path?: string | null; image_url?: string | null; product?: string | null };
 type CollectionRow = {
@@ -68,6 +70,7 @@ export default function CollectionsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [items, setItems] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,11 +100,13 @@ export default function CollectionsScreen() {
     if (!name) return;
     setSaving(true);
     try {
-      await api('/collections', { method: 'POST', body: JSON.stringify({ name, description: newDescription.trim() }) });
+      const created = await api('/collections', { method: 'POST', body: JSON.stringify({ name, description: newDescription.trim() }) });
       setCreating(false);
       setNewName('');
       setNewDescription('');
       load();
+      showGamificationToast(created.gamification);
+      refreshUser();
     } catch {} finally {
       setSaving(false);
     }
