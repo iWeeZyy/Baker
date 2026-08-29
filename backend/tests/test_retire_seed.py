@@ -78,6 +78,25 @@ def test_les_lignes_orphelines_partent_avec_la_fiche():
     asyncio.run(run())
 
 
+def test_les_collections_perdent_la_reference_mais_pas_la_collection_elle_meme():
+    # Le point d'accroche réel utilisé par le chantier Collections : une
+    # collection n'est jamais elle-même supprimée par ce cycle (seul un
+    # document `recipes` peut l'être), seule sa référence à la recette
+    # retirée disparaît, exactement comme pour les autres dépendants.
+    async def run():
+        db = fresh_db()
+        await db.recipes.insert_one(
+            {"id": "b", "title": "Retirée", "is_user_submitted": False})
+        await db.collection_recipes.insert_many([
+            {"collection_id": "c1", "recipe_id": "b"},
+            {"collection_id": "c1", "recipe_id": "autre"},
+        ])
+        await retire_built_ins(db.recipes, [db.collection_recipes], set())
+        assert await db.collection_recipes.count_documents({"recipe_id": "b"}) == 0
+        assert await db.collection_recipes.count_documents({"recipe_id": "autre"}) == 1
+    asyncio.run(run())
+
+
 def test_un_seed_inchange_ne_supprime_rien():
     async def run():
         db = fresh_db()

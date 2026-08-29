@@ -60,13 +60,15 @@ export default function Profile() {
   const [teamInvites, setTeamInvites] = useState<{ id: string; from_user: { user_id: string; name: string; picture?: string | null }; role: string | null }[]>([]);
   const [stats, setStats] = useState({ recipe_count: 0, comment_count: 0, total_likes: 0, follower_count: 0, following_count: 0 });
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collectionsCount, setCollectionsCount] = useState(0);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [m, f, c, p] = await Promise.all([
+      const [m, f, c, p, cols] = await Promise.all([
         api('/recipes/mine'), api('/recipes/favorites'), api('/creations/mine'),
         user ? api(`/users/${user.user_id}/profile`) : Promise.resolve(null),
+        api('/collections').catch(() => []),
       ]);
       setMine(m); setFavs(f); setCreations(c);
       if (p) {
@@ -75,6 +77,10 @@ export default function Profile() {
           follower_count: p.follower_count, following_count: p.following_count,
         });
       }
+      // Exclut le pseudo-dossier "Toutes les recettes enregistrées"
+      // (__favorites__), toujours en tête de la réponse — seules les
+      // collections que l'utilisateur a réellement créées comptent ici.
+      setCollectionsCount(Array.isArray(cols) ? cols.filter((c2: any) => c2.id !== '__favorites__').length : 0);
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
   }, [user]);
@@ -334,6 +340,16 @@ export default function Profile() {
               <Text style={styles.statLabel}>ABONNEMENTS</Text>
             </Pressable>
           </ScrollView>
+        )}
+
+        {!editingProfile && (
+          <Pressable testID="collections-entry-row" onPress={() => router.push('/collections' as any)} style={styles.collectionsRow}>
+            <Feather name="folder" size={15} color={colors.muted} />
+            <Text style={styles.collectionsRowText}>
+              {collectionsCount} collection{collectionsCount > 1 ? 's' : ''}
+            </Text>
+            <Feather name="chevron-right" size={15} color={colors.muted} />
+          </Pressable>
         )}
 
         <View style={styles.avatarLinksRow}>
@@ -696,6 +712,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   email: { fontSize: 13, color: colors.muted, marginTop: 2 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 20, paddingHorizontal: 4 },
   stat: { alignItems: 'center' },
+  // Indicateur compact, jamais une nouvelle section : une seule ligne
+  // discrète renvoyant vers Profil ▾ → Collections, qui reste le point
+  // d'entrée principal.
+  collectionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
+  collectionsRowText: { flex: 1, fontSize: 13, color: colors.muted },
   statVal: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   statLabel: { fontSize: 10, letterSpacing: 1, color: colors.muted, fontWeight: '600', marginTop: 2 },
   statDivider: { width: 1, height: 28, backgroundColor: colors.border },

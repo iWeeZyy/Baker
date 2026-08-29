@@ -381,6 +381,22 @@ class CreationInput(BaseModel):
     recipe_id: Optional[str] = None
     photos: List[str] = Field(default_factory=list)
 
+# Réservé, jamais lu par aucune route aujourd'hui : prépare un futur bascule
+# public/privé sans migration de schéma, sur le même principe que le
+# `status` absent de `db.follows` lors du chantier Abonnements. Toute
+# collection reste strictement privée tant qu'aucune route ne l'exploite.
+COLLECTION_VISIBILITY_DEFAULT = "private"
+COLLECTION_NAME_MAX_LENGTH = 80
+COLLECTION_DESCRIPTION_MAX_LENGTH = 300
+# Id réservé pour le pseudo-dossier "Toutes les recettes enregistrées",
+# dérivé de db.favorites en lecture seule — jamais un vrai document
+# db.collections, jamais accepté par PUT/DELETE.
+FAVORITES_COLLECTION_ID = "__favorites__"
+
+class CollectionInput(BaseModel):
+    name: str
+    description: str = ""
+
 # ---------- Auth Endpoints ----------
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
@@ -1266,6 +1282,225 @@ async def toggle_creation_like(creation_id: str, user: dict = Depends(get_curren
             await _upsert_like_notification(owner_id, creation_id, actor_id=user["user_id"], actor_name=user.get("name"), data={"content_kind": "creation"})
     count = await db.creation_likes.count_documents({"creation_id": creation_id})
     return {"liked": liked, "count": count}
+
+# ---------- Collections ----------
+# Dossiers personnels de recettes déjà enregistrées : une collection ne
+# référence jamais qu'un `recipe_id` (jamais une copie des données de la
+# recette), exactement comme `db.favorites`/`db.likes` — la résolution à la
+# lecture va chercher le document `recipes` à jour à chaque appel, donc une
+# recette éditée après coup se reflète immédiatement dans toutes ses
+# collections sans code de synchronisation supplémentaire.
+COLLECTION_PAGE_SIZE = 20
+COLLECTION_UNPAGINATED_CAP = 500
+
+def _validate_collection_input(inp: "CollectionInput"):
+    name = inp.name.strip()
+    if not name:
+        raise HTTPException(422, "Le nom de la collection est obligatoire.")
+    if len(name) > COLLECTION_NAME_MAX_LENGTH:
+        raise HTTPException(422, f"Le nom ne peut pas dépasser {COLLECTION_NAME_MAX_LENGTH} caractères.")
+    if len(inp.description) > COLLECTION_DESCRIPTION_MAX_LENGTH:
+        raise HTTPException(422, f"La description ne peut pas dépasser {COLLECTION_DESCRIPTION_MAX_LENGTH} caractères.")
+
+async def _owned_collection_or_404(collection_id: str, user_id: str):
+    if collection_id == FAVORITES_COLLECTION_ID:
+        raise HTTPException(404, "Collection introuvable")
+    c = await db.collections.find_one({"id": collection_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Collection introuvable")
+    if c["user_id"] != user_id:
+        raise HTTPException(403, "Vous ne pouvez accéder qu'à vos propres collections")
+    return c
+
+async def _recipe_preview_fields(recipe_ids):
+    """Juste assez de champs pour `recipeImageSource()` côté client — jamais
+    la recette complète, pour que la liste des collections reste légère."""
+    if not recipe_ids:
+        return {}
+    docs = await db.recipes.find(
+        {"id": {"$in": list(set(recipe_ids))}},
+        {"_id": 0, "id": 1, "image_path": 1, "image_url": 1, "product": 1},
+    ).to_list(len(set(recipe_ids)))
+    return {d["id"]: d for d in docs}
+
+async def _collection_counts_and_previews(collection_ids, id_field="collection_id"):
+    """Compte + jusqu'à 4 aperçus (les plus récemment ajoutés) par collection,
+    en deux requêtes batch au total — jamais une requête par collection.
+    Réutilisé tel quel pour `db.favorites` (id_field="user_id", un seul id)."""
+    if not collection_ids:
+        return {}
+    collection = db.collection_recipes if id_field == "collection_id" else db.favorites
+    pipeline = [
+        {"$match": {id_field: {"$in": collection_ids}}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": f"${id_field}", "recipe_ids": {"$push": "$recipe_id"}, "count": {"$sum": 1}}},
+        {"$project": {"count": 1, "preview_ids": {"$slice": ["$recipe_ids", 4]}}},
+    ]
+    by_id = {}
+    all_preview_ids = []
+    async for row in collection.aggregate(pipeline):
+        by_id[row["_id"]] = {"count": row["count"], "preview_ids": row["preview_ids"]}
+        all_preview_ids.extend(row["preview_ids"])
+    fields_by_recipe = await _recipe_preview_fields(all_preview_ids)
+    for entry in by_id.values():
+        entry["preview_recipes"] = [fields_by_recipe[rid] for rid in entry["preview_ids"] if rid in fields_by_recipe]
+        del entry["preview_ids"]
+    return by_id
+
+@api_router.get("/collections")
+async def list_collections(recipe_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    docs = await db.collections.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    ids = [d["id"] for d in docs]
+    stats = await _collection_counts_and_previews(ids, id_field="collection_id")
+    in_collection_ids = set()
+    if recipe_id:
+        memberships = await db.collection_recipes.find(
+            {"collection_id": {"$in": ids}, "recipe_id": recipe_id}, {"_id": 0, "collection_id": 1},
+        ).to_list(len(ids))
+        in_collection_ids = {m["collection_id"] for m in memberships}
+
+    out = []
+    for d in docs:
+        s = stats.get(d["id"], {"count": 0, "preview_recipes": []})
+        entry = {**d, "recipe_count": s["count"], "preview_recipes": s["preview_recipes"]}
+        if recipe_id:
+            entry["in_collection"] = d["id"] in in_collection_ids
+        out.append(entry)
+
+    fav_stats = (await _collection_counts_and_previews([user["user_id"]], id_field="user_id")).get(
+        user["user_id"], {"count": 0, "preview_recipes": []},
+    )
+    favorites_entry = {
+        "id": FAVORITES_COLLECTION_ID, "user_id": user["user_id"],
+        "name": "Toutes les recettes enregistrées", "description": "",
+        "visibility": COLLECTION_VISIBILITY_DEFAULT,
+        "recipe_count": fav_stats["count"], "preview_recipes": fav_stats["preview_recipes"],
+    }
+    return [favorites_entry, *out]
+
+@api_router.get("/collections/{collection_id}")
+async def get_collection(collection_id: str, user: dict = Depends(get_current_user)):
+    if collection_id == FAVORITES_COLLECTION_ID:
+        count = await db.favorites.count_documents({"user_id": user["user_id"]})
+        return {
+            "id": FAVORITES_COLLECTION_ID, "name": "Toutes les recettes enregistrées",
+            "description": "", "visibility": COLLECTION_VISIBILITY_DEFAULT, "recipe_count": count,
+        }
+    c = await _owned_collection_or_404(collection_id, user["user_id"])
+    count = await db.collection_recipes.count_documents({"collection_id": collection_id})
+    return {**c, "recipe_count": count}
+
+@api_router.post("/collections")
+async def create_collection(inp: CollectionInput, user: dict = Depends(get_current_user)):
+    _validate_collection_input(inp)
+    doc = {
+        "id": str(uuid.uuid4()), "user_id": user["user_id"],
+        "name": inp.name.strip(), "description": inp.description.strip(),
+        "cover_image": None, "visibility": COLLECTION_VISIBILITY_DEFAULT,
+        "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc),
+    }
+    await db.collections.insert_one(doc)
+    # `insert_one` mute `doc` en place pour y ajouter un `_id` Mongo — jamais
+    # sérialisable tel quel, donc on ne le renvoie jamais directement (même
+    # précaution que `_creation_detail`, qui reconstruit toujours un dict
+    # explicite plutôt que d'étaler un document venant d'`insert_one`).
+    return {k: v for k, v in doc.items() if k != "_id"} | {"recipe_count": 0}
+
+@api_router.put("/collections/{collection_id}")
+async def update_collection(collection_id: str, inp: CollectionInput, user: dict = Depends(get_current_user)):
+    c = await _owned_collection_or_404(collection_id, user["user_id"])
+    _validate_collection_input(inp)
+    updates = {"name": inp.name.strip(), "description": inp.description.strip(), "updated_at": datetime.now(timezone.utc)}
+    await db.collections.update_one({"id": collection_id}, {"$set": updates})
+    count = await db.collection_recipes.count_documents({"collection_id": collection_id})
+    return {**c, **updates, "recipe_count": count}
+
+@api_router.delete("/collections/{collection_id}")
+async def delete_collection(collection_id: str, user: dict = Depends(get_current_user)):
+    await _owned_collection_or_404(collection_id, user["user_id"])
+    # Ne touche jamais db.recipes ni db.favorites : supprimer une collection
+    # ne doit jamais supprimer les recettes qu'elle contient, exigence
+    # centrale de la fonctionnalité.
+    await db.collections.delete_one({"id": collection_id})
+    await db.collection_recipes.delete_many({"collection_id": collection_id})
+    return {"deleted": True}
+
+@api_router.post("/collections/{collection_id}/recipes/{recipe_id}")
+async def add_recipe_to_collection(collection_id: str, recipe_id: str, user: dict = Depends(get_current_user)):
+    await _owned_collection_or_404(collection_id, user["user_id"])
+    if not await db.recipes.find_one({"id": recipe_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Recette introuvable")
+    try:
+        await db.collection_recipes.insert_one({
+            "id": str(uuid.uuid4()), "collection_id": collection_id, "recipe_id": recipe_id,
+            "created_at": datetime.now(timezone.utc),
+        })
+    except DuplicateKeyError:
+        pass
+    return {"in_collection": True}
+
+@api_router.delete("/collections/{collection_id}/recipes/{recipe_id}")
+async def remove_recipe_from_collection(collection_id: str, recipe_id: str, user: dict = Depends(get_current_user)):
+    await _owned_collection_or_404(collection_id, user["user_id"])
+    await db.collection_recipes.delete_one({"collection_id": collection_id, "recipe_id": recipe_id})
+    return {"in_collection": False}
+
+@api_router.get("/collections/{collection_id}/recipes")
+async def get_collection_recipes(
+    collection_id: str, before: Optional[str] = None, sort: str = "recent", q: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    if sort not in ("recent", "oldest", "popular"):
+        raise HTTPException(422, "Tri invalide")
+    is_favorites = collection_id == FAVORITES_COLLECTION_ID
+    if is_favorites:
+        join_collection, join_filter = db.favorites, {"user_id": user["user_id"]}
+    else:
+        await _owned_collection_or_404(collection_id, user["user_id"])
+        join_collection, join_filter = db.collection_recipes, {"collection_id": collection_id}
+
+    # La recherche et le tri "populaire" ont besoin de considérer toute la
+    # collection à la fois (jamais seulement la page courante), donc ils
+    # désactivent la pagination par curseur — comme `GET /recipes?sort=popular`
+    # le fait déjà pour le catalogue entier. Une collection personnelle reste
+    # d'une taille modeste ; le plafond évite un cas dégénéré.
+    unpaginated = bool(q) or sort == "popular"
+    if unpaginated:
+        join_docs = await join_collection.find(join_filter, {"_id": 0}).sort("created_at", -1).to_list(COLLECTION_UNPAGINATED_CAP)
+        has_more = False
+    else:
+        query = dict(join_filter)
+        if before:
+            query["created_at"] = {"$lt": datetime.fromisoformat(before)}
+        direction = 1 if sort == "oldest" else -1
+        join_docs = await join_collection.find(query, {"_id": 0}).sort("created_at", direction).limit(COLLECTION_PAGE_SIZE + 1).to_list(COLLECTION_PAGE_SIZE + 1)
+        has_more = len(join_docs) > COLLECTION_PAGE_SIZE
+        join_docs = join_docs[:COLLECTION_PAGE_SIZE]
+
+    recipe_ids_in_order = [j["recipe_id"] for j in join_docs]
+    added_at_by_recipe = {j["recipe_id"]: j["created_at"] for j in join_docs}
+    recipes_by_id = {}
+    if recipe_ids_in_order:
+        docs = await db.recipes.find({"id": {"$in": recipe_ids_in_order}}, {"_id": 0}).to_list(len(recipe_ids_in_order))
+        recipes_by_id = {d["id"]: d for d in docs}
+    # Une entrée `collection_recipes`/`favorites` pointant sur une recette
+    # entre-temps retirée (cascade `retire_built_ins`) ne devrait plus
+    # exister — filtrée ici par sécurité plutôt que par nécessité.
+    ordered = [recipes_by_id[rid] for rid in recipe_ids_in_order if rid in recipes_by_id]
+    ordered = await enrich_recipes(ordered)
+    # `added_at` (date d'ajout à CETTE collection, distincte de la date de
+    # création de la recette) est le curseur de pagination du client — sans
+    # lui, "plus récemment ajoutées" ne serait pas paginable correctement.
+    for item in ordered:
+        item["added_at"] = added_at_by_recipe[item["id"]].isoformat()
+
+    if q:
+        needle = q.strip().lower()
+        ordered = [r for r in ordered if needle in r["title"].lower()]
+    if sort == "popular":
+        ordered.sort(key=lambda r: r.get("like_count", 0), reverse=True)
+
+    return {"items": ordered, "has_more": has_more}
 
 # ---------- Friends ----------
 def _pair(a: str, b: str):
@@ -3279,9 +3514,10 @@ async def retire_built_ins(recipes, dependents, keep_titles) -> list:
     Two rules make this safe to run on every boot:
       - only `is_user_submitted: False` documents are considered, so a deploy
         can never remove a recipe a member of the community wrote;
-      - the likes, comments, comment likes, notes and favourites of a deleted
-        recipe go with it, since rows pointing at nothing would still be
-        counted.
+      - the likes, comments, comment likes, notes, favourites and collection
+        memberships of a deleted recipe go with it, since rows pointing at
+        nothing would still be counted (or, for a collection, would leave a
+        dangling reference a card could never resolve).
 
     Returns the titles removed, for the log.
     """
@@ -3352,6 +3588,15 @@ async def startup():
     await db.creations.create_index([("user_id", 1), ("created_at", -1)])
     await db.creation_likes.create_index([("user_id", 1), ("creation_id", 1)], unique=True)
     await db.creation_likes.create_index("creation_id")
+    # Liste "Mes collections", triée du plus récent.
+    await db.collections.create_index([("user_id", 1), ("created_at", -1)])
+    # Composé unique : empêche les doublons et sert "cette recette est-elle
+    # déjà dans cette collection ?" ; recipe_id seul sert le nettoyage en
+    # cascade (retire_built_ins) ; (collection_id, created_at) sert le tri
+    # "plus récemment ajoutée d'abord" sans scan.
+    await db.collection_recipes.create_index([("collection_id", 1), ("recipe_id", 1)], unique=True)
+    await db.collection_recipes.create_index("recipe_id")
+    await db.collection_recipes.create_index([("collection_id", 1), ("created_at", -1)])
     await db.team_members.create_index("users")
     # Empêche deux relations Team pour la même paire (course entre deux
     # acceptations concurrentes) — même garde-fou que friendships.pair_key.
@@ -3406,7 +3651,7 @@ async def startup():
 
     retired = await retire_built_ins(
         db.recipes,
-        [db.likes, db.comments, db.notes, db.favorites, db.comment_likes],
+        [db.likes, db.comments, db.notes, db.favorites, db.comment_likes, db.collection_recipes],
         {r["title"] for r in RECIPES_SEED},
     )
     if retired:
