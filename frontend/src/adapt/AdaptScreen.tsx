@@ -27,13 +27,6 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
-  const Section = ({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{icon} {title}</Text>
-      {children}
-    </View>
-  );
-
   const [loading, setLoading] = useState(true);
   const [recipe, setRecipe] = useState<any>(null);
   const [original, setOriginal] = useState<AdaptationResult | null>(null);
@@ -556,6 +549,17 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function Section({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{icon} {title}</Text>
+      {children}
+    </View>
   );
 }
 
