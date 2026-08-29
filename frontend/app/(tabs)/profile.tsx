@@ -552,6 +552,7 @@ export default function Profile() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {tab === 'comments' ? (
           <FlatList
+            key="comments-list"
             style={{ flex: 1 }}
             data={myComments}
             keyExtractor={c => c.id}
@@ -609,6 +610,7 @@ export default function Profile() {
           />
       ) : (
         <FlatList
+          key="grid-list"
           style={{ flex: 1 }}
           data={loading ? [] : items}
           keyExtractor={r => r.id}
