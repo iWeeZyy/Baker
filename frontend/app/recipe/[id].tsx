@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { AddToCollectionModal } from '@/src/AddToCollectionModal';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
@@ -180,6 +181,7 @@ export default function RecipeDetail() {
   const [recipe, setRecipe] = useState<any>(null);
   const [tab, setTab] = useState<'ingredients' | 'steps' | 'community'>('ingredients');
   const [favorited, setFavorited] = useState(false);
+  const [collectionModalVisible, setCollectionModalVisible] = useState(false);
   const [likes, setLikes] = useState({ count: 0, liked: false });
   const [likeError, setLikeError] = useState<string | null>(null);
   const [likePending, setLikePending] = useState(false);
@@ -436,9 +438,14 @@ export default function RecipeDetail() {
             <Pressable testID="back-btn" onPress={() => router.back()} style={styles.iconBtn}>
               <Feather name="arrow-left" size={20} color={colors.onBrandPrimary} />
             </Pressable>
-            <Pressable testID="fav-btn" onPress={toggleFav} style={styles.iconBtn}>
-              <Feather name="bookmark" size={20} color={favorited ? colors.brandSecondary : colors.onBrandPrimary} />
-            </Pressable>
+            <View style={styles.heroTopRightGroup}>
+              <Pressable testID="fav-btn" onPress={toggleFav} style={styles.iconBtn}>
+                <Feather name="bookmark" size={20} color={favorited ? colors.brandSecondary : colors.onBrandPrimary} />
+              </Pressable>
+              <Pressable testID="add-to-collection-btn" onPress={() => setCollectionModalVisible(true)} style={styles.iconBtn}>
+                <Feather name="folder-plus" size={20} color={colors.onBrandPrimary} />
+              </Pressable>
+            </View>
           </SafeAreaView>
           <View style={styles.heroBottom}>
             <View style={styles.heroBadgeRow}>
@@ -758,6 +765,11 @@ export default function RecipeDetail() {
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
+      <AddToCollectionModal
+        visible={collectionModalVisible}
+        recipeId={id}
+        onClose={() => setCollectionModalVisible(false)}
+      />
     </View>
   );
 }
@@ -769,6 +781,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   heroPlain: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surfaceSecondary },
   heroDrawing: { flex: 1, marginBottom: 92 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
+  heroTopRightGroup: { flexDirection: 'row', gap: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },
   heroBottom: { position: 'absolute', bottom: 24, left: 24, right: 24 },
   heroBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

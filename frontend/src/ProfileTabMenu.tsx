@@ -24,7 +24,7 @@ const TAB_BAR_HEIGHT = 82;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
-  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie';
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections';
   showBadge?: boolean;
   // Pastille numérique (Amis, Messagerie) — différente du simple point
   // showBadge, réutilise le style déjà existant du badge de la cloche
@@ -44,10 +44,14 @@ export function ProfileTabButton() {
   const opacity = useRef(new Animated.Value(0)).current;
 
   // Groupe actif : Profil doit rester mis en avant quand on est sur Amis,
-  // Abonnements, Classement ou Messagerie aussi, pour que l'utilisateur
-  // comprenne que ces pages en dépendent — comparaison stricte, pas
-  // startsWith, pour ne matcher que ces routes précises.
-  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following' || pathname === '/classement' || pathname === '/messagerie';
+  // Abonnements, Classement, Messagerie ou Collections aussi, pour que
+  // l'utilisateur comprenne que ces pages en dépendent — comparaison
+  // stricte pour la plupart de ces routes plates, sauf Collections qui a
+  // une sous-page de détail (`/collections/{id}`) : `startsWith` y est
+  // nécessaire pour que le bouton reste actif une fois entré dans une
+  // collection, pas seulement sur la grille "Mes collections".
+  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following'
+    || pathname === '/classement' || pathname === '/messagerie' || pathname.startsWith('/collections');
 
   const loadBadges = () => {
     // Un seul appel pour les deux compteurs de Messagerie (conversations +
@@ -95,6 +99,9 @@ export function ProfileTabButton() {
     // icône inventée pour l'occasion.
     { key: 'classement', label: 'Classement', icon: 'award', route: '/classement' },
     { key: 'messagerie', label: 'Messagerie', icon: 'message-circle', route: '/messagerie', badgeCount: messagerieBadge },
+    // Ni `showBadge` ni `badgeCount` : pas de pastille sur Collections par
+    // défaut, à la différence d'Amis/Messagerie — décision explicite.
+    { key: 'collections', label: 'Collections', icon: 'folder', route: '/collections' },
   ];
 
   const select = (item: MenuItem) => {
