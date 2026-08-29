@@ -510,6 +510,12 @@ export default function RecipeDetail() {
           <Feather name="chevron-right" size={16} color={colors.muted} />
         </Pressable>
 
+        <Pressable testID="adapt-btn" onPress={() => router.push(`/adapt/${id}` as any)} style={styles.costBtn}>
+          <Text style={styles.costBtnEmoji}>⚙️</Text>
+          <Text style={styles.costBtnText}>Adapter la recette</Text>
+          <Feather name="chevron-right" size={16} color={colors.muted} />
+        </Pressable>
+
         <TechnicalSheet technical={recipe.technical} source={recipe.source} quantity={quantity} />
 
         <View style={styles.segment}>

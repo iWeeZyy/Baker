@@ -19,7 +19,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional
+from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import bcrypt
 
@@ -35,6 +35,7 @@ import imaging
 import moderation
 import text_moderation
 import scan
+import recipe_adapt
 import instagram
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
@@ -253,6 +254,11 @@ class Recipe(BaseModel):
     author_id: Optional[str] = None
     author_name: Optional[str] = None
     is_user_submitted: bool = False
+    # Lignée d'une recette adaptée depuis une autre (voir "Adapter la
+    # recette") — jamais affiché par aucune route, préparé pour un futur
+    # usage sans en être un aujourd'hui, même principe que `visibility` sur
+    # les collections.
+    adapted_from_recipe_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class RecipeCreateInput(BaseModel):
@@ -270,6 +276,7 @@ class RecipeCreateInput(BaseModel):
     steps: List[str]
     step_images: List[Optional[str]] = Field(default_factory=list)
     image_path: Optional[str] = None
+    adapted_from_recipe_id: Optional[str] = None
 
 class ChatMessageInput(BaseModel):
     message: str
@@ -859,6 +866,147 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     extraction["bakers_percentages"] = scan.bakers_percentages(ingredient_lines)
     extraction["hydration"] = scan.compute_hydration(ingredient_lines)
     return extraction
+
+# ---------- Adapter la recette ----------
+# Même calque exact que SCAN_TOOL : l'IA interprète une demande en langage
+# naturel vers des paramètres structurés, jamais vers un chiffre final —
+# recipe_adapt.apply_adaptation() (pur, testé séparément) fait tout le
+# calcul. La plupart des champs n'ont pas besoin de `confidence` comme
+# SCAN_TOOL : ils viennent d'une phrase tapée sans ambiguïté par
+# l'utilisateur (extraction de faits explicites), pas d'une lecture floue
+# de photo — simplement `null` quand non mentionnés. Les deux exceptions
+# qui restent des propositions (jamais des faits) sont les suggestions de
+# substitution et de fermentation, toujours affichées comme telles côté
+# client, jamais appliquées sans acceptation explicite.
+ADAPT_SYSTEM_PROMPT = (
+    "Tu es un expert boulanger qui traduit une demande d'adaptation de recette "
+    "en paramètres structurés, vers l'outil submit_recipe_adaptation. Règle "
+    "absolue : n'extrais que ce que l'utilisateur a explicitement demandé, "
+    "laisse un champ à null s'il n'en parle pas. N'invente et ne calcule "
+    "JAMAIS une quantité finale en grammes — l'application s'en charge à "
+    "partir des paramètres que tu identifies. Les champs `suggested_quantity_g` "
+    "(substitution) et `suggested_technical` (fermentation) sont des "
+    "propositions de ta part, pas des faits énoncés par l'utilisateur : "
+    "ne les remplis que si une expertise technique est réellement utile, et "
+    "reste prudent, ces suggestions seront présentées comme telles."
+)
+
+RECIPE_ADAPT_TOOL = {
+    "name": "submit_recipe_adaptation",
+    "description": "Soumet les paramètres d'adaptation identifiés dans une demande en langage naturel.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "target_yield_pieces": {"type": ["integer", "null"]},
+            "target_piece_weight_g": {"type": ["number", "null"]},
+            "target_total_weight_g": {"type": ["number", "null"]},
+            "target_hydration_pct": {"type": ["number", "null"]},
+            "flour_percentage_changes": {
+                "type": "object",
+                "description": "nom de la farine (tel qu'il apparaît dans la recette) -> nouveau pourcentage boulanger",
+                "additionalProperties": {"type": "number"},
+            },
+            "ingredient_percentage_changes": {
+                "type": "object",
+                "description": "nom d'un ingrédient non-farine -> nouveau pourcentage boulanger",
+                "additionalProperties": {"type": "number"},
+            },
+            "substitutions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "from_name": {"type": "string", "description": "nom de l'ingrédient à remplacer, tel qu'il apparaît dans la recette"},
+                        "to_name": {"type": "string"},
+                        "suggested_quantity_g": {"type": ["number", "null"], "description": "Proposition d'ajustement de quantité, jamais une certitude."},
+                        "suggested_note": {"type": ["string", "null"], "description": "Courte explication de la proposition, si pertinente."},
+                    },
+                    "required": ["from_name", "to_name"],
+                },
+            },
+            "fermentation": {
+                "type": "object",
+                "properties": {
+                    "mentioned": {"type": "boolean"},
+                    "requested_description": {"type": ["string", "null"], "description": "Ce que l'utilisateur a demandé, tel quel."},
+                    "suggested_technical": {
+                        "type": "object",
+                        "properties": {key: {"type": ["string", "null"]} for key in SCAN_TECHNICAL_KEYS},
+                        "description": "Proposition de nouvelles valeurs pour ces champs de la fiche technique — jamais une certitude.",
+                    },
+                },
+                "required": ["mentioned"],
+            },
+        },
+        "required": [],
+    },
+}
+
+class RecipeAdaptTextInput(BaseModel):
+    text: str
+
+@api_router.post("/recipes/{recipe_id}/adapt/interpret")
+async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput, user: dict = Depends(get_current_user)):
+    """Traduit une demande en langage naturel en paramètres structurés —
+    jamais en quantités calculées. Le client fusionne ces paramètres dans
+    la même requête que les contrôles manuels, puis appelle /adapt/preview
+    (même moteur, quelle que soit l'origine des champs)."""
+    if not await db.recipes.find_one({"id": recipe_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Recette introuvable")
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1500,
+            system=ADAPT_SYSTEM_PROMPT,
+            tools=[RECIPE_ADAPT_TOOL],
+            tool_choice={"type": "tool", "name": "submit_recipe_adaptation"},
+            messages=[{"role": "user", "content": inp.text}],
+        )
+    except anthropic.APIError as e:
+        logger.error(f"Anthropic API error (adapt/interpret): {e}")
+        raise HTTPException(502, "L'interprétation est momentanément indisponible, réessaie dans un instant")
+
+    tool_use = next((b for b in response.content if b.type == "tool_use"), None)
+    if not tool_use:
+        raise HTTPException(502, "La demande n'a pas pu être interprétée, réessaie")
+    return tool_use.input
+
+class AdaptSubstitutionInput(BaseModel):
+    from_name: str
+    to_name: str
+    new_quantity: Optional[float] = None
+    new_unit: Optional[str] = None
+
+class RecipeAdaptRequest(BaseModel):
+    target_yield_pieces: Optional[int] = None
+    target_piece_weight_g: Optional[float] = None
+    target_total_weight_g: Optional[float] = None
+    target_hydration_pct: Optional[float] = None
+    flour_percentage_changes: Dict[str, float] = Field(default_factory=dict)
+    ingredient_percentage_changes: Dict[str, float] = Field(default_factory=dict)
+    substitutions: List[AdaptSubstitutionInput] = Field(default_factory=list)
+
+@api_router.post("/recipes/{recipe_id}/adapt/preview")
+async def preview_recipe_adaptation(recipe_id: str, inp: RecipeAdaptRequest, user: dict = Depends(get_current_user)):
+    """Calcule le résultat d'une adaptation — ne persiste rien, ne mute
+    jamais la recette d'origine. Une requête vide renvoie la recette
+    originale recalculée par le même chemin que n'importe quelle
+    adaptation, pour que la comparaison (§13 de la demande) compare deux
+    calculs homogènes plutôt qu'un chiffre stocké contre un chiffre
+    recalculé."""
+    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(404, "Recette introuvable")
+
+    request = inp.dict()
+    request["substitutions"] = [s.dict() for s in inp.substitutions]
+    result = recipe_adapt.apply_adaptation(
+        recipe.get("ingredients") or [], request, original_yield_pieces=recipe.get("yield_pieces"),
+    )
+    return result
 
 @api_router.post("/recipes/{recipe_id}/favorite")
 async def toggle_favorite(recipe_id: str, user: dict = Depends(get_current_user)):
