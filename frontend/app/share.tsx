@@ -29,18 +29,32 @@ export default function ShareRecipe() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
-  const params = useLocalSearchParams<{ prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string }>();
+  const params = useLocalSearchParams<{
+    prefillTitle?: string; prefillHydration?: string; prefillIngredients?: string; prefillDescription?: string;
+    // Ajoutés pour "Adapter la recette" — une adaptation prérempli plus de
+    // champs qu'un simple calcul (catégorie, famille, étapes...), jamais
+    // affichés différemment : ce sont les mêmes champs que la création
+    // manuelle, juste déjà remplis.
+    prefillSteps?: string; prefillCategory?: string; prefillFamily?: string;
+    prefillDifficulty?: string; prefillTime?: string; prefillYieldPieces?: string;
+    // Jamais un champ du formulaire, jamais affiché — uniquement reportés
+    // dans le payload de création. `prefillTechnical` (JSON) porte une
+    // suggestion de fermentation acceptée par l'utilisateur sur l'écran
+    // d'adaptation : ce formulaire n'a pas de champ dédié à la fiche
+    // technique, seul un aller-retour silencieux vers la création.
+    prefillAdaptedFromId?: string; prefillTechnical?: string;
+  }>();
   const [title, setTitle] = useState(params.prefillTitle || '');
-  const [category, setCategory] = useState('Pains');
+  const [category, setCategory] = useState(params.prefillCategory || 'Pains');
   const [families, setFamilies] = useState<Family[]>([]);
-  const [family, setFamily] = useState<string | null>(null);
-  const [difficulty, setDifficulty] = useState('Facile');
-  const [time, setTime] = useState('');
+  const [family, setFamily] = useState<string | null>(params.prefillFamily || null);
+  const [difficulty, setDifficulty] = useState(params.prefillDifficulty || 'Facile');
+  const [time, setTime] = useState(params.prefillTime || '');
   const [hydration, setHydration] = useState(params.prefillHydration || '');
-  const [yieldPieces, setYieldPieces] = useState('');
+  const [yieldPieces, setYieldPieces] = useState(params.prefillYieldPieces || '');
   const [description, setDescription] = useState(params.prefillDescription || '');
   const [ingredients, setIngredients] = useState(params.prefillIngredients || '');
-  const [steps, setSteps] = useState('');
+  const [steps, setSteps] = useState(params.prefillSteps || '');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -127,6 +141,8 @@ export default function ShareRecipe() {
           ingredients: ingredients.split('\n').map(s => s.trim()).filter(Boolean),
           steps: steps.split('\n').map(s => s.trim()).filter(Boolean),
           image_path: imagePath,
+          adapted_from_recipe_id: params.prefillAdaptedFromId || null,
+          technical: params.prefillTechnical ? JSON.parse(params.prefillTechnical) : null,
         }),
       });
       router.replace('/(tabs)/profile');
