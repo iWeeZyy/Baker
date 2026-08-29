@@ -12,6 +12,7 @@ import { AdsProvider } from "@/src/ads";
 import { TimerProvider } from "@/src/TimerContext";
 import { ThemeProvider, useTheme } from "@/src/ThemeContext";
 import TimerBar from "@/src/TimerBar";
+import { UnlockToast } from "@/src/gamification/UnlockToast";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +29,7 @@ function AppShell() {
           <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
           <TimerBar />
+          <UnlockToast />
         </TimerProvider>
       </AdsProvider>
     </AuthProvider>

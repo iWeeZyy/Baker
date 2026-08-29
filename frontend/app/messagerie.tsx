@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
 import { formatRelativeDate } from '@/src/relativeDate';
@@ -12,6 +13,7 @@ import { subscribeRealtime } from '@/src/realtime';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type Peer = { user_id: string; name: string; picture?: string | null };
 type Conversation = { peer: Peer; last_message: { content: string; type: string; from_me: boolean; created_at: string } | null; unread: number };
@@ -19,11 +21,12 @@ type Conversation = { peer: Peer; last_message: { content: string; type: string;
 type NotifType =
   | 'new_follower' | 'new_recipe' | 'new_creation'
   | 'new_friend_request' | 'friend_request_accepted'
-  | 'new_comment' | 'new_comment_reply' | 'new_like';
+  | 'new_comment' | 'new_comment_reply' | 'new_like'
+  | 'level_up' | 'badge_unlocked';
 
 type Notification = {
   id: string; type: NotifType; actor_id: string; actor_name?: string | null; target_id?: string | null;
-  data?: { recipe_id?: string; comment_id?: string; content_kind?: 'recipe' | 'creation' } | null;
+  data?: { recipe_id?: string; comment_id?: string; content_kind?: 'recipe' | 'creation'; level?: number; title?: string; name?: string; icon?: string } | null;
   count?: number; read: boolean; created_at: string;
 };
 
@@ -34,6 +37,7 @@ const ICONS: Record<NotifType, keyof typeof Feather.glyphMap> = {
   new_follower: 'user-plus', new_recipe: 'book-open', new_creation: 'camera',
   new_friend_request: 'users', friend_request_accepted: 'user-check',
   new_comment: 'message-circle', new_comment_reply: 'corner-up-left', new_like: 'heart',
+  level_up: 'trending-up', badge_unlocked: 'award',
 };
 
 function label(n: Notification): string {
@@ -52,6 +56,8 @@ function label(n: Notification): string {
       if (extra > 0) return `${name} et ${extra} autre${extra > 1 ? 's' : ''} ont aimé votre ${kind}.`;
       return `${name} a aimé votre ${kind}.`;
     }
+    case 'level_up': return `Niveau supérieur ! Niveau ${n.data?.level} — ${n.data?.title}.`;
+    case 'badge_unlocked': return `Vous avez obtenu le badge « ${n.data?.name} ».`;
   }
 }
 
@@ -59,6 +65,7 @@ export default function Messagerie() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<'messages' | 'activity'>(tabParam === 'activity' ? 'activity' : 'messages');
 
@@ -152,6 +159,10 @@ export default function Messagerie() {
       router.push(`/recipe/${n.data.recipe_id}?tab=community&highlightComment=${n.data.comment_id}` as any);
     } else if (n.type === 'new_like' && n.target_id) {
       router.push((n.data?.content_kind === 'creation' ? `/creation/${n.target_id}` : `/recipe/${n.target_id}`) as any);
+    } else if (n.type === 'badge_unlocked' && n.target_id) {
+      router.push(`/badge/${n.target_id}` as any);
+    } else if (n.type === 'level_up') {
+      router.push('/(tabs)/profile' as any);
     }
   };
 
@@ -159,9 +170,11 @@ export default function Messagerie() {
     if (!n.target_id || respondingId) return;
     setRespondingId(n.id);
     try {
-      await api(`/friends/requests/${n.target_id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
+      const res = await api(`/friends/requests/${n.target_id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
       setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
       api(`/notifications/${n.id}/read`, { method: 'POST' }).catch(() => {});
+      showGamificationToast(res.gamification);
+      refreshUser();
     } catch (e) { console.warn(e); }
     finally { setRespondingId(null); }
   };

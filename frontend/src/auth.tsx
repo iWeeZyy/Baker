@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { api, saveToken, getToken, clearToken, setInMemoryToken } from './api';
 import { disconnectRealtime } from './realtime';
 import { syncWidgetData, clearWidgetData } from './widgetData';
+import type { LevelDetail } from './gamification/types';
 
 export type User = {
   user_id: string;
@@ -16,6 +17,7 @@ export type User = {
   notify_new_follower?: boolean;
   notify_new_recipe?: boolean;
   notify_new_creation?: boolean;
+  level_detail?: LevelDetail;
 };
 
 type AuthCtx = {

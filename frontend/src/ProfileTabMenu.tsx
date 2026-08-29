@@ -24,7 +24,7 @@ const TAB_BAR_HEIGHT = 82;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
-  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections';
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges';
   showBadge?: boolean;
   // Pastille numérique (Amis, Messagerie) — différente du simple point
   // showBadge, réutilise le style déjà existant du badge de la cloche
@@ -51,7 +51,8 @@ export function ProfileTabButton() {
   // nécessaire pour que le bouton reste actif une fois entré dans une
   // collection, pas seulement sur la grille "Mes collections".
   const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following'
-    || pathname === '/classement' || pathname === '/messagerie' || pathname.startsWith('/collections');
+    || pathname === '/classement' || pathname === '/messagerie' || pathname.startsWith('/collections')
+    || pathname.startsWith('/badges') || pathname.startsWith('/badge/');
 
   const loadBadges = () => {
     // Un seul appel pour les deux compteurs de Messagerie (conversations +
@@ -102,6 +103,9 @@ export function ProfileTabButton() {
     // Ni `showBadge` ni `badgeCount` : pas de pastille sur Collections par
     // défaut, à la différence d'Amis/Messagerie — décision explicite.
     { key: 'collections', label: 'Collections', icon: 'folder', route: '/collections' },
+    // "star" plutôt que "award" (déjà pris par Classement) — pas de pastille
+    // ici non plus, aucun compteur "non lu" pertinent pour des badges.
+    { key: 'badges', label: 'Mes badges', icon: 'star', route: '/badges' },
   ];
 
   const select = (item: MenuItem) => {

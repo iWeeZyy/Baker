@@ -10,8 +10,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type Row = { id: string; name: string; recipe_count: number; in_collection: boolean };
 
@@ -26,6 +28,7 @@ export function AddToCollectionModal({
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { refreshUser } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -63,6 +66,8 @@ export function AddToCollectionModal({
       setRows(prev => [{ id: created.id, name: created.name, recipe_count: 1, in_collection: true }, ...prev]);
       setNewName('');
       setCreating(false);
+      showGamificationToast(created.gamification);
+      refreshUser();
     } catch {}
   };
 

@@ -9,9 +9,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { ActionSheet } from '@/src/ActionSheet';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 const CREATION_CATEGORIES = ['Pain', 'Viennoiserie', 'Pâtisserie', 'Traiteur', 'Autre'];
 const DESCRIPTION_MAX_LENGTH = 500;
@@ -36,6 +38,7 @@ export default function CreationForm() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
 
@@ -166,6 +169,8 @@ export default function CreationForm() {
       const saved = isEdit
         ? await api(`/creations/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
         : await api('/creations', { method: 'POST', body: JSON.stringify(payload) });
+      showGamificationToast(saved.gamification);
+      refreshUser();
       router.replace(`/creation/${saved.id}` as any);
     } catch (e: any) {
       setError(e.message || 'Publication impossible.');

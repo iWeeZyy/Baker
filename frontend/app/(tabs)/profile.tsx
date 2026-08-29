@@ -15,6 +15,8 @@ import { recipeImageSource } from '@/src/products';
 import { formatRelativeDate } from '@/src/relativeDate';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ProgressBar } from '@/src/gamification/ProgressBar';
+import type { Badge } from '@/src/gamification/types';
 
 const BIO_MAX_LENGTH = 300;
 const PROFESSION_MAX_LENGTH = 60;
@@ -61,6 +63,8 @@ export default function Profile() {
   const [stats, setStats] = useState({ recipe_count: 0, comment_count: 0, total_likes: 0, follower_count: 0, following_count: 0 });
   const [unreadCount, setUnreadCount] = useState(0);
   const [collectionsCount, setCollectionsCount] = useState(0);
+  const [badgesPreview, setBadgesPreview] = useState<Badge[]>([]);
+  const [badgesCount, setBadgesCount] = useState(0);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -81,6 +85,10 @@ export default function Profile() {
       // (__favorites__), toujours en tête de la réponse — seules les
       // collections que l'utilisateur a réellement créées comptent ici.
       setCollectionsCount(Array.isArray(cols) ? cols.filter((c2: any) => c2.id !== '__favorites__').length : 0);
+      if (p) {
+        setBadgesPreview(p.badges_preview || []);
+        setBadgesCount(p.badge_count || 0);
+      }
     } catch (e) { console.warn(e); }
     finally { setLoading(false); }
   }, [user]);
@@ -350,6 +358,40 @@ export default function Profile() {
             </Text>
             <Feather name="chevron-right" size={15} color={colors.muted} />
           </Pressable>
+        )}
+
+        {!editingProfile && user?.level_detail && (
+          <View testID="progression-card" style={styles.progressionCard}>
+            <View style={styles.progressionHeader}>
+              <Text style={styles.progressionTitle}>
+                🥖 Niveau {user.level_detail.level} — {user.level_detail.title}
+              </Text>
+            </View>
+            <ProgressBar
+              ratio={user.level_detail.xp_for_next_level ? user.level_detail.xp_into_level / user.level_detail.xp_for_next_level : 1}
+            />
+            <Text style={styles.progressionXp}>
+              {user.level_detail.xp_for_next_level != null
+                ? `${user.level_detail.xp_into_level} / ${user.level_detail.xp_for_next_level} XP · ${user.level_detail.xp_remaining} XP avant le niveau ${user.level_detail.level + 1}`
+                : `${user.level_detail.xp} XP · niveau maximum atteint`}
+            </Text>
+          </View>
+        )}
+
+        {!editingProfile && badgesPreview.length > 0 && (
+          <View style={styles.badgesRow}>
+            <Text style={styles.badgesRowLabel}>Badges</Text>
+            <View style={styles.badgesIcons}>
+              {badgesPreview.map((b) => (
+                <Pressable key={b.id} testID={`badge-preview-${b.id}`} onPress={() => router.push(`/badge/${b.id}` as any)} style={styles.badgeIconWrap}>
+                  <Text style={styles.badgeIcon}>{b.icon}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable testID="badges-see-all" onPress={() => router.push('/badges' as any)}>
+              <Text style={styles.badgesSeeAll}>Voir tout ({badgesCount})</Text>
+            </Pressable>
+          </View>
         )}
 
         <View style={styles.avatarLinksRow}>
@@ -717,6 +759,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // d'entrée principal.
   collectionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
   collectionsRowText: { flex: 1, fontSize: 13, color: colors.muted },
+  progressionCard: { marginTop: 16, padding: 14, borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary },
+  progressionHeader: { marginBottom: 8 },
+  progressionTitle: { fontSize: 14, fontWeight: '700', color: colors.onSurface },
+  progressionXp: { fontSize: 12, color: colors.muted, marginTop: 8 },
+  badgesRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  badgesRowLabel: { fontSize: 13, fontWeight: '600', color: colors.onSurfaceSecondary },
+  badgesIcons: { flex: 1, flexDirection: 'row', gap: 6 },
+  badgeIconWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+  badgeIcon: { fontSize: 16 },
+  badgesSeeAll: { fontSize: 12, color: colors.brand, fontWeight: '600' },
   statVal: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   statLabel: { fontSize: 10, letterSpacing: 1, color: colors.muted, fontWeight: '600', marginTop: 2 },
   statDivider: { width: 1, height: 28, backgroundColor: colors.border },
