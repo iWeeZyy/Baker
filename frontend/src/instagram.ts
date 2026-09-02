@@ -53,7 +53,7 @@ export function instagramProfileUrl(username: string): string {
  * plusieurs années (plus rien ne garantit son format), et le vérifier via
  * `Linking.canOpenURL` échoue silencieusement de toute façon tant que
  * `instagram` n'est pas déclaré dans `LSApplicationQueriesSchemes` côté iOS
- * — ce qui faisait rester l'utilisateur dans Bakers au lieu de basculer
+ * — ce qui faisait rester l'utilisateur dans Levanea au lieu de basculer
  * vers Instagram. instagram.com gère les Universal Links (iOS) / App Links
  * (Android) : ouvrir ce lien https suffit à ce que le système bascule
  * lui-même vers l'app Instagram si elle est installée, sinon le navigateur

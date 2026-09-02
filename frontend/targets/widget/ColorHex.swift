@@ -17,5 +17,5 @@ extension Color {
         self.init(red: r, green: g, blue: b)
     }
 
-    static let bakersBrand = Color(hex: "#C05A35")
+    static let brand = Color(hex: "#C05A35")
 }

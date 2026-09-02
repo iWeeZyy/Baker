@@ -1,5 +1,5 @@
 Pod::Spec.new do |s|
-  s.name           = 'BakersLiveActivity'
+  s.name           = 'LevaneaLiveActivity'
   s.version        = '1.0.0'
   s.summary        = 'Local Live Activity bridge for the current bake step'
   s.description    = 'Local Live Activity bridge for the current bake step'

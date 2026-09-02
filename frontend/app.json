@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "Bakers",
-    "slug": "bakers",
+    "name": "Levanea",
+    "slug": "levanea",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bakers",
+    "scheme": "levanea",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lucasmorey.bakers",
+      "bundleIdentifier": "com.lucasmorey.levanea",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choisir une photo pour votre recette",
         "NSCameraUsageDescription": "Prendre une photo de votre recette",
         "NSPhotoLibraryAddUsageDescription": "Enregistrer l'emploi du temps de votre équipe dans vos photos"
       },
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.lucasmorey.bakers"]
+        "com.apple.security.application-groups": ["group.com.lucasmorey.levanea"]
       }
     },
     "android": {
@@ -26,7 +26,7 @@
         "backgroundColor": "#FAF8F5"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.lucasmorey.bakers",
+      "package": "com.lucasmorey.levanea",
       "permissions": [
         "READ_MEDIA_IMAGES",
         "VIBRATE",

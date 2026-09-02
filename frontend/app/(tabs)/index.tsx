@@ -68,7 +68,7 @@ export default function Home() {
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         <View style={styles.header}>
-          <Text style={styles.brandLabel}>BAKERS</Text>
+          <Text style={styles.brandLabel}>LEVANEA</Text>
           <Text style={styles.headerTitle} testID="home-greeting">{user?.name ? `Bonjour ${user.name} 👋` : 'Bonjour, boulanger'}</Text>
         </View>
 

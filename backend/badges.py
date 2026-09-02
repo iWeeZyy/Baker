@@ -120,7 +120,7 @@ BADGES: List[dict] = [
     {"id": "streak_14", "name": "Assidu", "description": "Être actif 14 jours consécutifs.",
      "category": "regularite", "icon": "🔥", "rarity": "epique", "hidden": False,
      "requirement": {"kind": "special_counter", "field": "current_streak", "threshold": 14}},
-    {"id": "night_owl", "name": "Nocturne", "description": "Effectuer une action sur Bakers entre minuit et 5h du matin.",
+    {"id": "night_owl", "name": "Nocturne", "description": "Effectuer une action sur Levanea entre minuit et 5h du matin.",
      "category": "regularite", "icon": "🌙", "rarity": "rare", "hidden": True,
      "requirement": {"kind": "hidden_time_window", "hour_start": 0, "hour_end": 5}},
 ]

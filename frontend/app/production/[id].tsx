@@ -12,7 +12,7 @@ import { useTimer } from '@/src/TimerContext';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { syncWidgetData } from '@/src/widgetData';
-import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/bakers-live-activity';
+import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/levanea-live-activity';
 
 type Line = {
   line_id: string;

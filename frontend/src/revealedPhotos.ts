@@ -14,7 +14,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = 'bakers_revealed_photo_ids';
+const KEY = 'levanea_revealed_photo_ids';
 const MAX_ENTRIES = 500;
 
 let cache: string[] | null = null;

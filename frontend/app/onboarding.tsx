@@ -21,7 +21,7 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     icon: 'sunrise',
-    title: 'Bienvenue sur Bakers',
+    title: 'Bienvenue sur Levanea',
     subtitle: 'L’application pensée pour les artisans boulangers et pâtissiers.',
   },
   {
@@ -50,13 +50,13 @@ const SLIDES: Slide[] = [
   },
   {
     icon: 'user',
-    title: 'Construisez votre profil Bakers',
+    title: 'Construisez votre profil Levanea',
     subtitle: 'Montrez votre travail et suivez votre progression.',
     bullets: ['Photo et description', 'Instagram', 'Recettes, créations, collections', 'Badges et niveau'],
   },
   {
     icon: 'check-circle',
-    title: 'Prêt à découvrir Bakers ?',
+    title: 'Prêt à découvrir Levanea ?',
     subtitle: 'Créez votre compte pour commencer, ou jetez un premier coup d’œil.',
   },
 ];

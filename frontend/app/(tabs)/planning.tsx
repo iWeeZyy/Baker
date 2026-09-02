@@ -12,7 +12,7 @@ import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
-import { endBakeActivity } from '@/modules/bakers-live-activity';
+import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { syncWidgetData } from '@/src/widgetData';
 
 type ProductionRow = {
@@ -243,7 +243,7 @@ export default function Planning() {
               <Text style={styles.emptyTitle}>Aucun emploi du temps</Text>
               <Text style={styles.emptyText}>
                 Planifiez la semaine de votre équipe :{'\n'}
-                Bakers calcule les heures de chacun et le total.
+                Levanea calcule les heures de chacun et le total.
               </Text>
             </View>
           ) : (
@@ -286,7 +286,7 @@ export default function Planning() {
             <Text style={styles.emptyTitle}>Aucune production planifiée</Text>
             <Text style={styles.emptyText}>
               Préparez votre journée : choisissez vos recettes et vos quantités,{'\n'}
-              Bakers calcule les ingrédients et les horaires.
+              Levanea calcule les ingrédients et les horaires.
             </Text>
           </View>
         ) : (

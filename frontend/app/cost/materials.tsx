@@ -69,7 +69,7 @@ export default function RawMaterials() {
           <Text style={styles.emptyTitle}>Aucune matière première</Text>
           <Text style={styles.emptyText}>
             Enregistrez vos prix d&apos;achat : farine, beurre, sucre…{'\n'}
-            Bakers calcule le prix au kilo, au litre ou à la pièce.
+            Levanea calcule le prix au kilo, au litre ou à la pièce.
           </Text>
           <Pressable testID="materials-add-empty" onPress={() => router.push('/cost/material-form')} style={styles.addBtn}>
             <Feather name="plus" size={16} color={colors.onBrandPrimary} />

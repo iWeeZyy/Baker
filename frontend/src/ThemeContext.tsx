@@ -16,7 +16,7 @@ import { DARK_COLORS, LIGHT_COLORS, type ThemeColors } from './theme';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type ThemeMode = 'light' | 'dark';
 
-const KEY = 'bakers_theme_preference';
+const KEY = 'levanea_theme_preference';
 
 type ThemeCtx = {
   colors: ThemeColors;

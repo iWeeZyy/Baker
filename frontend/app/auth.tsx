@@ -41,7 +41,7 @@ export default function AuthScreen() {
           <Image source={require('../assets/images/auth-hero.jpg')} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={['transparent', 'rgba(42,31,26,0.85)']} style={StyleSheet.absoluteFillObject} />
           <View style={styles.heroContent}>
-            <Text style={styles.brandLabel}>BAKERS</Text>
+            <Text style={styles.brandLabel}>LEVANEA</Text>
             <Text style={styles.heroTitle}>L'art de la boulangerie française</Text>
           </View>
         </View>

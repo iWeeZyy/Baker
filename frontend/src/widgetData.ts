@@ -1,6 +1,6 @@
 /**
  * Instantané "production du jour" partagé avec le widget iOS (WidgetKit),
- * via l'App Group `group.com.lucasmorey.bakers` et le module `ExtensionStorage`
+ * via l'App Group `group.com.lucasmorey.levanea` et le module `ExtensionStorage`
  * fourni par `@bacons/apple-targets`. Aucune donnée parallèle : ce fichier ne
  * fait que relire les mêmes routes et appliquer les mêmes règles d'heure et
  * de quantité que `app/production/[id].tsx`, jamais un calcul inventé.
@@ -14,7 +14,7 @@ import { Platform } from 'react-native';
 import { ExtensionStorage } from '@bacons/apple-targets';
 import { api } from './api';
 
-const APP_GROUP = 'group.com.lucasmorey.bakers';
+const APP_GROUP = 'group.com.lucasmorey.levanea';
 const STORAGE_KEY = 'widgetData';
 
 export type WidgetProductionItem = {

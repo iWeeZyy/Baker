@@ -140,7 +140,7 @@ export default function SignupScreen() {
       if (!perm.canAskAgain) {
         Alert.alert(
           kind === 'camera' ? 'Accès à la caméra refusé' : 'Accès à la photothèque refusé',
-          `Autorisez l'accès dans Réglages › Bakers › ${kind === 'camera' ? 'Appareil photo' : 'Photos'}.`,
+          `Autorisez l'accès dans Réglages › Levanea › ${kind === 'camera' ? 'Appareil photo' : 'Photos'}.`,
           [{ text: 'Annuler', style: 'cancel' }, { text: 'Ouvrir Réglages', onPress: () => Linking.openSettings() }],
         );
       } else {
@@ -311,7 +311,7 @@ export default function SignupScreen() {
           {phase === 'username' && (
             <>
               <Text style={styles.title}>Choisissez votre nom d’utilisateur</Text>
-              <Text style={styles.subtitle}>Il vous identifiera sur Bakers</Text>
+              <Text style={styles.subtitle}>Il vous identifiera sur Levanea</Text>
               <View style={styles.usernameRow}>
                 <Text style={styles.usernameAt}>@</Text>
                 <TextInput
@@ -390,7 +390,7 @@ export default function SignupScreen() {
           {phase === 'instagram' && (
             <>
               <Text style={styles.title}>Votre Instagram</Text>
-              <Text style={styles.subtitle}>Partagez votre Instagram avec la communauté Bakers.</Text>
+              <Text style={styles.subtitle}>Partagez votre Instagram avec la communauté Levanea.</Text>
               <TextInput
                 testID="signup-instagram"
                 value={instagram}
@@ -487,7 +487,7 @@ export default function SignupScreen() {
       <View style={styles.footer}>
         {phase === 'review' ? (
           <Pressable testID="signup-finish" onPress={finalize} disabled={submitting} style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}>
-            {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Commencer avec Bakers</Text>}
+            {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Commencer avec Levanea</Text>}
           </Pressable>
         ) : (
           <Pressable
