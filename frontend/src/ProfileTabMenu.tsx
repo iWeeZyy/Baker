@@ -20,7 +20,7 @@ import { api } from '@/src/api';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
-const TAB_BAR_HEIGHT = 82;
+const TAB_BAR_HEIGHT = 88;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
@@ -158,10 +158,10 @@ export function ProfileTabButton() {
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  iconWrap: { position: 'relative' },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5, gap: 4 },
+  iconWrap: { position: 'relative', height: 28, alignItems: 'center', justifyContent: 'center' },
   tabDot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 999, backgroundColor: colors.brand },
-  tabLabel: { fontSize: 11, letterSpacing: 0.5, fontWeight: '500' },
+  tabLabel: { fontSize: 11, lineHeight: 14, letterSpacing: 0.5, fontWeight: '500' },
   backdrop: { flex: 1 },
   menu: {
     position: 'absolute', right: 16, bottom: TAB_BAR_HEIGHT + 8, width: 200,

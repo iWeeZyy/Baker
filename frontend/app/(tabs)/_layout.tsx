@@ -29,11 +29,11 @@ export default function TabsLayout() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 82,
+          height: 88,
           paddingTop: 8,
           paddingBottom: 24,
         },
-        tabBarLabelStyle: { fontSize: 11, letterSpacing: 0.5, fontWeight: '500' },
+        tabBarLabelStyle: { fontSize: 11, lineHeight: 14, letterSpacing: 0.5, fontWeight: '500' },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Accueil', tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} /> }} />
