@@ -402,6 +402,28 @@ export default function RecipeDetail() {
     [recipe, quantity],
   );
 
+  // Tri + regroupement des commentaires, mémorisés à part : sans ça, taper
+  // dans le composeur de commentaire (state sur ce même composant) refiltrait
+  // et retriait toute la liste à chaque frappe.
+  const sortedRootComments = useMemo(() => {
+    const roots = comments.filter(c => !c.parent_id);
+    return [...roots].sort((a, b) => {
+      if (commentSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (commentSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }, [comments, commentSort]);
+
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, Comment[]>();
+    for (const c of comments) {
+      if (!c.parent_id) continue;
+      const arr = map.get(c.parent_id);
+      if (arr) arr.push(c); else map.set(c.parent_id, [c]);
+    }
+    return map;
+  }, [comments]);
+
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
   // Téléversement, puis photo du produit, puis dessin d'archétype, puis rien.
@@ -648,13 +670,8 @@ export default function RecipeDetail() {
               )}
 
               {(() => {
-                const roots = comments.filter(c => !c.parent_id);
-                const repliesFor = (pid: string) => comments.filter(c => c.parent_id === pid);
-                const sortedRoots = [...roots].sort((a, b) => {
-                  if (commentSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-                  if (commentSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                  return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                });
+                const sortedRoots = sortedRootComments;
+                const repliesFor = (pid: string) => repliesByParent.get(pid) || [];
                 if (sortedRoots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
 
                 const renderActions = (c: Comment, rootId: string) => (

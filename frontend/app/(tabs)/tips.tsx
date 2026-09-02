@@ -18,25 +18,16 @@ const CATEGORIES = [
 ];
 
 /**
- * La bibliothèque « Astuces » : toutes les astuces de l'application (les
- * originales, celles des deux ouvrages, migrées vers ce même écran) plutôt
- * que dispersées entre l'accueil et les fiches recette.
+ * Composant de module, pas défini dans le corps de `Tips` : sinon son
+ * identité changerait à chaque rendu de l'écran (recherche tapée,
+ * catégorie choisie, favori togglé...) et React démonterait/remonterait
+ * chaque carte visible au lieu de simplement la re-rendre.
  */
-export default function Tips() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  // Une valeur par astuce, sur la durée de vie de l'écran plutôt que de
-  // TipCard (redéfini à chaque rendu) : sans ça l'animation n'aurait
-  // jamais le temps de jouer avant que React ne remonte la carte.
-  const favScales = useRef<Map<string, Animated.Value>>(new Map());
-  const getFavScale = (id: string) => {
-    let v = favScales.current.get(id);
-    if (!v) { v = new Animated.Value(1); favScales.current.set(id, v); }
-    return v;
-  };
-
-  const TipCard = ({ tip, favorited, onToggleFavorite, onPress }: { tip: Tip; favorited: boolean; onToggleFavorite: () => void; onPress: () => void }) => (
+function TipCard({ tip, favorited, scale, colors, styles, onToggleFavorite, onPress }: {
+  tip: Tip; favorited: boolean; scale: Animated.Value; colors: ThemeColors; styles: ReturnType<typeof makeStyles>;
+  onToggleFavorite: () => void; onPress: () => void;
+}) {
+  return (
     <Pressable testID={`tip-card-${tip.id}`} onPress={onPress} style={styles.card}>
       <View style={styles.cardIcon}>
         <Feather name={(tip.icon as any) || 'star'} size={18} color={colors.brand} />
@@ -57,12 +48,32 @@ export default function Tips() {
         )}
       </View>
       <Pressable testID={`tip-fav-${tip.id}`} onPress={onToggleFavorite} hitSlop={10} style={styles.favBtn}>
-        <Animated.View style={{ transform: [{ scale: getFavScale(tip.id) }] }}>
+        <Animated.View style={{ transform: [{ scale }] }}>
           <Feather name="star" size={18} color={favorited ? colors.brandSecondary : colors.border} />
         </Animated.View>
       </Pressable>
     </Pressable>
   );
+}
+
+/**
+ * La bibliothèque « Astuces » : toutes les astuces de l'application (les
+ * originales, celles des deux ouvrages, migrées vers ce même écran) plutôt
+ * que dispersées entre l'accueil et les fiches recette.
+ */
+export default function Tips() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Une valeur par astuce, sur la durée de vie de l'écran plutôt que du
+  // rendu courant : sans ça l'animation n'aurait jamais le temps de jouer
+  // avant que React ne re-rende la carte.
+  const favScales = useRef<Map<string, Animated.Value>>(new Map());
+  const getFavScale = (id: string) => {
+    let v = favScales.current.get(id);
+    if (!v) { v = new Animated.Value(1); favScales.current.set(id, v); }
+    return v;
+  };
 
   const router = useRouter();
   const [tips, setTips] = useState<Tip[]>([]);
@@ -209,7 +220,15 @@ export default function Tips() {
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 40, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
           renderItem={({ item }) => (
-            <TipCard tip={item} favorited={favoriteIds.has(item.id)} onToggleFavorite={() => toggleFavorite(item)} onPress={() => router.push(`/tip/${item.id}`)} />
+            <TipCard
+              tip={item}
+              favorited={favoriteIds.has(item.id)}
+              scale={getFavScale(item.id)}
+              colors={colors}
+              styles={styles}
+              onToggleFavorite={() => toggleFavorite(item)}
+              onPress={() => router.push(`/tip/${item.id}`)}
+            />
           )}
         />
       )}
