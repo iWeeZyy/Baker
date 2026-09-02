@@ -124,7 +124,7 @@ export function ProfileTabButton() {
           </View>
           {hasAnyBadge && <View style={styles.tabDot} />}
         </View>
-        <Text style={[styles.tabLabel, { color: active ? colors.brand : colors.muted }]}>
+        <Text style={[styles.tabLabel, { color: active ? colors.brand : colors.muted }]} allowFontScaling={false} numberOfLines={1}>
           {`Profil ${menuOpen ? '▴' : '▾'}`}
         </Text>
       </Pressable>
@@ -160,7 +160,7 @@ export function ProfileTabButton() {
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5, gap: 4 },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5 },
   iconWrap: { position: 'relative', height: 28, alignItems: 'center', justifyContent: 'center' },
   // Contour permanent (pas seulement à l'état actif) : Profil regroupe des
   // sections importantes (Amis, Abonnements, Classement, Messagerie,
