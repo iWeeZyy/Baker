@@ -45,13 +45,14 @@ export function Button({
       testID={testID}
       onPress={onPress}
       disabled={isDisabled}
-      style={[
+      style={({ pressed }) => [
         styles.base,
         variant === 'primary' && styles.primary,
         variant === 'secondary' && styles.secondary,
         variant === 'text' && styles.text,
         fullWidth && styles.fullWidth,
         isDisabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
         style,
       ]}
     >
@@ -74,5 +75,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   text: { backgroundColor: 'transparent', paddingVertical: 10, paddingHorizontal: 8 },
   fullWidth: { alignSelf: 'stretch' },
   disabled: { opacity: 0.6 },
+  pressed: { opacity: 0.75 },
   label: { fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
 });

@@ -10,6 +10,7 @@ import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
+import { tapFeedback } from '@/src/haptics';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
 import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
@@ -287,6 +288,7 @@ export default function RecipeDetail() {
     setLikes(optimistic);
     setLikePending(true);
     if (optimistic.liked) {
+      tapFeedback();
       Animated.sequence([
         Animated.timing(likeScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
         Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
@@ -348,6 +350,8 @@ export default function RecipeDetail() {
 
   const toggleCommentLike = async (commentId: string) => {
     const previous = comments;
+    const wasLiked = comments.find(c => c.id === commentId)?.liked;
+    if (!wasLiked) tapFeedback();
     setComments(prev => prev.map(c => c.id === commentId
       ? { ...c, liked: !c.liked, like_count: (c.like_count || 0) + (c.liked ? -1 : 1) }
       : c));

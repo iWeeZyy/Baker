@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
+import { tapFeedback } from '@/src/haptics';
 import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
@@ -72,6 +73,7 @@ export default function BakerProfile() {
     if (followLoading) return;
     setFollowLoading(true);
     const prev = { following: data.following, follower_count: data.follower_count };
+    if (!prev.following) tapFeedback();
     // Optimistic : le bouton change d'état immédiatement, corrigé si l'appel échoue.
     setData((d: any) => ({ ...d, following: !d.following, follower_count: d.follower_count + (d.following ? -1 : 1) }));
     try {

@@ -18,7 +18,15 @@ export function Chip({ label, active, onPress, tone = 'inverse', testID }: { lab
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <Pressable testID={testID} onPress={onPress} style={[styles.chip, active && (tone === 'brand' ? styles.chipActiveBrand : styles.chipActiveInverse)]}>
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        active && (tone === 'brand' ? styles.chipActiveBrand : styles.chipActiveInverse),
+        pressed && styles.pressed,
+      ]}
+    >
       <Text style={[styles.chipText, active && (tone === 'brand' ? styles.chipTextActiveBrand : styles.chipTextActiveInverse)]}>{label}</Text>
     </Pressable>
   );
@@ -26,6 +34,7 @@ export function Chip({ label, active, onPress, tone = 'inverse', testID }: { lab
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignSelf: 'flex-start' },
+  pressed: { opacity: 0.7 },
   chipActiveInverse: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
   chipActiveBrand: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },

@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Animated, View, Text, TextInput, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { filterTips, pickRandomTip, summarize, type Tip } from '@/src/tips/tipsS
 import { Chip } from '@/src/Chip';
 import { SegmentedControl } from '@/src/SegmentedControl';
 import { EmptyState } from '@/src/EmptyState';
+import { tapFeedback } from '@/src/haptics';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -24,6 +25,16 @@ const CATEGORIES = [
 export default function Tips() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Une valeur par astuce, sur la durée de vie de l'écran plutôt que de
+  // TipCard (redéfini à chaque rendu) : sans ça l'animation n'aurait
+  // jamais le temps de jouer avant que React ne remonte la carte.
+  const favScales = useRef<Map<string, Animated.Value>>(new Map());
+  const getFavScale = (id: string) => {
+    let v = favScales.current.get(id);
+    if (!v) { v = new Animated.Value(1); favScales.current.set(id, v); }
+    return v;
+  };
 
   const TipCard = ({ tip, favorited, onToggleFavorite, onPress }: { tip: Tip; favorited: boolean; onToggleFavorite: () => void; onPress: () => void }) => (
     <Pressable testID={`tip-card-${tip.id}`} onPress={onPress} style={styles.card}>
@@ -46,7 +57,9 @@ export default function Tips() {
         )}
       </View>
       <Pressable testID={`tip-fav-${tip.id}`} onPress={onToggleFavorite} hitSlop={10} style={styles.favBtn}>
-        <Feather name="star" size={18} color={favorited ? colors.brandSecondary : colors.border} />
+        <Animated.View style={{ transform: [{ scale: getFavScale(tip.id) }] }}>
+          <Feather name="star" size={18} color={favorited ? colors.brandSecondary : colors.border} />
+        </Animated.View>
       </Pressable>
     </Pressable>
   );
@@ -91,6 +104,14 @@ export default function Tips() {
       if (willFavorite) next.add(tip.id); else next.delete(tip.id);
       return next;
     });
+    if (willFavorite) {
+      tapFeedback();
+      const scale = getFavScale(tip.id);
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
+      ]).start();
+    }
     try {
       await api(`/tips/${tip.id}/favorite`, { method: 'POST' });
     } catch {

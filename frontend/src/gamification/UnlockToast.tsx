@@ -19,6 +19,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { subscribeRealtime } from '@/src/realtime';
+import { successFeedback } from '@/src/haptics';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import type { GamificationResult } from './types';
@@ -82,6 +83,7 @@ export function UnlockToast() {
 
   useEffect(() => {
     if (!current) return;
+    successFeedback();
     Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     dismissTimer.current = setTimeout(dismiss, AUTO_DISMISS_MS);
     return () => { if (dismissTimer.current) clearTimeout(dismissTimer.current); };
