@@ -127,6 +127,7 @@ export default function Recipes() {
         onClose={() => setCreateMenuOpen(false)}
         options={[
           { key: 'scan', icon: 'camera', label: 'Scanner une recette', onPress: () => router.push('/scan') },
+          { key: 'instagram', icon: 'instagram', label: 'Importer depuis Instagram', onPress: () => router.push('/instagram-import') },
           { key: 'manual', icon: 'edit-2', label: 'Créer manuellement', onPress: () => router.push('/share') },
         ]}
       />
