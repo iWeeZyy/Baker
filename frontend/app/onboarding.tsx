@@ -85,7 +85,7 @@ export default function Onboarding() {
     setIndex(i);
   };
 
-  const skip = async () => {
+  const goToLogin = async () => {
     await finishOnboarding();
     router.replace('/auth');
   };
@@ -102,14 +102,12 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {!isLast && (
-        <View style={styles.topRow}>
-          <View />
-          <Pressable testID="onboarding-skip" onPress={skip} hitSlop={10}>
-            <Text style={styles.skipText}>Passer</Text>
-          </Pressable>
-        </View>
-      )}
+      <View style={styles.topRow}>
+        <View />
+        <Pressable testID="onboarding-login" onPress={goToLogin} hitSlop={10}>
+          <Text style={styles.loginText}>Se connecter</Text>
+        </Pressable>
+      </View>
 
       <ScrollView
         ref={scrollRef}
@@ -165,7 +163,7 @@ export default function Onboarding() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, height: 40 },
-  skipText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
+  loginText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
   slide: { flex: 1, alignItems: 'center', paddingHorizontal: 32, paddingTop: 24 },
   iconCircle: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
   title: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface, textAlign: 'center', lineHeight: 32, marginBottom: 12 },
