@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type Row = { user_id: string; name: string; picture?: string | null; profession?: string | null; following: boolean; since: string };
 
@@ -109,10 +110,7 @@ export function FollowListScreen({ userId, kind }: { userId: string; kind: 'foll
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : rows.length === 0 ? (
-        <View style={styles.center}>
-          <Feather name={kind === 'followers' ? 'users' : 'user-check'} size={34} color={colors.muted} />
-          <Text style={styles.emptyText}>{emptyText}</Text>
-        </View>
+        <EmptyState icon={kind === 'followers' ? 'users' : 'user-check'} title={emptyText} />
       ) : (
         <FlatList
           style={{ flex: 1 }}
@@ -162,7 +160,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   avatar: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 18, color: colors.onBrandTertiary, fontFamily: theme.serif },

@@ -7,6 +7,7 @@ import { api } from '@/src/api';
 import { filterTips, pickRandomTip, summarize, type Tip } from '@/src/tips/tipsSearch';
 import { Chip } from '@/src/Chip';
 import { SegmentedControl } from '@/src/SegmentedControl';
+import { EmptyState } from '@/src/EmptyState';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -157,28 +158,28 @@ export default function Tips() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : error ? (
-        <View style={styles.emptyBox}>
-          <Feather name="wifi-off" size={34} color={colors.muted} />
-          <Text style={styles.emptyText}>{error}</Text>
-          <Pressable testID="tips-retry" onPress={load} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Réessayer</Text>
-          </Pressable>
-        </View>
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger les astuces"
+          subtitle={error}
+          ctaLabel="Réessayer"
+          onCta={load}
+          testID="tips-retry"
+        />
       ) : shown.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Feather name={view === 'favoris' ? 'star' : 'search'} size={34} color={colors.muted} />
-          {view === 'favoris' && base.length === 0 ? (
-            <>
-              <Text style={styles.emptyTitle}>Aucune astuce enregistrée</Text>
-              <Text style={styles.emptyText}>Ajoutez vos astuces favorites pour les retrouver rapidement.</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.emptyTitle}>Aucune astuce trouvée</Text>
-              <Text style={styles.emptyText}>Essayez un autre mot-clé.</Text>
-            </>
-          )}
-        </View>
+        view === 'favoris' && base.length === 0 ? (
+          <EmptyState
+            icon="star"
+            title="Aucune astuce enregistrée"
+            subtitle="Ajoutez vos astuces favorites pour les retrouver rapidement."
+          />
+        ) : (
+          <EmptyState
+            icon="search"
+            title="Aucune astuce trouvée"
+            subtitle="Essayez un autre mot-clé."
+          />
+        )
       ) : (
         <FlatList
           style={{ flex: 1 }}
@@ -210,11 +211,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 40 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
-  retryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
   card: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
   cardIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

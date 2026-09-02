@@ -11,6 +11,7 @@ import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 const ROLE_OPTIONS = ['Boulanger', 'Pâtissier', 'Apprenti', 'Responsable', 'Chef', 'Tourier', 'Chocolatier', 'Traiteur', 'Autre'];
 
@@ -111,19 +112,14 @@ export default function TeamList() {
       )}
 
       {!visible ? (
-        <View style={styles.center}>
-          <Feather name="lock" size={34} color={colors.muted} />
-          <Text style={styles.emptyText}>Cette Team est privée.</Text>
-        </View>
+        <EmptyState icon="lock" title="Cette Team est privée" />
       ) : loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : members.length === 0 ? (
-        <View style={styles.center}>
-          <Feather name="users" size={34} color={colors.muted} />
-          <Text style={styles.emptyText}>
-            {query.trim() ? 'Aucun membre trouvé.' : isMine ? 'Votre Team est vide.' : 'Cette Team est vide.'}
-          </Text>
-        </View>
+        <EmptyState
+          icon="users"
+          title={query.trim() ? 'Aucun membre trouvé' : isMine ? 'Votre Team est vide' : 'Cette Team est vide'}
+        />
       ) : (
         <FlatList
           style={{ flex: 1 }}
@@ -183,7 +179,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 42 },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   avatar: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 18, color: colors.onBrandTertiary, fontFamily: theme.serif },

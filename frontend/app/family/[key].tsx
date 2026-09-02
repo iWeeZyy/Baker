@@ -9,6 +9,7 @@ import { type Family } from '@/src/families';
 import { formatDuration } from '@/src/format';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type Recipe = { id: string; title: string; difficulty: string; time_minutes: number; coup_de_coeur?: boolean; like_count?: number };
 
@@ -103,7 +104,7 @@ export default function FamilyScreen() {
               </>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>Aucune recette dans cette famille.</Text>}
+          ListEmptyComponent={<EmptyState icon="book-open" title="Aucune recette dans cette famille" />}
         />
       )}
     </SafeAreaView>
@@ -135,5 +136,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowTitle: { fontFamily: theme.serif, fontSize: 19, color: colors.onSurface },
   rowMeta: { fontSize: 12, color: colors.muted, marginTop: 4 },
   adRow: { paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.lg },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });
