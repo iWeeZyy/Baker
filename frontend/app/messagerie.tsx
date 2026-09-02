@@ -14,6 +14,7 @@ import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { SegmentedControl } from '@/src/SegmentedControl';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type Peer = { user_id: string; name: string; picture?: string | null };
@@ -72,12 +73,14 @@ export default function Messagerie() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
+  const [convosError, setConvosError] = useState(false);
   const [loadingMoreConvos, setLoadingMoreConvos] = useState(false);
   const [hasMoreConvos, setHasMoreConvos] = useState(false);
   const [search, setSearch] = useState('');
 
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(true);
+  const [notifsError, setNotifsError] = useState(false);
   const [loadingMoreNotifs, setLoadingMoreNotifs] = useState(false);
   const [hasMoreNotifs, setHasMoreNotifs] = useState(false);
   const [respondingId, setRespondingId] = useState<string | null>(null);
@@ -87,7 +90,8 @@ export default function Messagerie() {
       const res = await api('/conversations');
       setConversations(res.conversations);
       setHasMoreConvos(res.has_more);
-    } catch (e) { console.warn(e); }
+      setConvosError(false);
+    } catch (e) { console.warn(e); setConvosError(true); }
     finally { setLoadingConvos(false); }
   }, []);
 
@@ -110,7 +114,8 @@ export default function Messagerie() {
       const res = await api('/notifications');
       setNotifs(res.notifications);
       setHasMoreNotifs(res.has_more);
-    } catch (e) { console.warn(e); }
+      setNotifsError(false);
+    } catch (e) { console.warn(e); setNotifsError(true); }
     finally { setLoadingNotifs(false); }
   }, []);
 
@@ -230,12 +235,12 @@ export default function Messagerie() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="messagerie-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="messagerie-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Messagerie</Text>
         {tab === 'messages' ? (
-          <Pressable testID="messagerie-new" onPress={() => router.push('/messagerie/new' as any)} style={styles.iconBtn}>
+          <Pressable testID="messagerie-new" onPress={() => router.push('/messagerie/new' as any)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Nouveau message">
             <Feather name="edit" size={20} color={colors.onSurface} />
           </Pressable>
         ) : hasUnreadNotifs ? (
@@ -247,14 +252,12 @@ export default function Messagerie() {
         )}
       </View>
 
-      <View style={styles.segment}>
-        <Pressable testID="messagerie-tab-messages" onPress={() => setTab('messages')} style={[styles.segBtn, tab === 'messages' && styles.segBtnOn]}>
-          <Text style={[styles.segText, tab === 'messages' && styles.segTextOn]}>Messages</Text>
-        </Pressable>
-        <Pressable testID="messagerie-tab-activity" onPress={() => setTab('activity')} style={[styles.segBtn, tab === 'activity' && styles.segBtnOn]}>
-          <Text style={[styles.segText, tab === 'activity' && styles.segTextOn]}>Activité</Text>
-        </Pressable>
-      </View>
+      <SegmentedControl
+        testID="messagerie-tab"
+        options={[{ key: 'messages' as const, label: 'Messages' }, { key: 'activity' as const, label: 'Activité' }]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === 'messages' ? (
         <FlatList
@@ -296,6 +299,15 @@ export default function Messagerie() {
           ListEmptyComponent={
             loadingConvos ? (
               <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
+            ) : convosError ? (
+              <EmptyState
+                icon="wifi-off"
+                title="Impossible de charger vos messages"
+                subtitle="Vérifiez votre connexion et réessayez."
+                ctaLabel="Réessayer"
+                onCta={loadConversations}
+                testID="convos-retry"
+              />
             ) : (
               <EmptyState
                 icon="message-circle"
@@ -349,6 +361,15 @@ export default function Messagerie() {
           ListEmptyComponent={
             loadingNotifs ? (
               <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
+            ) : notifsError ? (
+              <EmptyState
+                icon="wifi-off"
+                title="Impossible de charger votre activité"
+                subtitle="Vérifiez votre connexion et réessayez."
+                ctaLabel="Réessayer"
+                onCta={loadNotifications}
+                testID="notifs-retry"
+              />
             ) : (
               <EmptyState icon="bell" title="Aucune activité" subtitle="Vous êtes à jour !" />
             )
@@ -367,12 +388,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
   markAllBtn: { paddingHorizontal: 10, height: 40, alignItems: 'center', justifyContent: 'center' },
   markAllText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
-  segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginTop: 16, marginBottom: 8 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
-  segBtnOn: { backgroundColor: colors.brand },
-  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: colors.onBrandPrimary },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 24, marginTop: 8, marginBottom: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 46 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 24, marginTop: 8, marginBottom: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.pill, paddingHorizontal: 16, height: 46 },
   searchInput: { flex: 1, fontSize: 15, color: colors.onSurface },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12, backgroundColor: colors.surface },
   rowRight: { alignItems: 'flex-end', gap: 6 },
@@ -380,19 +396,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   rowSubUnread: { color: colors.onSurface, fontWeight: '600' },
   rowMeta: { fontSize: 11, color: colors.muted },
-  avatar: { borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatar: { borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { color: colors.onBrandTertiary, fontFamily: theme.serif },
-  unreadBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  unreadBadge: { backgroundColor: colors.brand, borderRadius: theme.radius.pill, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
   notifRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   notifRowUnread: { backgroundColor: colors.surfaceSecondary },
-  iconCircle: { width: 36, height: 36, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { width: 36, height: 36, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   notifText: { fontSize: 14, color: colors.onSurface, lineHeight: 19 },
   notifMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  unreadDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: colors.brand, marginTop: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: theme.radius.pill, backgroundColor: colors.brand, marginTop: 4 },
   requestActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  acceptBtn: { backgroundColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  acceptBtn: { backgroundColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.pill },
   acceptBtnText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: '600' },
-  declineBtn: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  declineBtn: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.pill },
   declineBtnText: { color: colors.onSurfaceSecondary, fontSize: 12, fontWeight: '600' },
 });
