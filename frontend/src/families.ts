@@ -66,7 +66,7 @@ export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
   'cakes': require('../assets/images/families/cakes-photo.jpg'),
   'biscuits': require('../assets/images/families/biscuits-photo.jpg'),
   'carres': require('../assets/images/families/carres-photo.jpg'),
-  'petites-patisseries': require('../assets/images/families/petites-patisseries.png'),
+  'petites-patisseries': require('../assets/images/families/petites-patisseries-photo.jpg'),
   'muffins-scones': require('../assets/images/families/muffins-scones.png'),
   'garnitures': require('../assets/images/families/garnitures.png'),
   // Les fourre-tout partagent l'épi de blé : ils n'ont pas de forme propre,
