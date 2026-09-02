@@ -376,7 +376,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   profession: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
   badgesPreviewRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  badgePreviewIconWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  badgePreviewIconWrap: { width: 32, height: 32, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   badgePreviewIcon: { fontSize: 17 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },

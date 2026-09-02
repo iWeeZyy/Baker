@@ -17,8 +17,10 @@ import { formatRelativeDate } from '@/src/relativeDate';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
+import { LevelBadge } from '@/src/gamification/LevelBadge';
 import type { Badge } from '@/src/gamification/types';
 import { useUsernameAvailability } from '@/src/onboarding/useUsernameAvailability';
+import { EmptyState } from '@/src/EmptyState';
 
 const BIO_MAX_LENGTH = 300;
 const PROFESSION_MAX_LENGTH = 60;
@@ -42,6 +44,7 @@ export default function Profile() {
   const [mine, setMine] = useState<any[]>([]);
   const [favs, setFavs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
@@ -92,7 +95,16 @@ export default function Profile() {
         setBadgesPreview(p.badges_preview || []);
         setBadgesCount(p.badge_count || 0);
       }
-    } catch (e) { console.warn(e); }
+      setError(false);
+    } catch (e) {
+      console.warn(e);
+      // Un échec ici concerne l'ensemble du profil (recettes, stats, badges,
+      // collections partent du même Promise.all) — laisser passer un état
+      // silencieusement vide serait indiscernable d'un compte réellement
+      // vide. Un vrai état d'erreur avec relance, plutôt qu'un faux "aucune
+      // recette".
+      setError(true);
+    }
     finally { setLoading(false); }
   }, [user]);
 
@@ -267,7 +279,10 @@ export default function Profile() {
   const header = (
     <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Pressable testID="avatar-btn" onPress={() => setAvatarMenuOpen(true)} style={styles.avatar}>
+          <Pressable
+            testID="avatar-btn" onPress={() => setAvatarMenuOpen(true)} style={styles.avatar}
+            accessibilityRole="button" accessibilityLabel="Modifier la photo de profil"
+          >
             {avatarUrl(user?.picture, API_BASE) ? (
               <Image source={{ uri: avatarUrl(user?.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
             ) : (
@@ -275,7 +290,10 @@ export default function Profile() {
             )}
           </Pressable>
           <View style={styles.headerActions}>
-            <Pressable testID="notifications-btn" onPress={() => router.push('/messagerie?tab=activity' as any)} style={styles.logoutBtn}>
+            <Pressable
+              testID="notifications-btn" onPress={() => router.push('/messagerie?tab=activity' as any)} style={styles.logoutBtn}
+              accessibilityRole="button" accessibilityLabel="Notifications"
+            >
               <Feather name="bell" size={18} color={colors.onSurfaceSecondary} />
               {unreadCount > 0 && (
                 <View style={styles.notifBadge} testID="notifications-badge">
@@ -283,10 +301,16 @@ export default function Profile() {
                 </View>
               )}
             </Pressable>
-            <Pressable testID="settings-btn" onPress={() => router.push('/settings' as any)} style={styles.logoutBtn}>
+            <Pressable
+              testID="settings-btn" onPress={() => router.push('/settings' as any)} style={styles.logoutBtn}
+              accessibilityRole="button" accessibilityLabel="Réglages"
+            >
               <Feather name="settings" size={18} color={colors.onSurfaceSecondary} />
             </Pressable>
-            <Pressable testID="logout-btn" onPress={logout} style={styles.logoutBtn}>
+            <Pressable
+              testID="logout-btn" onPress={logout} style={styles.logoutBtn}
+              accessibilityRole="button" accessibilityLabel="Se déconnecter"
+            >
               <Feather name="log-out" size={18} color={colors.onSurfaceSecondary} />
             </Pressable>
           </View>
@@ -345,7 +369,7 @@ export default function Profile() {
         )}
 
         {!editingProfile && (
-          <Pressable testID="collections-entry-row" onPress={() => router.push('/collections' as any)} style={styles.collectionsRow}>
+          <Pressable testID="collections-entry-row" onPress={() => router.push('/collections' as any)} style={styles.collectionsRow} hitSlop={8}>
             <Feather name="folder" size={15} color={colors.muted} />
             <Text style={styles.collectionsRowText}>
               {collectionsCount} collection{collectionsCount > 1 ? 's' : ''}
@@ -357,9 +381,7 @@ export default function Profile() {
         {!editingProfile && user?.level_detail && (
           <View testID="progression-card" style={styles.progressionCard}>
             <View style={styles.progressionHeader}>
-              <Text style={styles.progressionTitle}>
-                🥖 Niveau {user.level_detail.level} — {user.level_detail.title}
-              </Text>
+              <LevelBadge level={user.level_detail} />
             </View>
             <ProgressBar
               ratio={user.level_detail.xp_for_next_level ? user.level_detail.xp_into_level / user.level_detail.xp_for_next_level : 1}
@@ -377,28 +399,28 @@ export default function Profile() {
             <Text style={styles.badgesRowLabel}>Badges</Text>
             <View style={styles.badgesIcons}>
               {badgesPreview.map((b) => (
-                <Pressable key={b.id} testID={`badge-preview-${b.id}`} onPress={() => router.push(`/badge/${b.id}` as any)} style={styles.badgeIconWrap}>
+                <Pressable key={b.id} testID={`badge-preview-${b.id}`} onPress={() => router.push(`/badge/${b.id}` as any)} style={styles.badgeIconWrap} hitSlop={4}>
                   <Text style={styles.badgeIcon}>{b.icon}</Text>
                 </Pressable>
               ))}
             </View>
-            <Pressable testID="badges-see-all" onPress={() => router.push('/badges' as any)}>
+            <Pressable testID="badges-see-all" onPress={() => router.push('/badges' as any)} hitSlop={8}>
               <Text style={styles.badgesSeeAll}>Voir tout ({badgesCount})</Text>
             </Pressable>
           </View>
         )}
 
         <View style={styles.avatarLinksRow}>
-          <Pressable testID="edit-avatar-link" onPress={() => setAvatarMenuOpen(true)}>
+          <Pressable testID="edit-avatar-link" onPress={() => setAvatarMenuOpen(true)} hitSlop={8}>
             <Text style={styles.avatarLink}>Modifier la photo</Text>
           </Pressable>
           {user?.picture && (
-            <Pressable testID="delete-avatar-link" onPress={deleteAvatar}>
+            <Pressable testID="delete-avatar-link" onPress={deleteAvatar} hitSlop={8}>
               <Text style={[styles.avatarLink, { color: colors.error }]}>Supprimer la photo</Text>
             </Pressable>
           )}
           {!editingProfile && (
-            <Pressable testID="edit-profile-link" onPress={openProfileEdit}>
+            <Pressable testID="edit-profile-link" onPress={openProfileEdit} hitSlop={8}>
               <Text style={styles.avatarLink}>Modifier mon profil</Text>
             </Pressable>
           )}
@@ -535,7 +557,7 @@ export default function Profile() {
             </View>
             {teamInvites.map(inv => (
               <View key={inv.id} style={styles.teamInviteRow} testID={`team-invite-${inv.id}`}>
-                <Pressable onPress={() => router.push(`/baker/${inv.from_user.user_id}` as any)} style={styles.teamInviteLeft}>
+                <Pressable testID={`team-invite-${inv.id}-open`} onPress={() => router.push(`/baker/${inv.from_user.user_id}` as any)} style={styles.teamInviteLeft}>
                   <View style={styles.teamAvatarSmall}>
                     {avatarUrl(inv.from_user.picture, API_BASE) ? (
                       <Image source={{ uri: avatarUrl(inv.from_user.picture, API_BASE) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
@@ -548,10 +570,10 @@ export default function Profile() {
                   </Text>
                 </Pressable>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable testID={`team-invite-accept-${inv.id}`} onPress={() => respondTeamInvite(inv.id, true)} style={styles.acceptBtn}>
+                  <Pressable testID={`team-invite-accept-${inv.id}`} onPress={() => respondTeamInvite(inv.id, true)} style={styles.acceptBtn} hitSlop={6}>
                     <Feather name="check" size={16} color={colors.onBrandPrimary} />
                   </Pressable>
-                  <Pressable testID={`team-invite-decline-${inv.id}`} onPress={() => respondTeamInvite(inv.id, false)} style={styles.declineBtn}>
+                  <Pressable testID={`team-invite-decline-${inv.id}`} onPress={() => respondTeamInvite(inv.id, false)} style={styles.declineBtn} hitSlop={6}>
                     <Feather name="x" size={16} color={colors.onSurfaceSecondary} />
                   </Pressable>
                 </View>
@@ -618,6 +640,21 @@ export default function Profile() {
     </View>
   );
 
+  if (error && !loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger votre profil"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={() => load()}
+          testID="profile-retry"
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {tab === 'comments' ? (
@@ -662,14 +699,14 @@ export default function Profile() {
               !commentsLoaded ? (
                 <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
               ) : (
-                <View style={styles.empty}>
-                  <Feather name="message-circle" size={40} color={colors.muted} />
-                  <Text style={styles.emptyTitle}>Aucun commentaire</Text>
-                  <Text style={styles.emptySubtitle}>Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes.</Text>
-                  <Pressable testID="empty-comments-btn" onPress={() => router.push('/(tabs)/recipes' as any)} style={styles.emptyBtn}>
-                    <Text style={styles.emptyBtnText}>Découvrir des recettes</Text>
-                  </Pressable>
-                </View>
+                <EmptyState
+                  icon="message-circle"
+                  title="Aucun commentaire"
+                  subtitle="Vos commentaires apparaîtront ici lorsque vous participerez aux discussions sur les recettes."
+                  ctaLabel="Découvrir des recettes"
+                  onCta={() => router.push('/(tabs)/recipes' as any)}
+                  testID="empty-comments-btn"
+                />
               )
             }
             ListFooterComponent={commentsHasMore ? (
@@ -700,15 +737,13 @@ export default function Profile() {
             loading ? (
               <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
             ) : (
-              <View style={styles.empty}>
-                <Feather name={tab === 'mine' ? 'edit-3' : 'bookmark'} size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>{tab === 'mine' ? "Vous n'avez pas encore partagé de recette" : 'Aucune recette sauvegardée'}</Text>
-                {tab === 'mine' && (
-                  <Pressable testID="empty-share-btn" onPress={() => router.push('/share')} style={styles.emptyBtn}>
-                    <Text style={styles.emptyBtnText}>Partager une recette</Text>
-                  </Pressable>
-                )}
-              </View>
+              <EmptyState
+                icon={tab === 'mine' ? 'edit-3' : 'bookmark'}
+                title={tab === 'mine' ? "Vous n'avez pas encore partagé de recette" : 'Aucune recette sauvegardée'}
+                ctaLabel={tab === 'mine' ? 'Partager une recette' : undefined}
+                onCta={tab === 'mine' ? () => router.push('/share') : undefined}
+                testID="empty-share-btn"
+              />
             )
           }
         />
@@ -752,15 +787,14 @@ export default function Profile() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyCenter: { paddingTop: 60, alignItems: 'center' },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerActions: { flexDirection: 'row', gap: 10 },
-  avatar: { width: 72, height: 72, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatar: { width: 72, height: 72, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 28, color: colors.onBrandTertiary, fontFamily: theme.serif },
-  logoutBtn: { width: 40, height: 40, borderRadius: 999, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  notifBadge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  logoutBtn: { width: 40, height: 40, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  notifBadge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: theme.radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   notifBadgeText: { color: colors.onBrandPrimary, fontSize: 9, fontWeight: '700' },
   name: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 14 },
   username: { fontSize: 14, color: colors.muted, marginTop: 2 },
@@ -772,14 +806,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // d'entrée principal.
   collectionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
   collectionsRowText: { flex: 1, fontSize: 13, color: colors.muted },
-  progressionCard: { marginTop: 16, padding: 14, borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary },
+  progressionCard: { marginTop: 16, padding: 14, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary },
   progressionHeader: { marginBottom: 8 },
-  progressionTitle: { fontSize: 14, fontWeight: '700', color: colors.onSurface },
   progressionXp: { fontSize: 12, color: colors.muted, marginTop: 8 },
   badgesRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   badgesRowLabel: { fontSize: 13, fontWeight: '600', color: colors.onSurfaceSecondary },
   badgesIcons: { flex: 1, flexDirection: 'row', gap: 6 },
-  badgeIconWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceTertiary, alignItems: 'center', justifyContent: 'center' },
+  badgeIconWrap: { width: 32, height: 32, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   badgeIcon: { fontSize: 16 },
   badgesSeeAll: { fontSize: 12, color: colors.brand, fontWeight: '600' },
   statVal: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
@@ -791,16 +824,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tabText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
   tabTextActive: { color: colors.onSurface },
   card: { flex: 1 },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  cardImage: { width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: 14, color: colors.muted, textAlign: 'center', paddingHorizontal: 40 },
-  emptySubtitle: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
-  emptyBtn: { marginTop: 16, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
-  emptyBtnText: { color: colors.onBrandPrimary, fontWeight: '600' },
   commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 14, marginHorizontal: 24 },
-  commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceTertiary },
+  commentThumb: { width: 56, height: 56, borderRadius: theme.radius.lg, backgroundColor: colors.surfaceTertiary },
   commentCardKind: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
   commentCardReplyTo: { fontSize: 12, color: colors.brand, fontWeight: '500', marginTop: 2 },
   commentCardBody: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18, marginTop: 4 },
@@ -817,50 +845,50 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
   editProfileCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 16, marginTop: 14 },
   editLabel: { fontSize: 12, color: colors.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
-  bioInput: { fontSize: 14, color: colors.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
+  bioInput: { fontSize: 14, color: colors.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: colors.surface, borderRadius: theme.radius.lg, padding: 10 },
   charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
-  editInput: { fontSize: 14, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
+  editInput: { fontSize: 14, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: theme.radius.lg, padding: 10 },
   editActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
   editCancelBtn: { paddingVertical: 10, paddingHorizontal: 14 },
   editCancelText: { fontSize: 14, color: colors.muted, fontWeight: '600' },
-  editSaveBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  editSaveBtn: { backgroundColor: colors.brand, borderRadius: theme.radius.pill, paddingVertical: 10, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
   editSaveText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 14 },
   creationsSection: { marginTop: 20 },
   creationsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   creationsTitle: { fontSize: 13, letterSpacing: 1, color: colors.onSurface, fontWeight: '700' },
   creationsSeeAll: { fontSize: 12, color: colors.brand, fontWeight: '600' },
   creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
+  creationTile: { width: '32%', aspectRatio: 1, borderRadius: theme.radius.md, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   creationTileImage: { width: '100%', height: '100%' },
   creationsEmpty: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 20, alignItems: 'center', gap: 12 },
   creationsEmptyText: { fontSize: 13, color: colors.muted, textAlign: 'center' },
-  addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
+  addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: theme.radius.pill },
   addCreationBtnText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 13 },
   visibilitySegment: { flexDirection: 'row', gap: 6 },
-  visibilityBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999, backgroundColor: colors.surface },
+  visibilityBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: theme.radius.pill, backgroundColor: colors.surface },
   visibilityBtnOn: { backgroundColor: colors.brand },
   visibilityBtnText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '600' },
   visibilityBtnTextOn: { color: colors.onBrandPrimary },
-  countBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  countBadge: { backgroundColor: colors.brand, borderRadius: theme.radius.pill, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   countBadgeText: { color: colors.onBrandPrimary, fontSize: 11, fontWeight: '700' },
   teamInviteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 10 },
   teamInviteLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  teamAvatarSmall: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatarSmall: { width: 34, height: 34, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   teamAvatarSmallText: { fontSize: 14, color: colors.onBrandTertiary, fontFamily: theme.serif },
   teamInviteText: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18 },
   teamInviteName: { fontWeight: '700', color: colors.onSurface },
-  acceptBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' },
-  declineBtn: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  acceptBtn: { width: 34, height: 34, borderRadius: theme.radius.pill, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' },
+  declineBtn: { width: 34, height: 34, borderRadius: theme.radius.pill, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   teamChip: { alignItems: 'center', width: 72 },
-  teamAvatar: { width: 56, height: 56, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  teamAvatar: { width: 56, height: 56, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   teamAvatarText: { fontSize: 20, color: colors.onBrandTertiary, fontFamily: theme.serif },
   teamChipName: { fontSize: 12, color: colors.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
   teamChipRole: { fontSize: 10, color: colors.muted, marginTop: 1, textAlign: 'center' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   previewCard: { backgroundColor: colors.surface, borderRadius: theme.radius.xl, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
-  previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: colors.surfaceSecondary, marginBottom: 20 },
-  previewConfirmBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingVertical: 14, alignItems: 'center', width: '100%' },
+  previewImage: { width: 200, height: 200, borderRadius: theme.radius.pill, backgroundColor: colors.surfaceSecondary, marginBottom: 20 },
+  previewConfirmBtn: { backgroundColor: colors.brand, borderRadius: theme.radius.pill, paddingVertical: 14, alignItems: 'center', width: '100%' },
   previewConfirmText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 15 },
   previewCancelBtn: { paddingVertical: 14, alignItems: 'center', width: '100%' },
   previewCancelText: { color: colors.muted, fontWeight: '500', fontSize: 14 },
