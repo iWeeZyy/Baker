@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+    <!--
+      Expo génère automatiquement un lien favicon depuis web.favicon (voir
+      @expo/cli/build/src/export/favicon.js) et l'injecte lui-même juste
+      avant la fermeture de cette section à l'export — ATTENTION : par un
+      simple remplacement de texte sur la première occurrence littérale de
+      la balise fermante, donc ne jamais écrire cette balise fermante en
+      toutes lettres dans un commentaire de ce fichier, sous peine de la
+      voir injectée ici plutôt qu'à sa vraie place plus bas.
+
+      Ce même mécanisme n'a aucun équivalent pour l'icône « Ajouter à
+      l'écran d'accueil » d'iOS Safari — sans le lien ci-dessous, Safari se
+      rabat sur une icône générée à la volée (fond uni + initiale du nom
+      de l'app). D'où cette balise manuelle, vers apple-touch-icon.png
+      (servi tel quel depuis ce même dossier public/ à la racine du site).
+
+      Ce fichier tout entier est le seul point d'extension de cette
+      section qui fonctionne avec web.output: "single" (SPA) — voir
+      CLAUDE.md, section « Gotchas » : app/+html.tsx existe dans le projet
+      mais n'a aucun effet dans ce mode (il ne sert qu'avec
+      web.output: "static" ou "server"), contrairement à ce que sa
+      présence pourrait laisser penser.
+    -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>
