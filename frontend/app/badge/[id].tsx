@@ -67,7 +67,11 @@ export default function BadgeDetail() {
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.iconWrap}>
-            <Text style={styles.icon}>{badge.unlocked_at ? badge.icon : '🔒'}</Text>
+            {/* Le verrou ne masque que les badges cachés — un badge verrouillé
+                mais non caché montre sa vraie icône, comme dans la grille de
+                badges.tsx, pas un cadenas générique ; même atténuation que
+                cette grille (`cardIconLocked`) pour un badge non obtenu. */}
+            <Text style={[styles.icon, !badge.unlocked_at && styles.iconLocked]}>{!badge.unlocked_at && badge.hidden ? '🔒' : badge.icon}</Text>
           </View>
           <Text style={styles.name}>{badge.name}</Text>
 
@@ -114,6 +118,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginTop: 16, marginBottom: 16,
   },
   icon: { fontSize: 44 },
+  iconLocked: { opacity: 0.6 },
   name: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, textAlign: 'center' },
   unlockedAt: { fontSize: 13, color: colors.muted, marginTop: 6, marginBottom: 16 },
   conditionLabel: { fontSize: 13, fontWeight: '600', color: colors.onSurfaceSecondary, marginTop: 20, marginBottom: 4 },
