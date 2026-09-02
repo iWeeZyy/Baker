@@ -78,7 +78,7 @@ The catalogue is browsed by **family** (Pains, Tartes, Biscuits et sablés…), 
 
 ### Recipe images — `backend/recipe_photos.py`, `backend/products.py`, `frontend/src/products.ts`
 
-None of the 194 imported sheets carries a photo of its own: the books' photographs are not reproduced (the data is taken, the images are not). Images therefore come from outside, and one function decides which — `recipeImage(recipe, apiBase)` in `src/products.ts`, used by the recipe screen, the home screen, the profile and the baker page so they cannot diverge. Four steps, in order:
+None of the 194 imported sheets carries a photo of its own: the books' photographs are not reproduced (the data is taken, the images are not). Images therefore come from outside, and one function decides which — `recipeImage(recipe, apiBase)` in `src/products.ts`, used by the recipe screen, the home screen, the profile and the baker page so they cannot diverge. Four steps, in order (plus one deliberate override ahead of all of them, see below):
 
 1. the **upload** of a community recipe (`image_path`);
 2. a **photograph of the product**, when one exists that really shows *that* product (`image_url`, from `recipe_photos.py`);
@@ -86,6 +86,8 @@ None of the 194 imported sheets carries a photo of its own: the books' photograp
 4. nothing, and the screen paints a plain warm band (never a grey one, which reads as a failed image load).
 
 A drawing reads as an **emblem** rather than as a picture of that particular piece, which is exactly what makes repetition acceptable where a photo would lie: nineteen tarts sharing one drawing say "a tart"; nineteen copies of one photo would say "here is *that* tart". A photograph earns its place only by being of the right product — which is why step 2 sits above step 3 but is much harder to fill.
+
+**`RECIPE_PHOTO_OVERRIDES` in `src/products.ts` is checked before all four steps** — a small, frontend-only, title-keyed table for the rare recipe where Lucas supplies his own photo directly (`Hot-dog` so far), the same assumed exception as the family-tile photos above: no Pexels credit is shown for these (`recipe_photos.py`'s `PHOTOS`/`image_url`/`image_credit` for that title are left exactly as they were — the override simply wins before they're ever consulted, so nothing there needs touching or removing). It exists as a frontend table rather than a backend field because a committed, non-Pexels photo can't go through `image_url` (which `tests/test_recipe_photos.py` requires to always be Pexels-sourced and credited) and can't go through `image_path` either (which resolves against `backend/uploads/`, gitignored and not deploy-safe) — a bundled asset, `require()`d exactly like a family-tile photo, is the only deploy-safe way to ship a photo Lucas owns outright. `recipeImage()` returns it as its own `'local-photo'` kind (not `'photo'`, which stays reserved for a URI-based `image_url`, and not `'drawing'`, since it must crop like a real photo — `contentFit="cover"` — rather than display whole like an archetype icon).
 
 #### Photographs — `backend/recipe_photos.py`
 

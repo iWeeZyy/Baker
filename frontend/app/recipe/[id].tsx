@@ -432,15 +432,21 @@ export default function RecipeDetail() {
   // deux écrans ne puissent pas diverger.
   const image = recipeImage(recipe, API_BASE);
   const photo = image.kind === 'upload' || image.kind === 'photo' ? image.uri : null;
+  // Une photo fournie directement par Lucas (RECIPE_PHOTO_OVERRIDES dans
+  // src/products.ts) se traite visuellement comme une vraie photo — recadrée,
+  // jamais entière comme un dessin — mais sans crédit Pexels puisqu'elle n'en
+  // vient pas : `photo` reste donc volontairement scopé aux sources par URI.
+  const localPhoto = image.kind === 'local-photo' ? image.source : null;
   const tile = image.kind === 'drawing' ? image.source : null;
+  const hasPhoto = !!(photo || localPhoto);
 
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
         <View style={styles.heroWrap}>
-          {photo ? (
-            <Image source={{ uri: photo }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          {hasPhoto ? (
+            <Image source={photo ? { uri: photo } : localPhoto} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           ) : (
             // Sans photo, un fond chaud plutôt qu'une bande grise, qui se
             // lirait comme une image qui n'a pas chargé. L'illustration de
@@ -461,7 +467,7 @@ export default function RecipeDetail() {
             // Sans photo, on n'assombrit que le bas : noircir le haut salirait
             // l'illustration sans rien rendre plus lisible, les deux boutons
             // portant déjà leur propre pastille.
-            colors={photo
+            colors={hasPhoto
               ? ['rgba(42,31,26,0.4)', 'transparent', 'rgba(42,31,26,0.7)']
               : ['transparent', 'transparent', 'rgba(42,31,26,0.72)']}
             style={StyleSheet.absoluteFillObject}

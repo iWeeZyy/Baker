@@ -106,17 +106,31 @@ export function productTile(key?: string | null): ImageSourcePropType | null {
 export type RecipeImageSource =
   | { kind: 'upload'; uri: string }
   | { kind: 'photo'; uri: string }
+  | { kind: 'local-photo'; source: ImageSourcePropType }
   | { kind: 'drawing'; source: ImageSourcePropType }
   | { kind: 'none' };
 
 type ImageableRecipe = {
+  title?: string;
   image_path?: string | null;
   image_url?: string | null;
   product?: string | null;
 };
 
+// Un petit nombre de recettes utilisent une vraie photo fournie directement
+// par Lucas plutôt que celle retenue par la moisson Pexels de
+// `backend/recipe_photos.py` — même exception assumée que les vignettes de
+// famille (voir CLAUDE.md, section « Recipe families »), sans crédit
+// photographe puisque la photo est la sienne. Indexée par titre : ces
+// recettes du catalogue de base ont un titre stable, jamais renommé.
+const RECIPE_PHOTO_OVERRIDES: Record<string, ImageSourcePropType> = {
+  'Hot-dog': require('../assets/images/recipe-photos/hot-dog-photo.jpg'),
+};
+
 export function recipeImage(recipe: ImageableRecipe | null | undefined, apiBase: string): RecipeImageSource {
   if (!recipe) return { kind: 'none' };
+  const override = recipe.title ? RECIPE_PHOTO_OVERRIDES[recipe.title] : undefined;
+  if (override) return { kind: 'local-photo', source: override };
   if (recipe.image_path) return { kind: 'upload', uri: `${apiBase}/files/${recipe.image_path}` };
   if (recipe.image_url) return { kind: 'photo', uri: recipe.image_url };
   const drawing = productTile(recipe.product);
@@ -136,5 +150,5 @@ export function recipeImageSource(
 ): ImageSourcePropType | undefined {
   const image = recipeImage(recipe, apiBase);
   if (image.kind === 'none') return undefined;
-  return image.kind === 'drawing' ? image.source : { uri: image.uri };
+  return image.kind === 'drawing' || image.kind === 'local-photo' ? image.source : { uri: image.uri };
 }
