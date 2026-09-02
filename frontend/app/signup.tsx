@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -116,6 +116,18 @@ export default function SignupScreen() {
     setPhaseIndex((i) => i - 1);
   };
 
+  // Le bouton physique Android doit reculer d'une étape comme la flèche
+  // maison, pas quitter le flux d'un coup (mot de passe/photo ne sont jamais
+  // persistés, voir persistDraft plus haut).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (phaseIndex === 0) { router.back(); return true; }
+      setPhaseIndex((i) => i - 1);
+      return true;
+    });
+    return () => sub.remove();
+  }, [phaseIndex, router]);
+
   const submitEmail = async () => {
     setEmailError(null);
     const value = email.trim();
@@ -125,8 +137,8 @@ export default function SignupScreen() {
       const res = await api(`/auth/email-available?email=${encodeURIComponent(value)}`);
       if (!res.available) { setEmailError('Un compte existe déjà avec cet e-mail.'); return; }
       await goNext();
-    } catch {
-      setEmailError('Erreur réseau, réessayez.');
+    } catch (e: any) {
+      setEmailError(e.message || 'Erreur réseau, réessayez.');
     } finally {
       setCheckingEmail(false);
     }
@@ -240,7 +252,7 @@ export default function SignupScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable testID="signup-back" onPress={goBack} style={styles.iconBtn} hitSlop={10}>
+        <Pressable testID="signup-back" onPress={goBack} style={styles.iconBtn} hitSlop={10} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <StepDots count={PHASES.length} activeIndex={phaseIndex} />
@@ -286,7 +298,14 @@ export default function SignupScreen() {
                   secureTextEntry={!showPassword}
                   autoFocus
                 />
-                <Pressable testID="signup-toggle-password" onPress={() => setShowPassword((v) => !v)} hitSlop={10} style={{ padding: 8 }}>
+                <Pressable
+                  testID="signup-toggle-password"
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  style={{ padding: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
                   <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.muted} />
                 </Pressable>
               </View>
@@ -349,7 +368,13 @@ export default function SignupScreen() {
             <>
               <Text style={styles.title}>Ajoutez une photo de profil</Text>
               <Text style={styles.subtitle}>Facultatif — vous pourrez la modifier plus tard.</Text>
-              <Pressable testID="signup-photo-pick" onPress={() => setPhotoSheetOpen(true)} style={styles.avatarPicker}>
+              <Pressable
+                testID="signup-photo-pick"
+                onPress={() => setPhotoSheetOpen(true)}
+                style={styles.avatarPicker}
+                accessibilityRole="button"
+                accessibilityLabel={photoUri ? 'Changer la photo de profil' : 'Ajouter une photo de profil'}
+              >
                 {photoUri ? (
                   <Image source={{ uri: photoUri }} style={styles.avatarImage} contentFit="cover" />
                 ) : (
@@ -425,14 +450,17 @@ export default function SignupScreen() {
                 ))}
               </View>
               {profession === 'Autre' && (
-                <TextInput
-                  testID="signup-profession-other"
-                  value={professionOther}
-                  onChangeText={(v) => setProfessionOther(v.slice(0, 60))}
-                  placeholder="Précisez votre métier"
-                  placeholderTextColor={colors.muted}
-                  style={[styles.input, { marginTop: 16 }]}
-                />
+                <>
+                  <TextInput
+                    testID="signup-profession-other"
+                    value={professionOther}
+                    onChangeText={(v) => setProfessionOther(v.slice(0, 60))}
+                    placeholder="Précisez votre métier"
+                    placeholderTextColor={colors.muted}
+                    style={[styles.input, { marginTop: 16 }]}
+                  />
+                  {!professionOther.trim() ? <Text style={styles.hint}>Précisez votre métier pour continuer.</Text> : null}
+                </>
               )}
             </>
           )}
@@ -523,8 +551,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   availabilityRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center' },
   availabilityText: { fontSize: 13, fontWeight: '500' },
   avatarPicker: { alignSelf: 'center', marginTop: 12 },
-  avatarImage: { width: 120, height: 120, borderRadius: 60 },
-  avatarPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { width: 120, height: 120, borderRadius: theme.radius.pill },
+  avatarPlaceholder: { width: 120, height: 120, borderRadius: theme.radius.pill, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   reviewCard: { alignItems: 'center', padding: 24, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, marginTop: 8 },
   reviewAvatar: { marginBottom: 16 },
