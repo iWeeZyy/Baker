@@ -60,7 +60,7 @@ export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
   'feuilletees': require('../assets/images/families/feuilletees-photo.jpg'),
   'brioches': require('../assets/images/families/brioches-photo.jpg'),
   'pates-tourees': require('../assets/images/families/pates-tourees-photo.jpg'),
-  'tartes': require('../assets/images/families/tartes.png'),
+  'tartes': require('../assets/images/families/tartes-photo.jpg'),
   'pates-a-tarte': require('../assets/images/families/pates-a-tarte.png'),
   'gateaux': require('../assets/images/families/gateaux.png'),
   'cakes': require('../assets/images/families/cakes.png'),
