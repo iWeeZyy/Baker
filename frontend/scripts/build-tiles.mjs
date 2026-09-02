@@ -16,6 +16,13 @@
  *   npm i -D playwright && node scripts/build-tiles.mjs
  *
  * CHROMIUM_PATH permet de pointer un Chromium déjà installé.
+ *
+ * Quelques familles (voir CLAUDE.md, section « Recipe families ») utilisent
+ * une vraie photo plutôt qu'un dessin, à la demande explicite de Lucas —
+ * `src/families.ts` pointe alors sur un fichier `<clé>-photo.jpg` distinct,
+ * jamais sur le `.png` que ce script régénère ici. Relancer ce script après
+ * une modification de `<clé>.svg` reste donc sans risque pour ces familles :
+ * ça régénère un `.png` qui n'est simplement plus référencé.
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';

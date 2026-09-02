@@ -49,13 +49,13 @@ export type Family = {
 const AUTRES = require('../assets/images/families/autres.png');
 
 export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
-  // Exceptions assumées (pains-classiques et brioches) : ces deux familles
-  // sont illustrées par une vraie photo plutôt qu'un dessin, à la demande
-  // explicite de Lucas — voir la note dans CLAUDE.md (section « Recipe
-  // families »). Les .svg/.png d'origine restent en place, inutilisés,
-  // comme filet de secours.
+  // Exceptions assumées (pains-classiques, pains-speciaux et brioches) : ces
+  // familles sont illustrées par une vraie photo plutôt qu'un dessin, à la
+  // demande explicite de Lucas — voir la note dans CLAUDE.md (section
+  // « Recipe families »). Les .svg/.png d'origine restent en place,
+  // inutilisés, comme filet de secours.
   'pains-classiques': require('../assets/images/families/pains-classiques-photo.jpg'),
-  'pains-speciaux': require('../assets/images/families/pains-speciaux.png'),
+  'pains-speciaux': require('../assets/images/families/pains-speciaux-photo.jpg'),
   'levains': require('../assets/images/families/levains.png'),
   'snacking': require('../assets/images/families/snacking.png'),
   'feuilletees': require('../assets/images/families/feuilletees.png'),
