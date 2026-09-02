@@ -12,7 +12,8 @@ import { api, API_BASE, getToken } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { ActionSheet } from '@/src/ActionSheet';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 import { Chip } from '@/src/Chip';
 import { Button } from '@/src/Button';
@@ -25,8 +26,8 @@ type PhotoItem = { key: string; uri: string; path: string | null; uploading?: bo
 type Recipe = { id: string; title: string };
 
 function Field({ label, children }: { label: string; children: any }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   return (
     <View style={{ marginBottom: 20 }}>
       <Text style={styles.label}>{label}</Text>
@@ -36,8 +37,8 @@ function Field({ label, children }: { label: string; children: any }) {
 }
 
 export default function CreationForm() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
 
   const router = useRouter();
   const { refreshUser } = useAuth();
@@ -297,7 +298,7 @@ export default function CreationForm() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -318,7 +319,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   addPhotoTile: { width: 84, height: 84, borderRadius: 8, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
   addBtnText: { color: colors.brand, fontWeight: '600', fontSize: 14 },
-  recipeChosenRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
+  recipeChosenRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary,
+    borderRadius: theme.radius.lg, paddingHorizontal: 14, paddingVertical: 12,
+    ...cardElevation(mode, colors),
+  },
   recipeChosenText: { flex: 1, fontSize: 14, color: colors.onSurface, fontWeight: '500' },
   picker: { marginTop: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 10 },
   pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 6 },

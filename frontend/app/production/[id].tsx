@@ -10,7 +10,8 @@ import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { syncWidgetData } from '@/src/widgetData';
 import { EmptyState } from '@/src/EmptyState';
 import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/levanea-live-activity';
@@ -101,8 +102,8 @@ const NEXT_STATUS: Record<Step['status'], Step['status']> = {
 };
 
 export default function ProductionDetail() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode: themeMode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, themeMode), [colors, themeMode]);
   const router = useRouter();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -486,7 +487,7 @@ export default function ProductionDetail() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -499,11 +500,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tabTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingBottom: 60 },
   statRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  stat: { flex: 1, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, paddingVertical: 16 },
+  stat: {
+    flex: 1, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, paddingVertical: 16,
+    ...cardElevation(mode, colors),
+  },
   statValue: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   statLabel: { fontSize: 10, letterSpacing: 1.6, color: colors.muted, fontWeight: '600', marginTop: 4 },
   sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginTop: 18, marginBottom: 10 },
-  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
+  lineCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10,
+    ...cardElevation(mode, colors),
+  },
   lineTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
   lineMeta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },
   notice: { fontSize: 12, color: colors.muted, lineHeight: 17, marginTop: 14 },
@@ -512,7 +519,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   ingName: { flex: 1, fontSize: 15, color: colors.onSurface },
   ingQty: { fontFamily: theme.serif, fontSize: 17, color: colors.brand },
   hint: { fontSize: 12, color: colors.muted, lineHeight: 17, marginBottom: 6 },
-  stepCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
+  stepCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10,
+    ...cardElevation(mode, colors),
+  },
   stepCardDone: { opacity: 0.6 },
   stepTop: { flexDirection: 'row', gap: 12 },
   statusBtn: { width: 44, height: 44, borderRadius: theme.radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },

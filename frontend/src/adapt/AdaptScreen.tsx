@@ -18,13 +18,14 @@ import {
   emptyAdaptationRequest, isAdaptationRequestEmpty,
 } from '@/src/recipeAdaptTypes';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 
 type ChangeRow = { icon: string; label: string };
 
 export function AdaptScreen({ recipeId }: { recipeId: string }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -553,8 +554,8 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
 }
 
 function Section({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{icon} {title}</Text>
@@ -564,8 +565,8 @@ function Section({ icon, title, children }: { icon: string; title: string; child
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   return (
     <View style={{ marginBottom: 14 }}>
       <Text style={styles.label}>{label}</Text>
@@ -574,14 +575,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginHorizontal: 8 },
   body: { padding: 24, paddingBottom: 60 },
-  originalCard: { backgroundColor: colors.surfaceInverse, borderRadius: 8, padding: 18, marginBottom: 16 },
+  originalCard: {
+    backgroundColor: colors.surfaceInverse, borderRadius: theme.radius.lg, padding: 18, marginBottom: 16,
+    ...cardElevation(mode, colors),
+  },
   originalTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurfaceInverse },
   originalMeta: { fontSize: 13, color: colors.onSurfaceInverse, opacity: 0.85, marginTop: 4 },
   section: { marginBottom: 24 },
@@ -589,7 +593,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   hint: { fontSize: 12, color: colors.muted, marginBottom: 8 },
   label: { fontSize: 11, letterSpacing: 1, color: colors.muted, marginBottom: 6, fontWeight: '600' },
   input: { fontSize: 15, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: theme.radius.md, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surfaceSecondary },
-  card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
+  card: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16, marginBottom: 12,
+    ...cardElevation(mode, colors),
+  },
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   subText: { fontSize: 14, color: colors.onSurface },
   warningBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: colors.surfaceTertiary, borderRadius: 8, padding: 12, marginTop: 8, marginBottom: 8 },
@@ -601,14 +608,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   chipTextActive: { color: colors.onSurfaceInverse },
   smallBtn: { backgroundColor: colors.brand, borderRadius: theme.radius.md, paddingVertical: 12, alignItems: 'center', marginTop: 4 },
   smallBtnText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 14 },
-  suggestionCard: { backgroundColor: colors.surfaceTertiary, borderRadius: 8, padding: 14, marginTop: 12 },
+  suggestionCard: {
+    backgroundColor: colors.surfaceTertiary, borderRadius: theme.radius.lg, padding: 14, marginTop: 12,
+    ...cardElevation(mode, colors),
+  },
   suggestionTitle: { fontSize: 13, fontWeight: '700', color: colors.onSurfaceTertiary, marginBottom: 6 },
   suggestionText: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 17, marginBottom: 8 },
   suggestionField: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: 2 },
   acceptRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   acceptText: { fontSize: 13, color: colors.onSurfaceTertiary, fontWeight: '600' },
   errorText: { fontSize: 12, color: colors.error, marginTop: 6, lineHeight: 16 },
-  summaryCard: { backgroundColor: colors.surfaceInverse, borderRadius: 8, padding: 18, marginBottom: 16 },
+  summaryCard: {
+    backgroundColor: colors.surfaceInverse, borderRadius: theme.radius.lg, padding: 18, marginBottom: 16,
+    ...cardElevation(mode, colors),
+  },
   summaryTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurfaceInverse, marginBottom: 8 },
   summaryRow: { fontSize: 13, color: colors.onSurfaceInverse, marginTop: 4 },
   applyBtn: { backgroundColor: colors.brand, borderRadius: theme.radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
