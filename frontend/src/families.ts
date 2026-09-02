@@ -54,7 +54,11 @@ export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
   'levains': require('../assets/images/families/levains.png'),
   'snacking': require('../assets/images/families/snacking.png'),
   'feuilletees': require('../assets/images/families/feuilletees.png'),
-  'brioches': require('../assets/images/families/brioches.png'),
+  // Exception assumée : seule famille illustrée par une vraie photo plutôt
+  // qu'un dessin, à la demande explicite de Lucas — voir la note dans
+  // CLAUDE.md (section « Recipe families »). brioches.svg/brioches.png
+  // restent en place (filet de secours), volontairement non référencés ici.
+  'brioches': require('../assets/images/families/brioches-photo.jpg'),
   'pates-tourees': require('../assets/images/families/pates-tourees.png'),
   'tartes': require('../assets/images/families/tartes.png'),
   'pates-a-tarte': require('../assets/images/families/pates-a-tarte.png'),
