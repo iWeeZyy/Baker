@@ -19,14 +19,14 @@ import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { EmptyState } from '@/src/EmptyState';
+import { FAVORITES_COLLECTION_ID } from '@/src/collections';
 
 type PreviewRecipe = { id: string; image_path?: string | null; image_url?: string | null; product?: string | null };
 type CollectionRow = {
   id: string; name: string; description: string;
   recipe_count: number; preview_recipes: PreviewRecipe[];
 };
-
-const FAVORITES_ID = '__favorites__';
 
 function Mosaic({ previews, isFavorites }: { previews: PreviewRecipe[]; isFavorites: boolean }) {
   const { colors } = useTheme();
@@ -73,6 +73,7 @@ export default function CollectionsScreen() {
   const { refreshUser } = useAuth();
   const [items, setItems] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -81,8 +82,8 @@ export default function CollectionsScreen() {
 
   const load = useCallback(() => {
     return api('/collections')
-      .then(setItems)
-      .catch(() => setItems([]));
+      .then(res => { setItems(res); setError(false); })
+      .catch(() => { setItems([]); setError(true); });
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -115,17 +116,26 @@ export default function CollectionsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="collections-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="collections-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Mes collections</Text>
-        <Pressable testID="collections-new-header" onPress={() => setCreating(true)} style={styles.iconBtn}>
+        <Pressable testID="collections-new-header" onPress={() => setCreating(true)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Nouvelle collection">
           <Feather name="plus" size={22} color={colors.onSurface} />
         </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
+      ) : error ? (
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger vos collections"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={() => { setLoading(true); load().finally(() => setLoading(false)); }}
+          testID="collections-retry"
+        />
       ) : (
         <FlatList
           style={{ flex: 1 }}
@@ -141,7 +151,7 @@ export default function CollectionsScreen() {
               onPress={() => router.push(`/collections/${item.id}` as any)}
               style={styles.card}
             >
-              <Mosaic previews={item.preview_recipes} isFavorites={item.id === FAVORITES_ID} />
+              <Mosaic previews={item.preview_recipes} isFavorites={item.id === FAVORITES_COLLECTION_ID} />
               <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.cardCount}>
                 {item.recipe_count} recette{item.recipe_count > 1 ? 's' : ''}
