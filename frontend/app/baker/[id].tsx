@@ -7,10 +7,12 @@ import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
+import { tapFeedback } from '@/src/haptics';
 import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 
 export default function BakerProfile() {
@@ -71,6 +73,7 @@ export default function BakerProfile() {
     if (followLoading) return;
     setFollowLoading(true);
     const prev = { following: data.following, follower_count: data.follower_count };
+    if (!prev.following) tapFeedback();
     // Optimistic : le bouton change d'état immédiatement, corrigé si l'appel échoue.
     setData((d: any) => ({ ...d, following: !d.following, follower_count: d.follower_count + (d.following ? -1 : 1) }));
     try {
@@ -119,7 +122,7 @@ export default function BakerProfile() {
       <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
         <Feather name="arrow-left" size={22} color={colors.onSurface} />
       </Pressable>
-      <Text style={styles.emptyTitle}>Profil introuvable</Text>
+      <EmptyState icon="user-x" title="Profil introuvable" />
     </SafeAreaView>
   );
 
@@ -356,7 +359,7 @@ export default function BakerProfile() {
             <Text style={styles.cardMeta}>{item.like_count} ♥ · {item.difficulty}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>Aucune recette partagée pour le moment.</Text>}
+        ListEmptyComponent={<EmptyState icon="book-open" title="Aucune recette partagée pour le moment." />}
       />
     </SafeAreaView>
   );
@@ -375,7 +378,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   profession: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
   badgesPreviewRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  badgePreviewIconWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  badgePreviewIconWrap: { width: 32, height: 32, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   badgePreviewIcon: { fontSize: 17 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
@@ -410,6 +413,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 30, fontStyle: 'italic' },
-  emptyTitle: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

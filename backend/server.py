@@ -4112,11 +4112,10 @@ async def startup():
         await db.recipes.update_one(
             {"title": r["title"], "is_user_submitted": False},
             {
-                "$set": r,
+                "$set": {**r, "author_name": "Chef Levanea"},
                 "$setOnInsert": {
                     "id": str(uuid.uuid4()),
                     "author_id": None,
-                    "author_name": "Chef Bakers",
                     "is_user_submitted": False,
                     "created_at": datetime.now(timezone.utc),
                 },

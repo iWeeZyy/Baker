@@ -20,7 +20,7 @@ struct WidgetSnapshot: Codable {
 }
 
 enum WidgetSnapshotStore {
-    static let appGroup = "group.com.lucasmorey.bakers"
+    static let appGroup = "group.com.lucasmorey.levanea"
     static let key = "widgetData"
 
     /// Ne renvoie jamais d'erreur : une donnée absente ou corrompue donne

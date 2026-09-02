@@ -3,12 +3,12 @@ import WidgetKit
 
 /// URL de la fiche production correspondante, ou de la connexion si le
 /// compte n'est pas connecté. Réutilise le routeur de l'app (Expo Router
-/// mappe `bakers://production/{id}` sur `app/production/[id].tsx` et
-/// `bakers://auth` sur `app/auth.tsx` sans configuration supplémentaire) —
+/// mappe `levanea://production/{id}` sur `app/production/[id].tsx` et
+/// `levanea://auth` sur `app/auth.tsx` sans configuration supplémentaire) —
 /// jamais un système de navigation séparé, jamais une route "today"
 /// symbolique qui n'existe pas.
-private func productionURL(_ id: String) -> URL? { URL(string: "bakers://production/\(id)") }
-private let authURL = URL(string: "bakers://auth")!
+private func productionURL(_ id: String) -> URL? { URL(string: "levanea://production/\(id)") }
+private let authURL = URL(string: "levanea://auth")!
 
 private func rowLabel(for item: WidgetProductionItem) -> some View {
     HStack(alignment: .top, spacing: 8) {
@@ -36,7 +36,7 @@ private struct LoggedOutView: View {
         VStack(spacing: 6) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.title2)
-                .foregroundStyle(.bakersBrand)
+                .foregroundStyle(.brand)
             Text("Connectez-vous pour afficher votre production")
                 .font(.caption)
                 .multilineTextAlignment(.center)
@@ -68,7 +68,7 @@ private struct WidgetHeader: View {
             Text("🥖")
             Text("PRODUCTION")
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.bakersBrand)
+                .foregroundStyle(.brand)
         }
     }
 }

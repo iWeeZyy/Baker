@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator,
   ScrollView, KeyboardAvoidingView, Platform,
@@ -13,6 +13,8 @@ import { isPlanLimitError } from '@/src/plan';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { syncWidgetData } from '@/src/widgetData';
+import { Button } from '@/src/Button';
+import { EmptyState } from '@/src/EmptyState';
 
 type Recipe = { id: string; title: string; category: string; yield_pieces?: number | null };
 type Line = { key: string; recipe_id: string; quantity: string; mode: 'pieces' | 'batches' };
@@ -38,33 +40,36 @@ export default function ProductionForm() {
   const [lines, setLines] = useState<Line[]>([]);
   const [picking, setPicking] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await api('/recipes');
-        setRecipes(list);
-        if (isEdit) {
-          const p = await api(`/productions/${id}`);
-          setDate(p.date);
-          setTargetTime(p.target_time || '');
-          setNotes(p.notes || '');
-          setLines((p.lines || []).map((l: any, i: number) => ({
-            key: `${l.line_id || i}`,
-            recipe_id: l.recipe_id,
-            quantity: String(l.quantity),
-            mode: l.mode,
-          })));
-        }
-      } catch (e: any) {
-        setError(e.message || 'Chargement impossible');
-      } finally {
-        setLoading(false);
+  const loadForm = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const list = await api('/recipes');
+      setRecipes(list);
+      if (isEdit) {
+        const p = await api(`/productions/${id}`);
+        setDate(p.date);
+        setTargetTime(p.target_time || '');
+        setNotes(p.notes || '');
+        setLines((p.lines || []).map((l: any, i: number) => ({
+          key: `${l.line_id || i}`,
+          recipe_id: l.recipe_id,
+          quantity: String(l.quantity),
+          mode: l.mode,
+        })));
       }
-    })();
+    } catch (e: any) {
+      setLoadError(e.message || 'Chargement impossible');
+    } finally {
+      setLoading(false);
+    }
   }, [id, isEdit]);
+
+  useEffect(() => { loadForm(); }, [loadForm]);
 
   const recipeById = (rid: string) => recipes.find(r => r.id === rid);
 
@@ -134,10 +139,25 @@ export default function ProductionForm() {
     return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
   }
 
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <EmptyState
+          icon="wifi-off"
+          title="Chargement impossible"
+          subtitle={loadError}
+          ctaLabel="Réessayer"
+          onCta={loadForm}
+          testID="prod-load-retry"
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="prod-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="prod-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>{isEdit ? 'Modifier' : 'Nouvelle production'}</Text>
@@ -178,7 +198,14 @@ export default function ProductionForm() {
               <View key={line.key} style={styles.lineCard} testID={`line-${line.recipe_id}`}>
                 <View style={styles.lineTop}>
                   <Text style={styles.lineTitle} numberOfLines={1}>{r?.title || 'Recette'}</Text>
-                  <Pressable testID={`remove-${line.recipe_id}`} onPress={() => removeLine(line.key)} style={styles.removeBtn}>
+                  <Pressable
+                    testID={`remove-${line.recipe_id}`}
+                    onPress={() => removeLine(line.key)}
+                    style={styles.removeBtn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Retirer ${r?.title || 'cette recette'}`}
+                  >
                     <Feather name="x" size={18} color={colors.muted} />
                   </Pressable>
                 </View>
@@ -243,20 +270,18 @@ export default function ProductionForm() {
 
           {error && <Text style={styles.error} testID="prod-error">{error}</Text>}
 
-          <Pressable
-            testID="prod-save" onPress={save} disabled={saving}
-            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-          >
-            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
-              <>
-                <Feather name="check" size={17} color={colors.onBrandPrimary} />
-                <Text style={styles.saveText}>{isEdit ? 'Enregistrer' : 'Créer la production'}</Text>
-              </>
-            )}
-          </Pressable>
+          <Button
+            testID="prod-save"
+            onPress={save}
+            disabled={saving}
+            loading={saving}
+            icon="check"
+            label={isEdit ? 'Enregistrer' : 'Créer la production'}
+            style={{ marginTop: 26 }}
+          />
 
           {isEdit && (
-            <Pressable testID="prod-delete" onPress={confirmDelete} style={styles.deleteBtn}>
+            <Pressable testID="prod-delete" onPress={confirmDelete} style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel="Supprimer cette production">
               <Text style={styles.deleteText}>Supprimer cette production</Text>
             </Pressable>
           )}
@@ -278,26 +303,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 9 },
   hint: { fontSize: 12, color: colors.muted, marginTop: 8, lineHeight: 17 },
   emptyLines: { fontSize: 13, color: colors.muted, fontStyle: 'italic', marginBottom: 4 },
-  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lineTitle: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
   removeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   lineControls: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 },
-  qtyInput: { width: 78, fontSize: 20, fontFamily: theme.serif, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12, textAlign: 'center' },
-  modeSwitch: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 6, padding: 3 },
-  modeBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 5 },
+  qtyInput: { width: 78, fontSize: 20, fontFamily: theme.serif, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: theme.radius.md, paddingVertical: 10, paddingHorizontal: 12, textAlign: 'center' },
+  modeSwitch: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: theme.radius.md, padding: 3 },
+  modeBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: theme.radius.md },
   modeBtnOn: { backgroundColor: colors.brand },
   modeText: { fontSize: 13, color: colors.muted, fontWeight: '600' },
   modeTextOn: { color: colors.onBrandPrimary },
   lineHint: { fontSize: 11, color: colors.muted, marginTop: 9, lineHeight: 16 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, marginTop: 4 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: theme.radius.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, marginTop: 4 },
   addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
-  picker: { marginTop: 10, backgroundColor: colors.surfaceSecondary, borderRadius: 8, overflow: 'hidden' },
+  picker: { marginTop: 10, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, overflow: 'hidden' },
   pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickTitle: { flex: 1, fontSize: 15, color: colors.onSurface },
   error: { color: colors.error, fontSize: 13, marginTop: 16, lineHeight: 18 },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: 8, marginTop: 26 },
-  saveText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '700' },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
   deleteText: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

@@ -11,6 +11,9 @@ import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
+import { Chip } from '@/src/Chip';
+import { EmptyState } from '@/src/EmptyState';
+import { SegmentedControl } from '@/src/SegmentedControl';
 
 type Period = 'week' | 'month' | 'year' | 'all';
 type Category = 'creators' | 'recipes' | 'creations';
@@ -36,6 +39,8 @@ export default function Classement() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
   const [creations, setCreations] = useState<CreationRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,9 +51,10 @@ export default function Classement() {
       if (category === 'creators') setCreators({ top: data.top, my_rank: data.my_rank });
       else if (category === 'recipes') setRecipes(data.items);
       else setCreations(data.items);
-    }).catch(console.warn).finally(() => { if (!cancelled) setLoading(false); });
+      setError(false);
+    }).catch((e) => { console.warn(e); if (!cancelled) setError(true); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [category, period]);
+  }, [category, period, reloadKey]);
 
   const toggleFollow = async (row: CreatorRow) => {
     if (busyId) return;
@@ -98,12 +104,8 @@ export default function Classement() {
     );
   };
 
-  const EmptyState = () => (
-    <View style={styles.emptyBox}>
-      <Feather name="award" size={40} color={colors.muted} />
-      <Text style={styles.emptyTitle}>Le classement arrive bientôt</Text>
-      <Text style={styles.emptySubtitle}>Publiez des recettes et des créations pour participer au classement.</Text>
-    </View>
+  const Empty = () => (
+    <EmptyState icon="award" title="Le classement arrive bientôt" subtitle="Publiez des recettes et des créations pour participer au classement." />
   );
 
   // Trois seules teintes de marque existent dans le thème — jamais un
@@ -115,7 +117,7 @@ export default function Classement() {
   ];
 
   const renderCreators = () => {
-    if (!creators || creators.top.length === 0) return <EmptyState />;
+    if (!creators || creators.top.length === 0) return <Empty />;
     const podium = creators.top.slice(0, 3);
     const rest = creators.top.slice(3);
     return (
@@ -169,7 +171,7 @@ export default function Classement() {
   };
 
   const renderRecipes = () => {
-    if (recipes.length === 0) return <EmptyState />;
+    if (recipes.length === 0) return <Empty />;
     return recipes.map(item => (
       <Pressable key={item.id} testID={`leaderboard-recipe-${item.id}`} onPress={() => router.push(`/recipe/${item.id}`)} style={styles.contentCard}>
         <Text style={styles.rankNumber}>{item.rank}</Text>
@@ -187,7 +189,7 @@ export default function Classement() {
   };
 
   const renderCreations = () => {
-    if (creations.length === 0) return <EmptyState />;
+    if (creations.length === 0) return <Empty />;
     return creations.map(item => (
       <Pressable key={item.id} testID={`leaderboard-creation-${item.id}`} onPress={() => router.push(`/creation/${item.id}` as any)} style={styles.contentCard}>
         <Text style={styles.rankNumber}>{item.rank}</Text>
@@ -207,7 +209,7 @@ export default function Classement() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="classement-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="classement-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Classement</Text>
@@ -216,22 +218,28 @@ export default function Classement() {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
         {PERIODS.map(([key, label]) => (
-          <Pressable key={key} testID={`period-${key}`} onPress={() => setPeriod(key)} style={[styles.chip, period === key && styles.chipActive]}>
-            <Text style={[styles.chipText, period === key && styles.chipTextActive]}>{label}</Text>
-          </Pressable>
+          <Chip key={key} testID={`period-${key}`} label={label} active={period === key} onPress={() => setPeriod(key)} />
         ))}
       </ScrollView>
 
-      <View style={styles.segment}>
-        {CATEGORIES.map(([key, label]) => (
-          <Pressable key={key} testID={`category-${key}`} onPress={() => setCategory(key)} style={[styles.segBtn, category === key && styles.segBtnOn]}>
-            <Text style={[styles.segText, category === key && styles.segTextOn]}>{label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <SegmentedControl
+        testID="category"
+        options={CATEGORIES.map(([key, label]) => ({ key, label }))}
+        value={category}
+        onChange={setCategory}
+      />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
+      ) : error ? (
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger le classement"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={() => setReloadKey(k => k + 1)}
+          testID="classement-retry"
+        />
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           {category === 'creators' && renderCreators()}
@@ -250,15 +258,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: theme.serif, fontSize: 24, color: colors.onSurface },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingVertical: 16 },
-  chip: { paddingHorizontal: 16, height: 36, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
-  segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginBottom: 16 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
-  segBtnOn: { backgroundColor: colors.brand },
-  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingTop: 8, paddingBottom: 60, gap: 12 },
   podiumRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 16, marginBottom: 24 },
   podiumItem: { alignItems: 'center', width: 96 },
@@ -284,7 +283,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   myRankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   myRankNumber: { fontFamily: theme.serif, fontSize: 20, color: colors.brand, width: 44 },
   myRankEmpty: { fontSize: 13, color: colors.muted, lineHeight: 19 },
-  emptyBox: { alignItems: 'center', paddingTop: 60, gap: 10 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center', marginTop: 6 },
-  emptySubtitle: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
 });

@@ -7,6 +7,7 @@ import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 import type { RawMaterial } from '@/src/cost/costCalc';
 
 function unitPriceOf(m: RawMaterial): { value: number; label: string } | null {
@@ -64,18 +65,14 @@ export default function RawMaterials() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : materials.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Feather name="shopping-bag" size={38} color={colors.muted} />
-          <Text style={styles.emptyTitle}>Aucune matière première</Text>
-          <Text style={styles.emptyText}>
-            Enregistrez vos prix d&apos;achat : farine, beurre, sucre…{'\n'}
-            Bakers calcule le prix au kilo, au litre ou à la pièce.
-          </Text>
-          <Pressable testID="materials-add-empty" onPress={() => router.push('/cost/material-form')} style={styles.addBtn}>
-            <Feather name="plus" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.addBtnText}>Ajouter une matière première</Text>
-          </Pressable>
-        </View>
+        <EmptyState
+          icon="shopping-bag"
+          title="Aucune matière première"
+          subtitle={"Enregistrez vos prix d'achat : farine, beurre, sucre…\nLevanea calcule le prix au kilo, au litre ou à la pièce."}
+          ctaLabel="Ajouter une matière première"
+          onCta={() => router.push('/cost/material-form')}
+          testID="materials-add-empty"
+        />
       ) : (
         <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 60, gap: 12 }}>
           {materials.map(m => {
@@ -123,11 +120,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand, paddingHorizontal: 20, paddingVertical: 13, borderRadius: 999, marginTop: 8 },
-  addBtnText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '600' },
   card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
   name: { fontSize: 16, fontWeight: '600', color: colors.onSurface },
   meta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },

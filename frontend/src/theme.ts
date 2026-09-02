@@ -75,7 +75,7 @@ export const DARK_COLORS: ThemeColors = {
 // valeurs, partagé par les deux thèmes.
 export const theme = {
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 },
-  radius: { sm: 0, md: 4, lg: 8, pill: 999 },
+  radius: { sm: 0, md: 4, lg: 8, xl: 16, pill: 999 },
   fontSize: { sm: 12, base: 14, lg: 16, xl: 20, xxl: 24, display: 32 },
   serif: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string,
 };

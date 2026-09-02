@@ -11,6 +11,8 @@ import { type Family } from '@/src/families';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { Chip } from '@/src/Chip';
+import { Button } from '@/src/Button';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
@@ -189,9 +191,7 @@ export default function ShareRecipe() {
           <Field label="Catégorie">
             <View style={styles.chipsRow}>
               {CATEGORIES.map(c => (
-                <Pressable key={c} testID={`cat-${c}`} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
-                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-                </Pressable>
+                <Chip key={c} testID={`cat-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
               ))}
             </View>
           </Field>
@@ -199,9 +199,7 @@ export default function ShareRecipe() {
           <Field label="Famille">
             <View style={styles.chipsRow}>
               {familyChoices.map(f => (
-                <Pressable key={f.key} testID={`fam-${f.key}`} onPress={() => setFamily(f.key)} style={[styles.chip, family === f.key && styles.chipActive]}>
-                  <Text style={[styles.chipText, family === f.key && styles.chipTextActive]}>{f.label}</Text>
-                </Pressable>
+                <Chip key={f.key} testID={`fam-${f.key}`} label={f.label} active={family === f.key} onPress={() => setFamily(f.key)} />
               ))}
             </View>
           </Field>
@@ -209,9 +207,7 @@ export default function ShareRecipe() {
           <Field label="Difficulté">
             <View style={styles.chipsRow}>
               {DIFFICULTIES.map(d => (
-                <Pressable key={d} testID={`diff-${d}`} onPress={() => setDifficulty(d)} style={[styles.chip, difficulty === d && styles.chipActive]}>
-                  <Text style={[styles.chipText, difficulty === d && styles.chipTextActive]}>{d}</Text>
-                </Pressable>
+                <Chip key={d} testID={`diff-${d}`} label={d} active={difficulty === d} onPress={() => setDifficulty(d)} />
               ))}
             </View>
           </Field>
@@ -250,9 +246,7 @@ export default function ShareRecipe() {
 
           {error && <Text style={styles.error} testID="share-error">{error}</Text>}
 
-          <Pressable testID="publish-btn" onPress={submit} disabled={submitting || uploading} style={[styles.publishBtn, (submitting || uploading) && { opacity: 0.6 }]}>
-            {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.publishText}>Publier ma recette</Text>}
-          </Pressable>
+          <Button testID="publish-btn" onPress={submit} disabled={submitting || uploading} loading={submitting} label="Publier ma recette" style={{ marginTop: 8 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -273,11 +267,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   input: { fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10 },
   fieldHint: { fontSize: 11, color: colors.muted, marginTop: 7, lineHeight: 16 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   error: { color: colors.error, fontSize: 13, marginBottom: 12 },
-  publishBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
-  publishText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
 });

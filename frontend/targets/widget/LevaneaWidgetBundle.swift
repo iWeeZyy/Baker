@@ -16,7 +16,7 @@ struct BakeryWidget: Widget {
 }
 
 /// Live Activity minimale : démarrée/mise à jour/terminée depuis
-/// `modules/bakers-live-activity` quand une étape passe respectivement à
+/// `modules/levanea-live-activity` quand une étape passe respectivement à
 /// "en cours"/reste "en cours" avec une durée modifiée/"terminée" dans
 /// `app/production/[id].tsx`. Entièrement locale — pas de jeton push, pas de
 /// mise à jour en arrière-plan.
@@ -28,7 +28,7 @@ struct BakeryLiveActivityWidget: Widget {
                 HStack {
                     Label("Cuisson en cours", systemImage: "flame.fill")
                         .font(.caption.bold())
-                        .foregroundStyle(.bakersBrand)
+                        .foregroundStyle(.brand)
                     Spacer()
                     if let endAt = context.state.endAt {
                         Text(endAt, style: .timer)
@@ -44,7 +44,7 @@ struct BakeryLiveActivityWidget: Widget {
             }
             .padding()
             .activityBackgroundTint(Color(.systemBackground))
-            .activitySystemActionForegroundColor(Color.bakersBrand)
+            .activitySystemActionForegroundColor(Color.brand)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -65,22 +65,22 @@ struct BakeryLiveActivityWidget: Widget {
                         .lineLimit(1)
                 }
             } compactLeading: {
-                Image(systemName: "flame.fill").foregroundStyle(.bakersBrand)
+                Image(systemName: "flame.fill").foregroundStyle(.brand)
             } compactTrailing: {
                 if let endAt = context.state.endAt {
                     Text(endAt, style: .timer).font(.caption2.monospacedDigit())
                 } else {
-                    Image(systemName: "flame.fill").foregroundStyle(.bakersBrand)
+                    Image(systemName: "flame.fill").foregroundStyle(.brand)
                 }
             } minimal: {
-                Image(systemName: "flame.fill").foregroundStyle(.bakersBrand)
+                Image(systemName: "flame.fill").foregroundStyle(.brand)
             }
         }
     }
 }
 
 @main
-struct BakersWidgetBundle: WidgetBundle {
+struct LevaneaWidgetBundle: WidgetBundle {
     var body: some Widget {
         BakeryWidget()
         if #available(iOS 16.1, *) {

@@ -17,10 +17,11 @@ import { confirmAsync } from '@/src/confirm';
 import { formatDuration } from '@/src/format';
 import { recipeImageSource } from '@/src/products';
 import { SwipeableRow } from '@/src/SwipeableRow';
+import { Chip } from '@/src/Chip';
+import { EmptyState } from '@/src/EmptyState';
+import { FAVORITES_COLLECTION_ID } from '@/src/collections';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
-
-const FAVORITES_ID = '__favorites__';
 
 type Sort = 'recent' | 'oldest' | 'popular';
 const SORT_OPTIONS: { key: Sort; label: string }[] = [
@@ -40,13 +41,14 @@ export default function CollectionDetail() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const isFavorites = id === FAVORITES_ID;
+  const isFavorites = id === FAVORITES_COLLECTION_ID;
 
   const [meta, setMeta] = useState<{ name: string; description: string; recipe_count: number } | null>(null);
   const [items, setItems] = useState<RecipeItem[]>([]);
   const [sort, setSort] = useState<Sort>('recent');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -67,16 +69,21 @@ export default function CollectionDetail() {
     return api(`/collections/${id}/recipes?${params.toString()}`);
   }, [id, sort, query]);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     setLoading(true);
     loadMeta();
     loadRecipes().then(r => {
       setItems(r.items);
       setHasMore(r.has_more);
-    }).catch(() => { setItems([]); setHasMore(false); }).finally(() => setLoading(false));
-    // `loadRecipes`/`loadMeta` volontairement absents : ils changent aussi
-    // avec `query` (débouncée séparément ci-dessous) — les inclure ici
-    // relancerait cet effet à chaque frappe, en plus du debounce.
+      setError(false);
+    }).catch(() => { setItems([]); setHasMore(false); setError(true); }).finally(() => setLoading(false));
+  }, [loadMeta, loadRecipes]);
+
+  useEffect(() => {
+    refetch();
+    // `refetch` volontairement absent : il change aussi avec `query`
+    // (débouncée séparément ci-dessous) — l'inclure ici relancerait cet
+    // effet à chaque frappe, en plus du debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, sort]);
 
@@ -88,7 +95,8 @@ export default function CollectionDetail() {
       loadRecipes().then(r => {
         setItems(r.items);
         setHasMore(r.has_more);
-      }).catch(() => { setItems([]); setHasMore(false); }).finally(() => setLoading(false));
+        setError(false);
+      }).catch(() => { setItems([]); setHasMore(false); setError(true); }).finally(() => setLoading(false));
     }, 300);
     return () => { if (queryDebounce.current) clearTimeout(queryDebounce.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,6 +112,11 @@ export default function CollectionDetail() {
   };
 
   const removeRecipe = async (recipeId: string) => {
+    // Même confirmation que deleteCollection ci-dessous et que le retrait
+    // d'un membre de Team — jamais une suppression silencieuse pour un
+    // simple glissement, même si le geste lui-même est déjà délibéré.
+    const ok = await confirmAsync('Retirer cette recette', 'Elle restera enregistrée et disponible ailleurs.', 'Retirer', true);
+    if (!ok) return;
     setItems(prev => prev.filter(r => r.id !== recipeId));
     try {
       await api(`/collections/${id}/recipes/${recipeId}`, { method: 'DELETE' });
@@ -148,7 +161,7 @@ export default function CollectionDetail() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="collection-detail-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="collection-detail-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <View style={styles.headerText}>
@@ -159,10 +172,10 @@ export default function CollectionDetail() {
           <View style={{ width: 40 }} />
         ) : (
           <View style={styles.headerActions}>
-            <Pressable testID="collection-detail-edit" onPress={openEdit} style={styles.iconBtn}>
+            <Pressable testID="collection-detail-edit" onPress={openEdit} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Modifier la collection">
               <Feather name="edit-2" size={18} color={colors.onSurface} />
             </Pressable>
-            <Pressable testID="collection-detail-delete" onPress={deleteCollection} style={styles.iconBtn}>
+            <Pressable testID="collection-detail-delete" onPress={deleteCollection} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Supprimer la collection">
               <Feather name="trash-2" size={18} color={colors.error} />
             </Pressable>
           </View>
@@ -183,19 +196,21 @@ export default function CollectionDetail() {
 
       <View style={styles.sortRow}>
         {SORT_OPTIONS.map(opt => (
-          <Pressable
-            key={opt.key}
-            testID={`collection-sort-${opt.key}`}
-            onPress={() => setSort(opt.key)}
-            style={[styles.chip, sort === opt.key && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, sort === opt.key && styles.chipTextActive]}>{opt.label}</Text>
-          </Pressable>
+          <Chip key={opt.key} testID={`collection-sort-${opt.key}`} label={opt.label} active={sort === opt.key} onPress={() => setSort(opt.key)} />
         ))}
       </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
+      ) : error ? (
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger cette collection"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={refetch}
+          testID="collection-detail-retry"
+        />
       ) : (
         <FlatList
           style={{ flex: 1 }}
@@ -226,7 +241,12 @@ export default function CollectionDetail() {
               </SwipeableRow>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>Aucune recette{query ? ' pour cette recherche' : ' pour l’instant'}.</Text>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="book-open"
+              title={`Aucune recette${query ? ' pour cette recherche' : ' pour l’instant'}.`}
+            />
+          }
         />
       )}
 
@@ -283,10 +303,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
   sortRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 12, marginBottom: 4 },
-  chip: { paddingHorizontal: 14, height: 32, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.md,
@@ -297,9 +313,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowText: { flex: 1 },
   rowTitle: { fontFamily: theme.serif, fontSize: 16, color: colors.onSurface },
   rowMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
   backdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.5)', justifyContent: 'center', padding: 24 },
-  formSheet: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, gap: 12 },
+  formSheet: { backgroundColor: colors.surface, borderRadius: theme.radius.xl, padding: 20, gap: 12 },
   formTitle: { fontFamily: theme.serif, fontSize: 19, color: colors.onSurface },
   input: {
     borderWidth: 1, borderColor: colors.border, borderRadius: theme.radius.md,

@@ -17,6 +17,13 @@ import {
 type CostLineItem = { id: string; label: string; costText: string };
 const newItem = (): CostLineItem => ({ id: String(Math.random()), label: '', costText: '' });
 
+// `colors.surfaceInverse`/`onSurfaceInverse` are fixed (identical in both
+// themes, see theme.ts) — this card's divider/secondary label are literal
+// translucent whites over that fixed dark background, same family as the
+// photo scrims documented in CLAUDE.md, never meant to vary with the theme.
+const TOTAL_CARD_DIVIDER = 'rgba(255,255,255,0.15)';
+const TOTAL_CARD_LABEL = 'rgba(250,248,245,0.75)';
+
 const VAT_PRESETS = ['5,5', '10', '20'];
 
 type Snapshot = { result: RecipeCostResult; sale: SaleMetrics };
@@ -554,10 +561,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   addItemText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
   totalCard: { backgroundColor: colors.surfaceInverse, borderRadius: 8, padding: 20, marginTop: 8 },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 10 },
+  divider: { height: 1, backgroundColor: TOTAL_CARD_DIVIDER, marginVertical: 10 },
   dividerLight: { height: 1, backgroundColor: colors.borderStrong, marginVertical: 10 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  resultLabel: { fontSize: 13, color: 'rgba(250,248,245,0.75)' },
+  resultLabel: { fontSize: 13, color: TOTAL_CARD_LABEL },
   resultLabelLight: { fontSize: 13, color: colors.onSurfaceSecondary },
   resultLabelBig: { fontSize: 13, letterSpacing: 1, color: colors.onSurfaceInverse, fontWeight: '700' },
   resultValue: { fontSize: 15, color: colors.onSurfaceInverse, fontFamily: theme.serif },

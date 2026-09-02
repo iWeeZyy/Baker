@@ -111,9 +111,17 @@ export default function Assistant() {
             placeholderTextColor={colors.muted}
             style={styles.input}
             multiline
+            editable={!loading}
             onSubmitEditing={() => send()}
           />
-          <Pressable testID="chat-send" onPress={() => send()} disabled={!input.trim() || loading} style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.4 }]}>
+          <Pressable
+            testID="chat-send"
+            onPress={() => send()}
+            disabled={!input.trim() || loading}
+            style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.4 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Envoyer"
+          >
             <Feather name="arrow-up" size={20} color={colors.onBrandPrimary} />
           </Pressable>
         </View>
@@ -129,19 +137,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 4 },
   chatBody: { padding: 20, paddingBottom: 24, gap: 12 },
   empty: { alignItems: 'center', paddingTop: 40 },
-  emptyIcon: { width: 64, height: 64, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  emptyIcon: { width: 64, height: 64, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   emptyTitle: { fontFamily: theme.serif, fontSize: 24, color: colors.onSurface },
   emptyBody: { fontSize: 14, color: colors.muted, textAlign: 'center', marginTop: 8, marginBottom: 32, paddingHorizontal: 24, lineHeight: 20 },
   suggestions: { gap: 10, width: '100%', paddingHorizontal: 8 },
-  suggestion: { backgroundColor: colors.surfaceSecondary, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 4 },
+  suggestion: { backgroundColor: colors.surfaceSecondary, paddingVertical: 14, paddingHorizontal: 16, borderRadius: theme.radius.md },
   suggestionText: { fontSize: 14, color: colors.onSurface },
-  bubble: { maxWidth: '82%', padding: 14, borderRadius: 12 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: colors.brandTertiary, borderBottomRightRadius: 4 },
-  aiBubble: { alignSelf: 'flex-start', backgroundColor: colors.surfaceSecondary, borderBottomLeftRadius: 4 },
+  bubble: { maxWidth: '82%', padding: 14, borderRadius: theme.radius.xl },
+  userBubble: { alignSelf: 'flex-end', backgroundColor: colors.brandTertiary, borderBottomRightRadius: theme.radius.md },
+  aiBubble: { alignSelf: 'flex-start', backgroundColor: colors.surfaceSecondary, borderBottomLeftRadius: theme.radius.md },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   userText: { color: colors.onBrandTertiary },
   aiText: { color: colors.onSurface },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 16, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface, gap: 10 },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 22 },
-  sendBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 12, borderRadius: theme.radius.pill },
+  sendBtn: { width: 44, height: 44, borderRadius: theme.radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
 });

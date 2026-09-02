@@ -10,9 +10,9 @@ import ActivityKit
 /// L'activité vit tant que l'app reste ouverte sur l'étape en cours et se
 /// termine explicitement, sur le même principe que les minuteurs de cuisson
 /// (TimerContext.tsx), déjà 100% locaux.
-public class BakersLiveActivityModule: Module {
+public class LevaneaLiveActivityModule: Module {
     public func definition() -> ModuleDefinition {
-        Name("BakersLiveActivity")
+        Name("LevaneaLiveActivity")
 
         Function("start") { (recipeTitle: String, stepText: String, endAtIso: String?) in
             guard #available(iOS 16.1, *) else { return }

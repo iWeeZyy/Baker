@@ -13,6 +13,7 @@ import { subscribeRealtime } from '@/src/realtime';
 import { isPhotoRevealed, markPhotoRevealed } from '@/src/revealedPhotos';
 import { LIGHT_COLORS, theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type Moderation = { level: 'normal' | 'sensitive' | 'blocked'; score: number; provider: string; status: string };
 type Message = {
@@ -120,7 +121,10 @@ export default function Chat() {
           )
         )}
         {!mine && (
-          <Pressable testID={`photo-report-${item.id}`} onPress={() => reportMessage(item.id)} style={styles.photoReportBtn}>
+          <Pressable
+            testID={`photo-report-${item.id}`} onPress={() => reportMessage(item.id)} style={styles.photoReportBtn} hitSlop={8}
+            accessibilityRole="button" accessibilityLabel="Signaler cette photo"
+          >
             <Feather name="flag" size={13} color={colors.onBrandPrimary} />
           </Pressable>
         )}
@@ -287,7 +291,7 @@ export default function Chat() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="chat-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="chat-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Pressable onPress={() => router.push(`/baker/${id}`)} style={styles.headerNameRow}>
@@ -303,7 +307,7 @@ export default function Chat() {
             <Text style={styles.headerSub}>Voir le profil</Text>
           </View>
         </Pressable>
-        <Pressable testID="chat-menu" onPress={() => setMenuOpen(true)} style={styles.iconBtn}>
+        <Pressable testID="chat-menu" onPress={() => setMenuOpen(true)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Options de la conversation">
           <Feather name="more-vertical" size={20} color={colors.onSurface} />
         </Pressable>
       </View>
@@ -313,10 +317,10 @@ export default function Chat() {
         title="Conversation"
         onClose={() => setMenuOpen(false)}
         options={[
-          ...(messages.length > 0 ? [{ key: 'report', emoji: '🚩', label: 'Signaler', onPress: reportConversation }] : []),
+          ...(messages.length > 0 ? [{ key: 'report', icon: 'flag' as const, label: 'Signaler', onPress: reportConversation }] : []),
           blockedByMe
-            ? { key: 'unblock', emoji: '✅', label: 'Débloquer', onPress: toggleBlock }
-            : { key: 'block', emoji: '🚫', label: 'Bloquer cet utilisateur', onPress: toggleBlock, destructive: true },
+            ? { key: 'unblock', icon: 'check-circle' as const, label: 'Débloquer', onPress: toggleBlock }
+            : { key: 'block', icon: 'slash' as const, label: 'Bloquer cet utilisateur', onPress: toggleBlock, destructive: true },
         ]}
       />
 
@@ -356,10 +360,7 @@ export default function Chat() {
               );
             }}
             ListEmptyComponent={
-              <View style={styles.emptyBox}>
-                <Feather name="message-circle" size={36} color={colors.muted} />
-                <Text style={styles.emptyText}>Commencez la conversation !{'\n'}Parlez levain, façonnage, cuisson…</Text>
-              </View>
+              <EmptyState icon="message-circle" title="Commencez la conversation !" subtitle="Parlez levain, façonnage, cuisson…" />
             }
           />
         )}
@@ -395,7 +396,10 @@ export default function Chat() {
           </View>
         ) : (
           <View style={styles.inputRow}>
-            <Pressable testID="chat-pick-photo" onPress={pickPhoto} disabled={!!pendingPhoto} style={[styles.photoBtn, !!pendingPhoto && { opacity: 0.4 }]}>
+            <Pressable
+              testID="chat-pick-photo" onPress={pickPhoto} disabled={!!pendingPhoto} style={[styles.photoBtn, !!pendingPhoto && { opacity: 0.4 }]}
+              accessibilityRole="button" accessibilityLabel="Ajouter une photo"
+            >
               <Feather name="image" size={20} color={colors.brand} />
             </Pressable>
             <TextInput
@@ -407,7 +411,10 @@ export default function Chat() {
               style={styles.input}
               multiline
             />
-            <Pressable testID="chat-send" onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}>
+            <Pressable
+              testID="chat-send" onPress={send} disabled={!text.trim() || sending} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.4 }]}
+              accessibilityRole="button" accessibilityLabel="Envoyer"
+            >
               <Feather name="send" size={18} color={colors.onBrandPrimary} />
             </Pressable>
           </View>
@@ -423,15 +430,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerNameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerAvatar: { width: 36, height: 36, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  headerAvatar: { width: 36, height: 36, borderRadius: theme.radius.pill, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   headerAvatarText: { fontSize: 15, color: colors.onBrandTertiary, fontFamily: theme.serif },
   headerName: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
   headerSub: { fontSize: 11, color: colors.muted },
   bubbleRow: { flexDirection: 'row' },
-  bubble: { maxWidth: '78%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  bubble: { maxWidth: '78%', borderRadius: theme.radius.xl, paddingHorizontal: 14, paddingVertical: 10 },
   bubblePhoto: { padding: 6 },
-  bubbleMine: { backgroundColor: colors.brand, borderBottomRightRadius: 4 },
-  bubbleTheirs: { backgroundColor: colors.surfaceSecondary, borderBottomLeftRadius: 4 },
+  bubbleMine: { backgroundColor: colors.brand, borderBottomRightRadius: theme.radius.md },
+  bubbleTheirs: { backgroundColor: colors.surfaceSecondary, borderBottomLeftRadius: theme.radius.md },
   bubbleText: { fontSize: 15, color: colors.onSurface, lineHeight: 20 },
   bubbleTime: { fontSize: 10, color: colors.muted, marginTop: 4, alignSelf: 'flex-end' },
   // Fond d'attente avant chargement de la photo : une teinte de surface
@@ -443,23 +450,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   photoWarningTitle: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   photoWarningText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', lineHeight: 15 },
   photoWarningActions: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  photoRevealBtn: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  photoRevealBtn: { backgroundColor: colors.onBrandPrimary, borderRadius: theme.radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
   // Un bouton blanc fixe posé sur un voile sombre invariant (au-dessus d'une
   // photo) : son texte doit rester sombre dans les deux thèmes, jamais
   // colors.onSurface qui s'éclaircirait en mode sombre et deviendrait
   // illisible sur ce fond resté blanc.
   photoRevealBtnText: { fontSize: 12, fontWeight: '700', color: LIGHT_COLORS.onSurface },
-  photoHideBtn: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)' },
+  photoHideBtn: { borderRadius: theme.radius.pill, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)' },
   photoHideBtnText: { fontSize: 12, fontWeight: '600', color: colors.onBrandPrimary },
-  photoReportBtn: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  photoReportBtn: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: theme.radius.pill, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   photoDismissedHint: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(20,14,10,0.75)', paddingHorizontal: 10, paddingVertical: 8 },
   photoDismissedHintText: { color: colors.onBrandPrimary, fontSize: 10.5, flex: 1 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
-  photoBtn: { width: 44, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  input: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
-  sendBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  photoBtn: { width: 44, height: 44, borderRadius: theme.radius.pill, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.pill, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
+  sendBtn: { width: 44, height: 44, borderRadius: theme.radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   error: { color: colors.error, fontSize: 12, paddingHorizontal: 16, paddingBottom: 4 },
   notFriendsBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surfaceSecondary },
   notFriendsText: { flex: 1, fontSize: 13, color: colors.muted, lineHeight: 18 },
@@ -470,10 +475,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   previewOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', gap: 8 },
   previewOverlayText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '600' },
   previewActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, padding: 10, position: 'absolute', bottom: 0, right: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
-  previewCancelBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.9)' },
+  previewCancelBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: theme.radius.pill, backgroundColor: 'rgba(255,255,255,0.9)' },
   // Même raison que photoRevealBtnText : ce bouton reste blanc dans les deux
   // thèmes (posé sur un voile sombre invariant), donc son texte aussi.
   previewCancelText: { fontSize: 13, fontWeight: '600', color: LIGHT_COLORS.onSurface },
-  previewSendBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: colors.brand },
+  previewSendBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: theme.radius.pill, backgroundColor: colors.brand },
   previewSendText: { fontSize: 13, fontWeight: '700', color: colors.onBrandPrimary },
 });

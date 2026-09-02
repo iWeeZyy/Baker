@@ -4,12 +4,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { AddToCollectionModal } from '@/src/AddToCollectionModal';
 import { api, API_BASE } from '@/src/api';
 import { avatarUrl } from '@/src/avatar';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
+import { tapFeedback } from '@/src/haptics';
 import { useTimer } from '@/src/TimerContext';
 import { formatDuration } from '@/src/format';
 import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingredientScale';
@@ -287,6 +288,7 @@ export default function RecipeDetail() {
     setLikes(optimistic);
     setLikePending(true);
     if (optimistic.liked) {
+      tapFeedback();
       Animated.sequence([
         Animated.timing(likeScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
         Animated.spring(likeScale, { toValue: 1, useNativeDriver: true }),
@@ -348,6 +350,8 @@ export default function RecipeDetail() {
 
   const toggleCommentLike = async (commentId: string) => {
     const previous = comments;
+    const wasLiked = comments.find(c => c.id === commentId)?.liked;
+    if (!wasLiked) tapFeedback();
     setComments(prev => prev.map(c => c.id === commentId
       ? { ...c, liked: !c.liked, like_count: (c.like_count || 0) + (c.liked ? -1 : 1) }
       : c));
@@ -397,6 +401,28 @@ export default function RecipeDetail() {
     () => ((recipe?.steps as string[] | undefined) ?? []).map((line) => scaleStepLine(line, quantity)),
     [recipe, quantity],
   );
+
+  // Tri + regroupement des commentaires, mémorisés à part : sans ça, taper
+  // dans le composeur de commentaire (state sur ce même composant) refiltrait
+  // et retriait toute la liste à chaque frappe.
+  const sortedRootComments = useMemo(() => {
+    const roots = comments.filter(c => !c.parent_id);
+    return [...roots].sort((a, b) => {
+      if (commentSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (commentSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }, [comments, commentSort]);
+
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, Comment[]>();
+    for (const c of comments) {
+      if (!c.parent_id) continue;
+      const arr = map.get(c.parent_id);
+      if (arr) arr.push(c); else map.set(c.parent_id, [c]);
+    }
+    return map;
+  }, [comments]);
 
   if (loading || !recipe) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
 
@@ -490,7 +516,7 @@ export default function RecipeDetail() {
         <View style={styles.likeRow}>
           <Pressable testID="like-btn" onPress={toggleLike} style={styles.likeBtn}>
             <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-              <Ionicons name={likes.liked ? 'heart' : 'heart-outline'} size={18} color={likes.liked ? colors.error : colors.onSurfaceSecondary} />
+              <Feather name="heart" size={18} color={likes.liked ? colors.error : colors.onSurfaceSecondary} />
             </Animated.View>
             <Text style={styles.likeText}>{likes.count} j'aime</Text>
           </Pressable>
@@ -506,7 +532,7 @@ export default function RecipeDetail() {
         <QuantitySelector testID="quantity-selector" value={quantity} onChange={setQuantity} />
 
         <Pressable testID="cost-btn" onPress={() => router.push(`/cost/${id}`)} style={styles.costBtn}>
-          <Text style={styles.costBtnEmoji}>💰</Text>
+          <Feather name="dollar-sign" size={16} color={colors.onSurface} />
           <Text style={styles.costBtnText}>Calculer le coût</Text>
           {costInfo?.available && costInfo.cost_per_piece != null && (
             <Text testID="cost-badge" style={styles.costBadge}>
@@ -517,7 +543,7 @@ export default function RecipeDetail() {
         </Pressable>
 
         <Pressable testID="adapt-btn" onPress={() => router.push(`/adapt/${id}` as any)} style={styles.costBtn}>
-          <Text style={styles.costBtnEmoji}>⚙️</Text>
+          <Feather name="settings" size={16} color={colors.onSurface} />
           <Text style={styles.costBtnText}>Adapter la recette</Text>
           <Feather name="chevron-right" size={16} color={colors.muted} />
         </Pressable>
@@ -644,19 +670,14 @@ export default function RecipeDetail() {
               )}
 
               {(() => {
-                const roots = comments.filter(c => !c.parent_id);
-                const repliesFor = (pid: string) => comments.filter(c => c.parent_id === pid);
-                const sortedRoots = [...roots].sort((a, b) => {
-                  if (commentSort === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-                  if (commentSort === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                  return (b.like_count || 0) - (a.like_count || 0) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                });
+                const sortedRoots = sortedRootComments;
+                const repliesFor = (pid: string) => repliesByParent.get(pid) || [];
                 if (sortedRoots.length === 0) return <Text style={styles.noComments}>Soyez le premier à donner votre avis.</Text>;
 
                 const renderActions = (c: Comment, rootId: string) => (
                   <View style={styles.commentActionsRow}>
                     <Pressable testID={`comment-like-btn-${c.id}`} onPress={() => toggleCommentLike(c.id)} style={styles.replyBtn}>
-                      <Ionicons name={c.liked ? 'heart' : 'heart-outline'} size={13} color={c.liked ? colors.error : colors.brand} />
+                      <Feather name="heart" size={13} color={c.liked ? colors.error : colors.brand} />
                       <Text style={styles.replyBtnText}>{c.like_count || 0}</Text>
                     </Pressable>
                     <Pressable
@@ -836,7 +857,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg,
     backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
   },
-  costBtnEmoji: { fontSize: 16 },
   costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.onSurface },
   costBadge: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   sheet: {
@@ -858,7 +878,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   segTextActive: { color: colors.onSurface },
   content: { paddingHorizontal: 24, paddingTop: 24 },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  dot: { width: 6, height: 6, borderRadius: theme.radius.pill, backgroundColor: colors.brand },
   ingredientText: { fontSize: 15, color: colors.onSurface, flex: 1 },
   stepRow: { flexDirection: 'row', marginBottom: 24, gap: 16 },
   stepNum: { fontFamily: theme.serif, fontSize: 24, color: colors.brand, minWidth: 36 },
@@ -875,11 +895,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   saveNoteText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '600' },
   commentsTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 16 },
   commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 8 },
-  commentInput: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
+  commentInput: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.pill, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
   commentSend: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   commentError: { color: colors.error, fontSize: 13, marginBottom: 16 },
   noComments: { color: colors.muted, fontSize: 14, fontStyle: 'italic' },
-  replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginBottom: 10 },
+  replyBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.brandTertiary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.lg, marginBottom: 10 },
   replyBannerText: { fontSize: 13, color: colors.onBrandTertiary, fontWeight: '500' },
   replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
   replyBtnText: { fontSize: 12, color: colors.brand, fontWeight: '600' },

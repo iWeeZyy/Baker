@@ -19,6 +19,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { subscribeRealtime } from '@/src/realtime';
+import { successFeedback } from '@/src/haptics';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import type { GamificationResult } from './types';
@@ -82,6 +83,7 @@ export function UnlockToast() {
 
   useEffect(() => {
     if (!current) return;
+    successFeedback();
     Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     dismissTimer.current = setTimeout(dismiss, AUTO_DISMISS_MS);
     return () => { if (dismissTimer.current) clearTimeout(dismissTimer.current); };
@@ -141,7 +143,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: colors.surface, borderRadius: theme.radius.lg, padding: 14,
     borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420,
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
   },
   emoji: { fontSize: 26 },
   title: { fontSize: theme.fontSize.base, fontWeight: '700', color: colors.onSurface },

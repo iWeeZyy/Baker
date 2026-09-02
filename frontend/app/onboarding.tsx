@@ -8,6 +8,7 @@ import { useTheme } from '@/src/ThemeContext';
 import { storage } from '@/src/utils/storage';
 import { ONBOARDING_COMPLETED_KEY } from '@/src/onboarding/storageKeys';
 import { StepDots } from '@/src/onboarding/StepDots';
+import { Button } from '@/src/Button';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -21,7 +22,7 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     icon: 'sunrise',
-    title: 'Bienvenue sur Bakers',
+    title: 'Bienvenue sur Levanea',
     subtitle: 'L’application pensée pour les artisans boulangers et pâtissiers.',
   },
   {
@@ -50,13 +51,13 @@ const SLIDES: Slide[] = [
   },
   {
     icon: 'user',
-    title: 'Construisez votre profil Bakers',
+    title: 'Construisez votre profil Levanea',
     subtitle: 'Montrez votre travail et suivez votre progression.',
     bullets: ['Photo et description', 'Instagram', 'Recettes, créations, collections', 'Badges et niveau'],
   },
   {
     icon: 'check-circle',
-    title: 'Prêt à découvrir Bakers ?',
+    title: 'Prêt à découvrir Levanea ?',
     subtitle: 'Créez votre compte pour commencer, ou jetez un premier coup d’œil.',
   },
 ];
@@ -143,17 +144,11 @@ export default function Onboarding() {
         <StepDots count={SLIDES.length} activeIndex={index} />
         {isLast ? (
           <View style={styles.footerButtons}>
-            <Pressable testID="onboarding-create-account" onPress={createAccount} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>Créer mon compte</Text>
-            </Pressable>
-            <Pressable testID="onboarding-discover" onPress={discoverApp} style={styles.secondaryBtn}>
-              <Text style={styles.secondaryBtnText}>Découvrir l’application</Text>
-            </Pressable>
+            <Button testID="onboarding-create-account" onPress={createAccount} label="Créer mon compte" />
+            <Button testID="onboarding-discover" onPress={discoverApp} variant="text" label="Découvrir l’application" />
           </View>
         ) : (
-          <Pressable testID="onboarding-continue" onPress={() => goTo(index + 1)} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>Continuer</Text>
-          </Pressable>
+          <Button testID="onboarding-continue" onPress={() => goTo(index + 1)} label="Continuer" />
         )}
       </View>
     </SafeAreaView>
@@ -173,8 +168,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   bulletText: { fontSize: 14, color: colors.onSurfaceSecondary, flex: 1 },
   footer: { paddingHorizontal: 24, paddingTop: 16, gap: 20 },
   footerButtons: { gap: 12 },
-  primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: theme.radius.lg },
-  primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
-  secondaryBtn: { paddingVertical: 14, alignItems: 'center' },
-  secondaryBtnText: { color: colors.onSurface, fontSize: 14, fontWeight: '500' },
 });

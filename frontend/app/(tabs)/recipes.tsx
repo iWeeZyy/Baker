@@ -6,9 +6,11 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { ActionSheet } from '@/src/ActionSheet';
+import { Chip } from '@/src/Chip';
 import { familyTile, type Family } from '@/src/families';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 // Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
 // une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
@@ -81,14 +83,7 @@ export default function Recipes() {
           contentContainerStyle={styles.chipsRow}
         >
           {categories.map(c => (
-            <Pressable
-              key={c}
-              testID={`chip-${c}`}
-              onPress={() => setCategory(c)}
-              style={[styles.chip, category === c && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-            </Pressable>
+            <Chip key={c} testID={`chip-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
           ))}
         </ScrollView>
       </View>
@@ -121,7 +116,7 @@ export default function Recipes() {
               {row.length === 1 && <View style={styles.card} />}
             </View>
           )}
-          ListEmptyComponent={<Text style={styles.empty}>Aucune famille dans cette catégorie.</Text>}
+          ListEmptyComponent={<EmptyState icon="folder" title="Aucune famille dans cette catégorie." />}
         />
       )}
 
@@ -130,8 +125,8 @@ export default function Recipes() {
         title="Nouvelle recette"
         onClose={() => setCreateMenuOpen(false)}
         options={[
-          { key: 'scan', emoji: '📷', label: 'Scanner une recette', onPress: () => router.push('/scan') },
-          { key: 'manual', emoji: '✏️', label: 'Créer manuellement', onPress: () => router.push('/share') },
+          { key: 'scan', icon: 'camera', label: 'Scanner une recette', onPress: () => router.push('/scan') },
+          { key: 'manual', icon: 'edit-2', label: 'Créer manuellement', onPress: () => router.push('/share') },
         ]}
       />
     </SafeAreaView>
@@ -147,10 +142,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
   shareBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
-  chip: { paddingHorizontal: 16, height: 36, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   gridRow: { flexDirection: 'row', gap: 16, paddingHorizontal: 24 },
   card: { flex: 1 },
   cardImage: {
@@ -161,5 +152,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardTitle: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

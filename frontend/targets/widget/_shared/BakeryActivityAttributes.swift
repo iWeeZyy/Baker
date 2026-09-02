@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-/// Partagé entre l'app principale (modules/bakers-live-activity, qui démarre/
+/// Partagé entre l'app principale (modules/levanea-live-activity, qui démarre/
 /// termine l'activité) et l'extension widget (qui la présente sur l'écran
 /// verrouillé et dans la Dynamic Island). Lié aux deux cibles via le dossier
 /// `_shared` de `@bacons/apple-targets` — ne jamais dupliquer cette

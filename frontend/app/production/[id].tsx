@@ -12,7 +12,8 @@ import { useTimer } from '@/src/TimerContext';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { syncWidgetData } from '@/src/widgetData';
-import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/bakers-live-activity';
+import { EmptyState } from '@/src/EmptyState';
+import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/levanea-live-activity';
 
 type Line = {
   line_id: string;
@@ -205,13 +206,14 @@ export default function ProductionDetail() {
   if (!data) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.center}>
-          <Feather name="alert-circle" size={34} color={colors.muted} />
-          <Text style={styles.emptyText}>{error || 'Production introuvable'}</Text>
-          <Pressable testID="detail-back" onPress={() => router.back()} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Retour</Text>
-          </Pressable>
-        </View>
+        <EmptyState
+          icon="alert-circle"
+          title="Production introuvable"
+          subtitle={error || undefined}
+          ctaLabel="Retour"
+          onCta={() => router.back()}
+          testID="detail-back"
+        />
       </SafeAreaView>
     );
   }
@@ -247,7 +249,7 @@ export default function ProductionDetail() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="detail-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="detail-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{formatDate(data.date)}</Text>
@@ -255,6 +257,8 @@ export default function ProductionDetail() {
           testID="detail-edit"
           onPress={() => router.push({ pathname: '/production/new', params: { id: data.id } } as any)}
           style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier la production"
         >
           <Feather name="edit-2" size={18} color={colors.onSurface} />
         </Pressable>
@@ -297,12 +301,7 @@ export default function ProductionDetail() {
             </View>
 
             {data.lines.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Feather name="book-open" size={32} color={colors.muted} />
-                <Text style={styles.emptyText}>
-                  Aucune recette dans cette production.{'\n'}Modifiez-la pour en ajouter.
-                </Text>
-              </View>
+              <EmptyState icon="book-open" title="Aucune recette dans cette production" subtitle="Modifiez-la pour en ajouter." />
             ) : (
               data.lines.map(l => (
                 <View key={l.line_id} style={styles.lineCard} testID={`sum-${l.line_id}`}>
@@ -318,7 +317,7 @@ export default function ProductionDetail() {
 
             {!data.target_time && (
               <Text style={styles.notice}>
-                Aucune heure cible : les étapes ne sont pas datées. Ajoutez-en une en modifiant la production.
+                Aucune heure cible : les étapes ne sont pas datées. Ajoutez-en une en modifiant la production — Levanea calcule alors l'heure de chaque étape en remontant depuis cette heure cible.
               </Text>
             )}
 
@@ -338,12 +337,7 @@ export default function ProductionDetail() {
         {tab === 'ingredients' && (
           <>
             {data.ingredients.items.length === 0 && data.ingredients.unparsed.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Feather name="shopping-bag" size={32} color={colors.muted} />
-                <Text style={styles.emptyText}>
-                  Aucun ingrédient à totaliser.{'\n'}Les recettes de cette production n'en listent pas.
-                </Text>
-              </View>
+              <EmptyState icon="shopping-bag" title="Aucun ingrédient à totaliser" subtitle="Les recettes de cette production n'en listent pas." />
             ) : (
               <>
                 <Text style={styles.sectionLabel}>TOTAUX</Text>
@@ -375,10 +369,7 @@ export default function ProductionDetail() {
         {tab === 'schedule' && (
           <>
             {orderedSteps.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Feather name="list" size={32} color={colors.muted} />
-                <Text style={styles.emptyText}>Aucune étape à dérouler.</Text>
-              </View>
+              <EmptyState icon="list" title="Aucune étape à dérouler" />
             ) : (
               orderedSteps.map(step => {
                 const needsDuration = missing.has(step.step_id);
@@ -399,6 +390,12 @@ export default function ProductionDetail() {
                           step.status === 'doing' && styles.statusBtnDoing,
                           step.status === 'done' && styles.statusBtnDone,
                         ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          step.status === 'todo' ? 'Démarrer cette étape'
+                          : step.status === 'doing' ? 'Marquer cette étape terminée'
+                          : 'Remettre cette étape à faire'
+                        }
                       >
                         {busyStep === step.step_id ? (
                           <ActivityIndicator size="small" color={colors.brand} />
@@ -470,7 +467,8 @@ export default function ProductionDetail() {
                           <Pressable
                             testID={`duration-save-${step.step_id}`}
                             onPress={() => submitDuration(step.step_id)}
-                            style={styles.durationBtn}
+                            disabled={busyStep === step.step_id}
+                            style={[styles.durationBtn, busyStep === step.step_id && { opacity: 0.5 }]}
                           >
                             <Text style={styles.durationBtnText}>Valider</Text>
                           </Pressable>
@@ -495,17 +493,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, textTransform: 'capitalize' },
   tabs: { flexDirection: 'row', gap: 6, paddingHorizontal: 24, paddingTop: 14 },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: theme.radius.pill, backgroundColor: colors.surfaceSecondary },
   tabOn: { backgroundColor: colors.brand },
   tabText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
   tabTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingBottom: 60 },
   statRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  stat: { flex: 1, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingVertical: 16 },
+  stat: { flex: 1, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, paddingVertical: 16 },
   statValue: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
   statLabel: { fontSize: 10, letterSpacing: 1.6, color: colors.muted, fontWeight: '600', marginTop: 4 },
   sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginTop: 18, marginBottom: 10 },
-  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
   lineTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
   lineMeta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },
   notice: { fontSize: 12, color: colors.muted, lineHeight: 17, marginTop: 14 },
@@ -514,31 +512,27 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   ingName: { flex: 1, fontSize: 15, color: colors.onSurface },
   ingQty: { fontFamily: theme.serif, fontSize: 17, color: colors.brand },
   hint: { fontSize: 12, color: colors.muted, lineHeight: 17, marginBottom: 6 },
-  stepCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 14, marginBottom: 10 },
+  stepCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
   stepCardDone: { opacity: 0.6 },
   stepTop: { flexDirection: 'row', gap: 12 },
-  statusBtn: { width: 44, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  statusBtn: { width: 44, height: 44, borderRadius: theme.radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   statusBtnDoing: { backgroundColor: colors.warning, borderColor: colors.warning },
   statusBtnDone: { backgroundColor: colors.success, borderColor: colors.success },
   stepRecipe: { fontSize: 11, letterSpacing: 1, color: colors.muted, fontWeight: '600', textTransform: 'uppercase' },
   stepText: { fontSize: 14, color: colors.onSurface, lineHeight: 20, marginTop: 3 },
   stepTextDone: { textDecorationLine: 'line-through', color: colors.muted },
   stepMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, marginLeft: 56 },
-  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: theme.radius.pill },
   timePillText: { fontSize: 11, color: colors.onBrandTertiary, fontWeight: '700' },
   stepDuration: { fontSize: 11, color: colors.muted },
-  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999 },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: theme.radius.pill },
   timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
   durationBox: { marginTop: 12, marginLeft: 56 },
   durationHint: { fontSize: 11, color: colors.muted, lineHeight: 16 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  durationInput: { flex: 1, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: 6, paddingVertical: 11, paddingHorizontal: 12 },
-  durationBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 6, backgroundColor: colors.brand },
+  durationInput: { flex: 1, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surface, borderRadius: theme.radius.md, paddingVertical: 11, paddingHorizontal: 12 },
+  durationBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: theme.radius.md, backgroundColor: colors.brand },
   durationBtnText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 30, marginTop: 50 },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
-  retryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
   error: { color: colors.error, fontSize: 13, paddingHorizontal: 24, paddingTop: 12, lineHeight: 18 },
   deleteBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 20 },
   deleteText: { color: colors.error, fontSize: 13, fontWeight: '600' },

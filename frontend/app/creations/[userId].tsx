@@ -8,6 +8,7 @@ import { api, API_BASE } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type CreationStub = { id: string; title: string; category: string; photos: string[]; like_count: number };
 
@@ -54,7 +55,7 @@ export default function CreationsGallery() {
               <Image source={{ uri: `${API_BASE}/files/${item.photos[0]}` }} style={styles.tileImage} contentFit="cover" />
             </Pressable>
           )}
-          ListEmptyComponent={<Text style={styles.empty}>Aucune création.</Text>}
+          ListEmptyComponent={<EmptyState icon="grid" title="Aucune création" />}
         />
       )}
     </SafeAreaView>
@@ -69,5 +70,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },
   tile: { flex: 1, aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   tileImage: { width: '100%', height: '100%' },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

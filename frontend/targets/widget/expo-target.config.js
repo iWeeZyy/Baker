@@ -2,7 +2,7 @@
 module.exports = (config) => ({
   type: "widget",
   name: "widget",
-  displayName: "Bakers",
+  displayName: "Levanea",
   // Écran verrouillé (accessoryRectangular/accessoryInline) et Live Activity
   // (ActivityKit) exigent 16.1 au minimum ; l'extension peut avoir une cible
   // de déploiement différente de l'app principale sans y toucher.

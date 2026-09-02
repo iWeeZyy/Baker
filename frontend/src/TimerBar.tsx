@@ -50,7 +50,7 @@ export default function TimerBar() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { position: 'absolute', left: 12, right: 12, bottom: 90 },
-  inner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 12, gap: 10, borderWidth: 1, borderColor: colors.borderStrong, boxShadow: '0px 4px 12px rgba(0,0,0,0.12)', elevation: 6 },
+  inner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: theme.radius.xl, padding: 12, gap: 10, borderWidth: 1, borderColor: colors.borderStrong },
   iconWrap: { width: 34, height: 34, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 12, color: colors.muted },
   time: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface },

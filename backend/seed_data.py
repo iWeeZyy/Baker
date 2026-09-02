@@ -1,4 +1,4 @@
-"""Seed data for the Bakers app: recipes and tips shipped with the application.
+"""Seed data for the Levanea app: recipes and tips shipped with the application.
 
 Every recipe comes from `seed_books.py` — sheets taken from professional works,
 each carrying the page it was read from. The twenty demonstration recipes the

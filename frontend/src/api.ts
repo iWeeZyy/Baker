@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
-const KEY = 'bakers_auth_token';
+const KEY = 'levanea_auth_token';
 
 export async function saveToken(token: string) {
   if (Platform.OS === 'web') {

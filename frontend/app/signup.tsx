@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +16,8 @@ import { useUsernameAvailability } from '@/src/onboarding/useUsernameAvailabilit
 import { uploadAvatar } from '@/src/avatarUpload';
 import { parseInstagramUsername } from '@/src/instagram';
 import { ActionSheet } from '@/src/ActionSheet';
+import { Chip } from '@/src/Chip';
+import { Button } from '@/src/Button';
 
 const PHASES = ['email', 'password', 'firstname', 'username', 'photo', 'bio', 'instagram', 'profession', 'specialties', 'review'] as const;
 type Phase = typeof PHASES[number];
@@ -114,6 +116,18 @@ export default function SignupScreen() {
     setPhaseIndex((i) => i - 1);
   };
 
+  // Le bouton physique Android doit reculer d'une étape comme la flèche
+  // maison, pas quitter le flux d'un coup (mot de passe/photo ne sont jamais
+  // persistés, voir persistDraft plus haut).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (phaseIndex === 0) { router.back(); return true; }
+      setPhaseIndex((i) => i - 1);
+      return true;
+    });
+    return () => sub.remove();
+  }, [phaseIndex, router]);
+
   const submitEmail = async () => {
     setEmailError(null);
     const value = email.trim();
@@ -123,8 +137,8 @@ export default function SignupScreen() {
       const res = await api(`/auth/email-available?email=${encodeURIComponent(value)}`);
       if (!res.available) { setEmailError('Un compte existe déjà avec cet e-mail.'); return; }
       await goNext();
-    } catch {
-      setEmailError('Erreur réseau, réessayez.');
+    } catch (e: any) {
+      setEmailError(e.message || 'Erreur réseau, réessayez.');
     } finally {
       setCheckingEmail(false);
     }
@@ -140,7 +154,7 @@ export default function SignupScreen() {
       if (!perm.canAskAgain) {
         Alert.alert(
           kind === 'camera' ? 'Accès à la caméra refusé' : 'Accès à la photothèque refusé',
-          `Autorisez l'accès dans Réglages › Bakers › ${kind === 'camera' ? 'Appareil photo' : 'Photos'}.`,
+          `Autorisez l'accès dans Réglages › Levanea › ${kind === 'camera' ? 'Appareil photo' : 'Photos'}.`,
           [{ text: 'Annuler', style: 'cancel' }, { text: 'Ouvrir Réglages', onPress: () => Linking.openSettings() }],
         );
       } else {
@@ -238,7 +252,7 @@ export default function SignupScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable testID="signup-back" onPress={goBack} style={styles.iconBtn} hitSlop={10}>
+        <Pressable testID="signup-back" onPress={goBack} style={styles.iconBtn} hitSlop={10} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <StepDots count={PHASES.length} activeIndex={phaseIndex} />
@@ -284,7 +298,14 @@ export default function SignupScreen() {
                   secureTextEntry={!showPassword}
                   autoFocus
                 />
-                <Pressable testID="signup-toggle-password" onPress={() => setShowPassword((v) => !v)} hitSlop={10} style={{ padding: 8 }}>
+                <Pressable
+                  testID="signup-toggle-password"
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  style={{ padding: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
                   <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.muted} />
                 </Pressable>
               </View>
@@ -311,7 +332,7 @@ export default function SignupScreen() {
           {phase === 'username' && (
             <>
               <Text style={styles.title}>Choisissez votre nom d’utilisateur</Text>
-              <Text style={styles.subtitle}>Il vous identifiera sur Bakers</Text>
+              <Text style={styles.subtitle}>Il vous identifiera sur Levanea</Text>
               <View style={styles.usernameRow}>
                 <Text style={styles.usernameAt}>@</Text>
                 <TextInput
@@ -347,7 +368,13 @@ export default function SignupScreen() {
             <>
               <Text style={styles.title}>Ajoutez une photo de profil</Text>
               <Text style={styles.subtitle}>Facultatif — vous pourrez la modifier plus tard.</Text>
-              <Pressable testID="signup-photo-pick" onPress={() => setPhotoSheetOpen(true)} style={styles.avatarPicker}>
+              <Pressable
+                testID="signup-photo-pick"
+                onPress={() => setPhotoSheetOpen(true)}
+                style={styles.avatarPicker}
+                accessibilityRole="button"
+                accessibilityLabel={photoUri ? 'Changer la photo de profil' : 'Ajouter une photo de profil'}
+              >
                 {photoUri ? (
                   <Image source={{ uri: photoUri }} style={styles.avatarImage} contentFit="cover" />
                 ) : (
@@ -362,8 +389,8 @@ export default function SignupScreen() {
                 title="Photo de profil"
                 onClose={() => setPhotoSheetOpen(false)}
                 options={[
-                  { key: 'camera', emoji: '📷', label: 'Prendre une photo', onPress: () => pickPhoto('camera') },
-                  { key: 'library', emoji: '🖼️', label: 'Choisir dans Photos', onPress: () => pickPhoto('library') },
+                  { key: 'camera', icon: 'camera', label: 'Prendre une photo', onPress: () => pickPhoto('camera') },
+                  { key: 'library', icon: 'image', label: 'Choisir dans Photos', onPress: () => pickPhoto('library') },
                 ]}
               />
             </>
@@ -390,7 +417,7 @@ export default function SignupScreen() {
           {phase === 'instagram' && (
             <>
               <Text style={styles.title}>Votre Instagram</Text>
-              <Text style={styles.subtitle}>Partagez votre Instagram avec la communauté Bakers.</Text>
+              <Text style={styles.subtitle}>Partagez votre Instagram avec la communauté Levanea.</Text>
               <TextInput
                 testID="signup-instagram"
                 value={instagram}
@@ -412,25 +439,28 @@ export default function SignupScreen() {
               <Text style={styles.subtitle}>Facultatif — une simple information de profil.</Text>
               <View style={styles.chipsWrap}>
                 {PROFESSION_CHIPS.map((chip) => (
-                  <Pressable
+                  <Chip
                     key={chip}
                     testID={`signup-profession-${chip}`}
+                    label={chip}
+                    active={profession === chip}
+                    tone="brand"
                     onPress={() => setProfession(profession === chip ? null : chip)}
-                    style={[styles.chip, profession === chip && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, profession === chip && styles.chipTextActive]}>{chip}</Text>
-                  </Pressable>
+                  />
                 ))}
               </View>
               {profession === 'Autre' && (
-                <TextInput
-                  testID="signup-profession-other"
-                  value={professionOther}
-                  onChangeText={(v) => setProfessionOther(v.slice(0, 60))}
-                  placeholder="Précisez votre métier"
-                  placeholderTextColor={colors.muted}
-                  style={[styles.input, { marginTop: 16 }]}
-                />
+                <>
+                  <TextInput
+                    testID="signup-profession-other"
+                    value={professionOther}
+                    onChangeText={(v) => setProfessionOther(v.slice(0, 60))}
+                    placeholder="Précisez votre métier"
+                    placeholderTextColor={colors.muted}
+                    style={[styles.input, { marginTop: 16 }]}
+                  />
+                  {!professionOther.trim() ? <Text style={styles.hint}>Précisez votre métier pour continuer.</Text> : null}
+                </>
               )}
             </>
           )}
@@ -441,14 +471,14 @@ export default function SignupScreen() {
               <Text style={styles.subtitle}>Facultatif — plusieurs choix possibles.</Text>
               <View style={styles.chipsWrap}>
                 {SPECIALTY_CHIPS.map((chip) => (
-                  <Pressable
+                  <Chip
                     key={chip.key}
                     testID={`signup-specialty-${chip.key}`}
+                    label={chip.label}
+                    active={specialties.includes(chip.key)}
+                    tone="brand"
                     onPress={() => toggleSpecialty(chip.key)}
-                    style={[styles.chip, specialties.includes(chip.key) && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, specialties.includes(chip.key) && styles.chipTextActive]}>{chip.label}</Text>
-                  </Pressable>
+                  />
                 ))}
               </View>
             </>
@@ -486,18 +516,15 @@ export default function SignupScreen() {
 
       <View style={styles.footer}>
         {phase === 'review' ? (
-          <Pressable testID="signup-finish" onPress={finalize} disabled={submitting} style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}>
-            {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Commencer avec Bakers</Text>}
-          </Pressable>
+          <Button testID="signup-finish" onPress={finalize} disabled={submitting} loading={submitting} label="Commencer avec Levanea" />
         ) : (
-          <Pressable
+          <Button
             testID="signup-continue"
             onPress={onContinue}
             disabled={continueDisabled}
-            style={[styles.primaryBtn, continueDisabled && { opacity: 0.4 }]}
-          >
-            {checkingEmail && phase === 'email' ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{continueLabel}</Text>}
-          </Pressable>
+            loading={checkingEmail && phase === 'email'}
+            label={continueLabel}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -524,13 +551,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   availabilityRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center' },
   availabilityText: { fontSize: 13, fontWeight: '500' },
   avatarPicker: { alignSelf: 'center', marginTop: 12 },
-  avatarImage: { width: 120, height: 120, borderRadius: 60 },
-  avatarPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { width: 120, height: 120, borderRadius: theme.radius.pill },
+  avatarPlaceholder: { width: 120, height: 120, borderRadius: theme.radius.pill, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
-  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  chipText: { fontSize: 13, color: colors.onSurface, fontWeight: '500' },
-  chipTextActive: { color: colors.onBrandPrimary },
   reviewCard: { alignItems: 'center', padding: 24, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, marginTop: 8 },
   reviewAvatar: { marginBottom: 16 },
   reviewName: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
@@ -540,6 +563,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   reviewInstagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   reviewInstagramText: { fontSize: 13, color: colors.brand, fontWeight: '500' },
   footer: { paddingHorizontal: 24, paddingVertical: 16 },
-  primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: theme.radius.lg },
-  primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
 });

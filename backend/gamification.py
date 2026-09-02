@@ -1,5 +1,5 @@
 """
-Niveaux et XP — progression Bakers.
+Niveaux et XP — progression Levanea.
 
 Module pur (aucune route ici), même famille que `production.py`/`leaderboard.py`.
 Contrairement au classement (`leaderboard.py`), qui recalcule tout à la lecture,
@@ -52,9 +52,9 @@ LEVELS = [
     {"level": 15, "title": "Virtuose de la pâte", "xp_required": 7400},
     {"level": 16, "title": "Virtuose confirmé", "xp_required": 8600},
     {"level": 17, "title": "Figure de la communauté", "xp_required": 9900},
-    {"level": 18, "title": "Référence Bakers", "xp_required": 11300},
+    {"level": 18, "title": "Référence Levanea", "xp_required": 11300},
     {"level": 19, "title": "Légende du fournil", "xp_required": 12800},
-    {"level": 20, "title": "Légende de Bakers", "xp_required": 14400},
+    {"level": 20, "title": "Légende de Levanea", "xp_required": 14400},
 ]
 
 MAX_LEVEL = LEVELS[-1]["level"]

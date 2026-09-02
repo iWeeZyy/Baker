@@ -12,7 +12,7 @@ export default function Index() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, loading } = useAuth();
   // Préférence d'appareil, jamais liée au compte — lue une seule fois, comme
-  // `bakers_theme_preference` dans ThemeContext, jamais réinitialisée à la
+  // `levanea_theme_preference` dans ThemeContext, jamais réinitialisée à la
   // déconnexion (section 2 : se déconnecter ne relance pas la découverte).
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 

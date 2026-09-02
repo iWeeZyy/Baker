@@ -1,4 +1,4 @@
-# Bakers
+# Levanea
 
 Application mobile (iOS/Android/Web) dédiée aux boulangers : recettes classiques françaises, astuces techniques, assistant IA, partage communautaire. Frontend Expo/React Native, backend FastAPI + MongoDB.
 
@@ -23,7 +23,7 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
 # MongoDB local (si tu n'as pas Atlas) :
-docker run -d -p 27017:27017 --name bakers-mongo mongo:7
+docker run -d -p 27017:27017 --name levanea-mongo mongo:7
 
 cp .env.example .env   # puis édite JWT_SECRET et ANTHROPIC_API_KEY
 uvicorn server:app --reload --port 8000
@@ -75,7 +75,7 @@ Le tier gratuit de Render met le backend en veille après 15 min d'inactivité �
    eas login
    ```
 3. Dans `frontend/eas.json`, remplace `REPLACE-WITH-YOUR-BACKEND-URL` par l'URL de ton backend déployé (Railway, Render, Fly.io…) pour les profils `preview` et `production`.
-4. Change si besoin `com.lucasmorey.bakers` (`frontend/app.json`, champs `ios.bundleIdentifier` et `android.package`) pour ton propre identifiant.
+4. Change si besoin `com.lucasmorey.levanea` (`frontend/app.json`, champs `ios.bundleIdentifier` et `android.package`) pour ton propre identifiant.
 5. Build :
    ```bash
    cd frontend

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { Button } from '@/src/Button';
 
 export default function AuthScreen() {
   const { colors } = useTheme();
@@ -41,7 +42,7 @@ export default function AuthScreen() {
           <Image source={require('../assets/images/auth-hero.jpg')} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient colors={['transparent', 'rgba(42,31,26,0.85)']} style={StyleSheet.absoluteFillObject} />
           <View style={styles.heroContent}>
-            <Text style={styles.brandLabel}>BAKERS</Text>
+            <Text style={styles.brandLabel}>LEVANEA</Text>
             <Text style={styles.heroTitle}>L'art de la boulangerie française</Text>
           </View>
         </View>
@@ -67,9 +68,7 @@ export default function AuthScreen() {
 
           {error ? <Text style={styles.error} testID="auth-error">{error}</Text> : null}
 
-          <Pressable testID="submit-auth" onPress={submit} disabled={loading} style={[styles.primaryBtn, loading && { opacity: 0.6 }]}>
-            {loading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Se connecter</Text>}
-          </Pressable>
+          <Button testID="submit-auth" onPress={submit} loading={loading} label="Se connecter" style={{ marginTop: 8 }} />
 
           <Pressable testID="go-to-signup" onPress={() => router.push('/signup')} style={styles.signupLink}>
             <Text style={styles.signupLinkText}>Pas encore de compte ? <Text style={styles.signupLinkStrong}>Créer un compte</Text></Text>
@@ -95,8 +94,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   field: { marginBottom: 16 },
   label: { fontSize: 12, color: colors.muted, marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' },
   input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10 },
-  primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
-  primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
   error: { color: colors.error, fontSize: 13, marginBottom: 8 },
   signupLink: { marginTop: 20, alignItems: 'center' },
   signupLinkText: { fontSize: 13, color: colors.muted },

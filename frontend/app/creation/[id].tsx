@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Dimen
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { ActionSheet } from '@/src/ActionSheet';
 import { avatarUrl } from '@/src/avatar';
@@ -137,7 +137,7 @@ export default function CreationDetail() {
           {!!data.description && <Text style={styles.description}>{data.description}</Text>}
 
           <Pressable testID="creation-like-btn" onPress={toggleLike} style={styles.likeRow}>
-            <Ionicons name={data.liked ? 'heart' : 'heart-outline'} size={22} color={data.liked ? colors.error : colors.onSurfaceSecondary} />
+            <Feather name="heart" size={22} color={data.liked ? colors.error : colors.onSurfaceSecondary} />
             <Text style={styles.likeCount}>{data.like_count}</Text>
           </Pressable>
 
@@ -161,8 +161,8 @@ export default function CreationDetail() {
         title="Cette création"
         onClose={() => setMenuOpen(false)}
         options={[
-          { key: 'edit', emoji: '✏️', label: 'Modifier', onPress: () => router.push({ pathname: '/creation/new', params: { id: data.id } } as any) },
-          { key: 'delete', emoji: '🗑️', label: 'Supprimer', onPress: doDelete, destructive: true },
+          { key: 'edit', icon: 'edit-2', label: 'Modifier', onPress: () => router.push({ pathname: '/creation/new', params: { id: data.id } } as any) },
+          { key: 'delete', icon: 'trash-2', label: 'Supprimer', onPress: doDelete, destructive: true },
         ]}
       />
     </View>

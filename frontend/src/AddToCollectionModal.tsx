@@ -14,6 +14,7 @@ import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { FAVORITES_COLLECTION_ID } from '@/src/collections';
 
 type Row = { id: string; name: string; recipe_count: number; in_collection: boolean };
 
@@ -39,7 +40,7 @@ export function AddToCollectionModal({
     if (!visible) return;
     setLoading(true);
     api(`/collections?recipe_id=${recipeId}`)
-      .then((list: any[]) => setRows(list.filter(c => c.id !== '__favorites__')))
+      .then((list: any[]) => setRows(list.filter(c => c.id !== FAVORITES_COLLECTION_ID)))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }, [visible, recipeId]);
@@ -113,7 +114,7 @@ export function AddToCollectionModal({
                 style={styles.input}
                 autoFocus
               />
-              <Pressable testID="new-collection-confirm" onPress={createAndAdd} style={styles.newRowBtn}>
+              <Pressable testID="new-collection-confirm" onPress={createAndAdd} style={styles.newRowBtn} accessibilityRole="button" accessibilityLabel="Créer la collection">
                 <Feather name="check" size={18} color={colors.onBrandPrimary} />
               </Pressable>
             </View>
@@ -135,7 +136,7 @@ export function AddToCollectionModal({
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40, gap: 4 },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl, padding: 24, paddingBottom: 40, gap: 4 },
   title: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, marginBottom: 12 },
   center: { paddingVertical: 24, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
