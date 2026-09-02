@@ -13,6 +13,7 @@ import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { SegmentedControl } from '@/src/SegmentedControl';
+import { EmptyState } from '@/src/EmptyState';
 import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { syncWidgetData } from '@/src/widgetData';
 
@@ -224,23 +225,21 @@ export default function Planning() {
         {loading ? (
           <ActivityIndicator color={colors.brand} style={{ marginTop: 40 }} />
         ) : error ? (
-          <View style={styles.emptyBox}>
-            <Feather name="wifi-off" size={34} color={colors.muted} />
-            <Text style={styles.emptyText}>{error}</Text>
-            <Pressable testID="planning-retry" onPress={load} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Réessayer</Text>
-            </Pressable>
-          </View>
+          <EmptyState
+            icon="wifi-off"
+            title="Impossible de charger le planning"
+            subtitle={error}
+            ctaLabel="Réessayer"
+            onCta={load}
+            testID="planning-retry"
+          />
         ) : mode === 'staff' ? (
           schedules.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Feather name="users" size={38} color={colors.muted} />
-              <Text style={styles.emptyTitle}>Aucun emploi du temps</Text>
-              <Text style={styles.emptyText}>
-                Planifiez la semaine de votre équipe :{'\n'}
-                Levanea calcule les heures de chacun et le total.
-              </Text>
-            </View>
+            <EmptyState
+              icon="users"
+              title="Aucun emploi du temps"
+              subtitle={'Planifiez la semaine de votre équipe :\nLevanea calcule les heures de chacun et le total.'}
+            />
           ) : (
             <View style={styles.section}>
               {schedules.map(s => (
@@ -276,14 +275,11 @@ export default function Planning() {
             </View>
           )
         ) : productions.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Feather name="calendar" size={38} color={colors.muted} />
-            <Text style={styles.emptyTitle}>Aucune production planifiée</Text>
-            <Text style={styles.emptyText}>
-              Préparez votre journée : choisissez vos recettes et vos quantités,{'\n'}
-              Levanea calcule les ingrédients et les horaires.
-            </Text>
-          </View>
+          <EmptyState
+            icon="calendar"
+            title="Aucune production planifiée"
+            subtitle={'Préparez votre journée : choisissez vos recettes et vos quantités,\nLevanea calcule les ingrédients et les horaires.'}
+          />
         ) : (
           <>
             {upcoming.length > 0 && (
@@ -306,6 +302,8 @@ export default function Planning() {
         testID={mode === 'staff' ? 'new-schedule' : 'new-production'}
         onPress={() => router.push((mode === 'staff' ? '/schedule/new' : '/production/new') as any)}
         style={styles.fab}
+        accessibilityRole="button"
+        accessibilityLabel={mode === 'staff' ? 'Nouvel emploi du temps' : 'Nouvelle production'}
       >
         <Feather name="plus" size={20} color={colors.onBrandPrimary} />
         <Text style={styles.fabText}>{mode === 'staff' ? 'Nouvel emploi du temps' : 'Nouvelle production'}</Text>
@@ -319,26 +317,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
-  quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: 8 },
+  quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg },
   quotaText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
   quotaLink: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 12 },
-  card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
+  card: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardDate: { flex: 1, fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, textTransform: 'capitalize' },
-  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: theme.radius.pill },
   timePillText: { fontSize: 11, color: colors.onBrandTertiary, fontWeight: '700' },
   cardRecipes: { fontSize: 14, color: colors.onSurfaceSecondary, marginTop: 6, lineHeight: 19 },
   cardMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted },
-  progressTrack: { height: 4, backgroundColor: colors.surfaceTertiary, borderRadius: 999, marginTop: 10, overflow: 'hidden' },
-  progressFill: { height: 4, backgroundColor: colors.brand, borderRadius: 999 },
-  emptyBox: { alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40, marginTop: 70 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
-  retryText: { fontSize: 14, color: colors.onSurface, fontWeight: '600' },
-  fab: { position: 'absolute', left: 24, right: 24, bottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: 999 },
+  progressTrack: { height: 4, backgroundColor: colors.surfaceTertiary, borderRadius: theme.radius.pill, marginTop: 10, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: colors.brand, borderRadius: theme.radius.pill },
+  fab: { position: 'absolute', left: 24, right: 24, bottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 16, borderRadius: theme.radius.pill },
   fabText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '700' },
 });
