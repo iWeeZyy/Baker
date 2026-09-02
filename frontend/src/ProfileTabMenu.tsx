@@ -20,7 +20,7 @@ import { api } from '@/src/api';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
-const TAB_BAR_HEIGHT = 82;
+const TAB_BAR_HEIGHT = 88;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
@@ -119,10 +119,12 @@ export function ProfileTabButton() {
     <>
       <Pressable testID="profile-tab-button" onPress={toggleMenu} style={styles.tabButton}>
         <View style={styles.iconWrap}>
-          <Feather name="user" size={20} color={active ? colors.brand : colors.muted} />
+          <View style={styles.iconRing}>
+            <Feather name="user" size={16} color={active ? colors.brand : colors.muted} />
+          </View>
           {hasAnyBadge && <View style={styles.tabDot} />}
         </View>
-        <Text style={[styles.tabLabel, { color: active ? colors.brand : colors.muted }]}>
+        <Text style={[styles.tabLabel, { color: active ? colors.brand : colors.muted }]} allowFontScaling={false} numberOfLines={1}>
           {`Profil ${menuOpen ? '▴' : '▾'}`}
         </Text>
       </Pressable>
@@ -158,10 +160,15 @@ export function ProfileTabButton() {
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  iconWrap: { position: 'relative' },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5 },
+  iconWrap: { position: 'relative', height: 28, alignItems: 'center', justifyContent: 'center' },
+  // Contour permanent (pas seulement à l'état actif) : Profil regroupe des
+  // sections importantes (Amis, Abonnements, Classement, Messagerie,
+  // Collections, Badges) derrière un seul bouton — le distinguer visuellement
+  // des 5 autres onglets rappelle qu'il ouvre un sous-menu, pas un écran seul.
+  iconRing: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tabDot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 999, backgroundColor: colors.brand },
-  tabLabel: { fontSize: 11, letterSpacing: 0.5, fontWeight: '500' },
+  tabLabel: { fontSize: 11, lineHeight: 14, letterSpacing: 0.5, fontWeight: '500' },
   backdrop: { flex: 1 },
   menu: {
     position: 'absolute', right: 16, bottom: TAB_BAR_HEIGHT + 8, width: 200,
