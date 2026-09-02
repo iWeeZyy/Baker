@@ -47,14 +47,16 @@ export default function Friends() {
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
+  const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
   const debounceRef = useRef<any>(null);
 
   const load = useCallback(async () => {
     try {
       const [r, f] = await Promise.all([api('/friends/requests'), api('/friends')]);
-      setRequests(r); setFriends(f);
-    } catch (e) { console.warn(e); }
+      setRequests(r); setFriends(f); setError(false);
+    } catch (e) { console.warn(e); setError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -81,11 +83,14 @@ export default function Friends() {
   }, [query]);
 
   const sendRequest = async (u: UserRow) => {
+    if (requestBusyId) return;
+    setRequestBusyId(u.user_id);
     try {
       const res = await api('/friends/request', { method: 'POST', body: JSON.stringify({ user_id: u.user_id }) });
       setResults(prev => prev.map(r => r.user_id === u.user_id ? { ...r, friend_status: res.status === 'friends' ? 'friends' : 'pending_sent' } : r));
       if (res.status === 'friends') { load(); showGamificationToast(res.gamification); refreshUser(); }
     } catch (e) { console.warn(e); }
+    finally { setRequestBusyId(null); }
   };
 
   const toggleFollow = async (u: UserRow) => {
@@ -105,16 +110,20 @@ export default function Friends() {
   };
 
   const respond = async (req: RequestRow, accept: boolean) => {
+    if (requestBusyId) return;
+    setRequestBusyId(req.id);
     try {
       const res = await api(`/friends/requests/${req.id}/respond`, { method: 'POST', body: JSON.stringify({ accept }) });
       setRequests(prev => prev.filter(r => r.id !== req.id));
       if (accept) { load(); showGamificationToast(res.gamification); refreshUser(); }
     } catch (e) { console.warn(e); }
+    finally { setRequestBusyId(null); }
   };
 
   const SearchAction = ({ u }: { u: UserRow }) => {
     if (u.friend_status === 'friends') return <Feather name="check-circle" size={20} color={colors.success} />;
     if (u.friend_status === 'pending_sent') return <Text style={styles.pendingText}>Envoyée</Text>;
+    if (requestBusyId === u.user_id) return <ActivityIndicator size="small" color={colors.brand} />;
     return (
       <Pressable testID={`add-friend-${u.user_id}`} onPress={() => sendRequest(u)} style={styles.addBtn}>
         <Feather name="user-plus" size={15} color={colors.onBrandPrimary} />
@@ -165,13 +174,24 @@ export default function Friends() {
             autoCapitalize="none"
           />
           {query.length > 0 && (
-            <Pressable testID="clear-search" onPress={() => setQuery('')}>
+            <Pressable testID="clear-search" onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Effacer la recherche">
               <Feather name="x" size={18} color={colors.muted} />
             </Pressable>
           )}
         </View>
 
-        {query.trim().length >= 2 && (
+        {error && !loading ? (
+          <EmptyState
+            icon="wifi-off"
+            title="Impossible de charger vos amis"
+            subtitle="Vérifiez votre connexion et réessayez."
+            ctaLabel="Réessayer"
+            onCta={() => { setLoading(true); load(); }}
+            testID="friends-retry"
+          />
+        ) : null}
+
+        {!error && query.trim().length >= 2 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Résultats</Text>
             {searching ? (
@@ -193,7 +213,7 @@ export default function Friends() {
           </View>
         )}
 
-        {requests.length > 0 && (
+        {!error && requests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Demandes d'amis</Text>
@@ -208,19 +228,24 @@ export default function Friends() {
                     <Text style={styles.rowSub}>souhaite devenir votre ami</Text>
                   </View>
                 </Pressable>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable testID={`accept-${r.id}`} onPress={() => respond(r, true)} style={styles.acceptBtn}>
-                    <Feather name="check" size={18} color={colors.onBrandPrimary} />
-                  </Pressable>
-                  <Pressable testID={`decline-${r.id}`} onPress={() => respond(r, false)} style={styles.declineBtn}>
-                    <Feather name="x" size={18} color={colors.onSurfaceSecondary} />
-                  </Pressable>
-                </View>
+                {requestBusyId === r.id ? (
+                  <ActivityIndicator size="small" color={colors.brand} />
+                ) : (
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable testID={`accept-${r.id}`} onPress={() => respond(r, true)} style={styles.acceptBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Accepter la demande de ${r.from_user.name}`}>
+                      <Feather name="check" size={18} color={colors.onBrandPrimary} />
+                    </Pressable>
+                    <Pressable testID={`decline-${r.id}`} onPress={() => respond(r, false)} style={styles.declineBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Refuser la demande de ${r.from_user.name}`}>
+                      <Feather name="x" size={18} color={colors.onSurfaceSecondary} />
+                    </Pressable>
+                  </View>
+                )}
               </View>
             ))}
           </View>
         )}
 
+        {!error && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Mes amis</Text>
           {loading ? (
@@ -257,6 +282,7 @@ export default function Friends() {
             </Pressable>
           ))}
         </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

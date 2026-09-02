@@ -60,6 +60,7 @@ export default function Following() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [followingCount, setFollowingCount] = useState<number | null>(null);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -71,7 +72,8 @@ export default function Following() {
       setItems(feed.items);
       setHasMore(feed.has_more);
       if (profile) setFollowingCount(profile.following_count);
-    } catch (e) { console.warn(e); }
+      setError(false);
+    } catch (e) { console.warn(e); setError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, [user]);
 
@@ -106,6 +108,15 @@ export default function Following() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
+      ) : error ? (
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger votre fil"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={() => load()}
+          testID="following-retry"
+        />
       ) : (
         <FlatList
           style={{ flex: 1 }}

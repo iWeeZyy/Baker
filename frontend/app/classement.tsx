@@ -39,6 +39,8 @@ export default function Classement() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
   const [creations, setCreations] = useState<CreationRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,9 +51,10 @@ export default function Classement() {
       if (category === 'creators') setCreators({ top: data.top, my_rank: data.my_rank });
       else if (category === 'recipes') setRecipes(data.items);
       else setCreations(data.items);
-    }).catch(console.warn).finally(() => { if (!cancelled) setLoading(false); });
+      setError(false);
+    }).catch((e) => { console.warn(e); if (!cancelled) setError(true); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [category, period]);
+  }, [category, period, reloadKey]);
 
   const toggleFollow = async (row: CreatorRow) => {
     if (busyId) return;
@@ -206,7 +209,7 @@ export default function Classement() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable testID="classement-back" onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable testID="classement-back" onPress={() => router.back()} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Classement</Text>
@@ -228,6 +231,15 @@ export default function Classement() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
+      ) : error ? (
+        <EmptyState
+          icon="wifi-off"
+          title="Impossible de charger le classement"
+          subtitle="Vérifiez votre connexion et réessayez."
+          ctaLabel="Réessayer"
+          onCta={() => setReloadKey(k => k + 1)}
+          testID="classement-retry"
+        />
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           {category === 'creators' && renderCreators()}
