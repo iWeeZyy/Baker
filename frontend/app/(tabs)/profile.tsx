@@ -719,9 +719,9 @@ export default function Profile() {
         title="Photo de profil"
         onClose={() => setAvatarMenuOpen(false)}
         options={[
-          { key: 'camera', emoji: '📷', label: 'Prendre une photo', onPress: () => pickAvatar('camera') },
-          { key: 'library', emoji: '🖼️', label: 'Choisir dans la photothèque', onPress: () => pickAvatar('library') },
-          ...(user?.picture ? [{ key: 'delete', emoji: '🗑️', label: 'Supprimer la photo', onPress: deleteAvatar, destructive: true }] : []),
+          { key: 'camera', icon: 'camera', label: 'Prendre une photo', onPress: () => pickAvatar('camera') },
+          { key: 'library', icon: 'image', label: 'Choisir dans la photothèque', onPress: () => pickAvatar('library') },
+          ...(user?.picture ? [{ key: 'delete', icon: 'trash-2' as const, label: 'Supprimer la photo', onPress: deleteAvatar, destructive: true }] : []),
         ]}
       />
 
@@ -799,7 +799,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: colors.muted, textAlign: 'center', paddingHorizontal: 32, marginTop: -6 },
   emptyBtn: { marginTop: 16, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
   emptyBtnText: { color: colors.onBrandPrimary, fontWeight: '600' },
-  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14, marginHorizontal: 24 },
+  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 14, marginHorizontal: 24 },
   commentThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceTertiary },
   commentCardKind: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
   commentCardReplyTo: { fontSize: 12, color: colors.brand, fontWeight: '500', marginTop: 2 },
@@ -815,7 +815,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
-  editProfileCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 16, marginTop: 14 },
+  editProfileCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 16, marginTop: 14 },
   editLabel: { fontSize: 12, color: colors.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
   bioInput: { fontSize: 14, color: colors.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: colors.surface, borderRadius: 8, padding: 10 },
   charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
@@ -832,7 +832,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   creationTile: { width: '32%', aspectRatio: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   creationTileImage: { width: '100%', height: '100%' },
-  creationsEmpty: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 20, alignItems: 'center', gap: 12 },
+  creationsEmpty: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 20, alignItems: 'center', gap: 12 },
   creationsEmptyText: { fontSize: 13, color: colors.muted, textAlign: 'center' },
   addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
   addCreationBtnText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 13 },
@@ -858,7 +858,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   teamChipName: { fontSize: 12, color: colors.onSurface, fontWeight: '600', marginTop: 6, textAlign: 'center' },
   teamChipRole: { fontSize: 10, color: colors.muted, marginTop: 1, textAlign: 'center' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  previewCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
+  previewCard: { backgroundColor: colors.surface, borderRadius: theme.radius.xl, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
   previewImage: { width: 200, height: 200, borderRadius: 999, backgroundColor: colors.surfaceSecondary, marginBottom: 20 },
   previewConfirmBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingVertical: 14, alignItems: 'center', width: '100%' },
   previewConfirmText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 15 },

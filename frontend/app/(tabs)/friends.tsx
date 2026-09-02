@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { subscribeRealtime } from '@/src/realtime';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 // Fallback poll in case the realtime socket is down; the socket refreshes
@@ -225,10 +226,11 @@ export default function Friends() {
           {loading ? (
             <ActivityIndicator color={colors.brand} style={{ marginTop: 12 }} />
           ) : friends.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Feather name="users" size={36} color={colors.muted} />
-              <Text style={styles.emptyText}>Vous n'avez pas encore d'amis.{'\n'}Recherchez un boulanger par son nom pour l'ajouter !</Text>
-            </View>
+            <EmptyState
+              icon="users"
+              title="Vous n'avez pas encore d'amis"
+              subtitle="Recherchez un boulanger par son nom pour l'ajouter !"
+            />
           ) : friends.map(f => (
             <Pressable
               key={f.user_id}
@@ -291,6 +293,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   declineBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   unreadBadge: { backgroundColor: colors.brand, borderRadius: 999, minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   unreadText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', paddingVertical: 32, gap: 12 },
   emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20, marginTop: 12 },
 });

@@ -16,6 +16,8 @@ import { useUsernameAvailability } from '@/src/onboarding/useUsernameAvailabilit
 import { uploadAvatar } from '@/src/avatarUpload';
 import { parseInstagramUsername } from '@/src/instagram';
 import { ActionSheet } from '@/src/ActionSheet';
+import { Chip } from '@/src/Chip';
+import { Button } from '@/src/Button';
 
 const PHASES = ['email', 'password', 'firstname', 'username', 'photo', 'bio', 'instagram', 'profession', 'specialties', 'review'] as const;
 type Phase = typeof PHASES[number];
@@ -362,8 +364,8 @@ export default function SignupScreen() {
                 title="Photo de profil"
                 onClose={() => setPhotoSheetOpen(false)}
                 options={[
-                  { key: 'camera', emoji: '📷', label: 'Prendre une photo', onPress: () => pickPhoto('camera') },
-                  { key: 'library', emoji: '🖼️', label: 'Choisir dans Photos', onPress: () => pickPhoto('library') },
+                  { key: 'camera', icon: 'camera', label: 'Prendre une photo', onPress: () => pickPhoto('camera') },
+                  { key: 'library', icon: 'image', label: 'Choisir dans Photos', onPress: () => pickPhoto('library') },
                 ]}
               />
             </>
@@ -412,14 +414,14 @@ export default function SignupScreen() {
               <Text style={styles.subtitle}>Facultatif — une simple information de profil.</Text>
               <View style={styles.chipsWrap}>
                 {PROFESSION_CHIPS.map((chip) => (
-                  <Pressable
+                  <Chip
                     key={chip}
                     testID={`signup-profession-${chip}`}
+                    label={chip}
+                    active={profession === chip}
+                    tone="brand"
                     onPress={() => setProfession(profession === chip ? null : chip)}
-                    style={[styles.chip, profession === chip && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, profession === chip && styles.chipTextActive]}>{chip}</Text>
-                  </Pressable>
+                  />
                 ))}
               </View>
               {profession === 'Autre' && (
@@ -441,14 +443,14 @@ export default function SignupScreen() {
               <Text style={styles.subtitle}>Facultatif — plusieurs choix possibles.</Text>
               <View style={styles.chipsWrap}>
                 {SPECIALTY_CHIPS.map((chip) => (
-                  <Pressable
+                  <Chip
                     key={chip.key}
                     testID={`signup-specialty-${chip.key}`}
+                    label={chip.label}
+                    active={specialties.includes(chip.key)}
+                    tone="brand"
                     onPress={() => toggleSpecialty(chip.key)}
-                    style={[styles.chip, specialties.includes(chip.key) && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, specialties.includes(chip.key) && styles.chipTextActive]}>{chip.label}</Text>
-                  </Pressable>
+                  />
                 ))}
               </View>
             </>
@@ -486,18 +488,15 @@ export default function SignupScreen() {
 
       <View style={styles.footer}>
         {phase === 'review' ? (
-          <Pressable testID="signup-finish" onPress={finalize} disabled={submitting} style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}>
-            {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Commencer avec Levanea</Text>}
-          </Pressable>
+          <Button testID="signup-finish" onPress={finalize} disabled={submitting} loading={submitting} label="Commencer avec Levanea" />
         ) : (
-          <Pressable
+          <Button
             testID="signup-continue"
             onPress={onContinue}
             disabled={continueDisabled}
-            style={[styles.primaryBtn, continueDisabled && { opacity: 0.4 }]}
-          >
-            {checkingEmail && phase === 'email' ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{continueLabel}</Text>}
-          </Pressable>
+            loading={checkingEmail && phase === 'email'}
+            label={continueLabel}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -527,10 +526,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   avatarImage: { width: 120, height: 120, borderRadius: 60 },
   avatarPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
-  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  chipText: { fontSize: 13, color: colors.onSurface, fontWeight: '500' },
-  chipTextActive: { color: colors.onBrandPrimary },
   reviewCard: { alignItems: 'center', padding: 24, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, marginTop: 8 },
   reviewAvatar: { marginBottom: 16 },
   reviewName: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
@@ -540,6 +535,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   reviewInstagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   reviewInstagramText: { fontSize: 13, color: colors.brand, fontWeight: '500' },
   footer: { paddingHorizontal: 24, paddingVertical: 16 },
-  primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: theme.radius.lg },
-  primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
 });

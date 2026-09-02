@@ -13,6 +13,7 @@ import { subscribeRealtime } from '@/src/realtime';
 import { isPhotoRevealed, markPhotoRevealed } from '@/src/revealedPhotos';
 import { LIGHT_COLORS, theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type Moderation = { level: 'normal' | 'sensitive' | 'blocked'; score: number; provider: string; status: string };
 type Message = {
@@ -313,10 +314,10 @@ export default function Chat() {
         title="Conversation"
         onClose={() => setMenuOpen(false)}
         options={[
-          ...(messages.length > 0 ? [{ key: 'report', emoji: '🚩', label: 'Signaler', onPress: reportConversation }] : []),
+          ...(messages.length > 0 ? [{ key: 'report', icon: 'flag' as const, label: 'Signaler', onPress: reportConversation }] : []),
           blockedByMe
-            ? { key: 'unblock', emoji: '✅', label: 'Débloquer', onPress: toggleBlock }
-            : { key: 'block', emoji: '🚫', label: 'Bloquer cet utilisateur', onPress: toggleBlock, destructive: true },
+            ? { key: 'unblock', icon: 'check-circle' as const, label: 'Débloquer', onPress: toggleBlock }
+            : { key: 'block', icon: 'slash' as const, label: 'Bloquer cet utilisateur', onPress: toggleBlock, destructive: true },
         ]}
       />
 
@@ -356,10 +357,7 @@ export default function Chat() {
               );
             }}
             ListEmptyComponent={
-              <View style={styles.emptyBox}>
-                <Feather name="message-circle" size={36} color={colors.muted} />
-                <Text style={styles.emptyText}>Commencez la conversation !{'\n'}Parlez levain, façonnage, cuisson…</Text>
-              </View>
+              <EmptyState icon="message-circle" title="Commencez la conversation !" subtitle="Parlez levain, façonnage, cuisson…" />
             }
           />
         )}
@@ -443,7 +441,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   photoWarningTitle: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   photoWarningText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', lineHeight: 15 },
   photoWarningActions: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  photoRevealBtn: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  photoRevealBtn: { backgroundColor: colors.onBrandPrimary, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   // Un bouton blanc fixe posé sur un voile sombre invariant (au-dessus d'une
   // photo) : son texte doit rester sombre dans les deux thèmes, jamais
   // colors.onSurface qui s'éclaircirait en mode sombre et deviendrait
@@ -458,8 +456,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   photoBtn: { width: 44, height: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.onSurface, minHeight: 44, maxHeight: 120 },
   sendBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
   error: { color: colors.error, fontSize: 12, paddingHorizontal: 16, paddingBottom: 4 },
   notFriendsBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surfaceSecondary },
   notFriendsText: { flex: 1, fontSize: 13, color: colors.muted, lineHeight: 18 },

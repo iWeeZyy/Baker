@@ -13,6 +13,7 @@ import { subscribeRealtime } from '@/src/realtime';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
 type Peer = { user_id: string; name: string; picture?: string | null };
@@ -296,11 +297,11 @@ export default function Messagerie() {
             loadingConvos ? (
               <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
             ) : (
-              <View style={styles.empty}>
-                <Feather name="message-circle" size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>Aucun message</Text>
-                <Text style={styles.emptySubtitle}>Vous n'avez pas encore de conversation.{'\n'}Ajoutez des amis ou suivez des boulangers pour commencer à échanger.</Text>
-              </View>
+              <EmptyState
+                icon="message-circle"
+                title="Aucun message"
+                subtitle="Vous n'avez pas encore de conversation. Ajoutez des amis ou suivez des boulangers pour commencer à échanger."
+              />
             )
           }
         />
@@ -349,11 +350,7 @@ export default function Messagerie() {
             loadingNotifs ? (
               <View style={styles.emptyCenter}><ActivityIndicator color={colors.brand} /></View>
             ) : (
-              <View style={styles.empty}>
-                <Feather name="bell" size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>Aucune activité</Text>
-                <Text style={styles.emptySubtitle}>Vous êtes à jour !</Text>
-              </View>
+              <EmptyState icon="bell" title="Aucune activité" subtitle="Vous êtes à jour !" />
             )
           }
         />
@@ -398,7 +395,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   acceptBtnText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: '600' },
   declineBtn: { backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
   declineBtnText: { color: colors.onSurfaceSecondary, fontSize: 12, fontWeight: '600' },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 12, paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 14, color: colors.muted, textAlign: 'center' },
-  emptySubtitle: { fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginTop: -6 },
 });

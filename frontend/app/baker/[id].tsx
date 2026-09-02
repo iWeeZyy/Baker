@@ -11,6 +11,7 @@ import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 
 export default function BakerProfile() {
@@ -119,7 +120,7 @@ export default function BakerProfile() {
       <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
         <Feather name="arrow-left" size={22} color={colors.onSurface} />
       </Pressable>
-      <Text style={styles.emptyTitle}>Profil introuvable</Text>
+      <EmptyState icon="user-x" title="Profil introuvable" />
     </SafeAreaView>
   );
 
@@ -356,7 +357,7 @@ export default function BakerProfile() {
             <Text style={styles.cardMeta}>{item.like_count} ♥ · {item.difficulty}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>Aucune recette partagée pour le moment.</Text>}
+        ListEmptyComponent={<EmptyState icon="book-open" title="Aucune recette partagée pour le moment." />}
       />
     </SafeAreaView>
   );
@@ -410,6 +411,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 30, fontStyle: 'italic' },
-  emptyTitle: { textAlign: 'center', color: colors.muted, marginTop: 60 },
 });

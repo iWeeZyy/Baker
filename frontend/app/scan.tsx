@@ -10,6 +10,7 @@ import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { Chip } from '@/src/Chip';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
@@ -373,18 +374,14 @@ export default function ScanRecipe() {
             <Text style={styles.label}>Catégorie</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {CATEGORIES.map(c => (
-                <Pressable key={c} testID={`scan-category-${c}`} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
-                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-                </Pressable>
+                <Chip key={c} testID={`scan-category-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
               ))}
             </ScrollView>
 
             <Text style={styles.label}>Difficulté</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {DIFFICULTIES.map(d => (
-                <Pressable key={d} testID={`scan-difficulty-${d}`} onPress={() => setDifficulty(d)} style={[styles.chip, difficulty === d && styles.chipActive]}>
-                  <Text style={[styles.chipText, difficulty === d && styles.chipTextActive]}>{d}</Text>
-                </Pressable>
+                <Chip key={d} testID={`scan-difficulty-${d}`} label={d} active={difficulty === d} onPress={() => setDifficulty(d)} />
               ))}
             </ScrollView>
 
@@ -577,10 +574,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   statLine: { fontSize: 13, color: colors.brand, fontWeight: '600', marginBottom: 10 },
   input: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.onSurface },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
-  chip: { paddingHorizontal: 14, height: 34, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   ingredientRow: { flexDirection: 'row', gap: 10, marginBottom: 12, alignItems: 'flex-start' },
   ingredientTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ingredientBottomRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -215,7 +215,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cardName: { fontFamily: theme.serif, fontSize: 15, color: colors.onSurface },
   cardCount: { fontSize: 12, color: colors.muted },
   backdrop: { flex: 1, backgroundColor: 'rgba(42,31,26,0.5)', justifyContent: 'center', padding: 24 },
-  formSheet: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, gap: 12 },
+  formSheet: { backgroundColor: colors.surface, borderRadius: theme.radius.xl, padding: 20, gap: 12 },
   formTitle: { fontFamily: theme.serif, fontSize: 19, color: colors.onSurface },
   input: {
     borderWidth: 1, borderColor: colors.border, borderRadius: theme.radius.md,

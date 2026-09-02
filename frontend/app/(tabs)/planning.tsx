@@ -12,6 +12,7 @@ import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { SegmentedControl } from '@/src/SegmentedControl';
 import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { syncWidgetData } from '@/src/widgetData';
 
@@ -197,18 +198,12 @@ export default function Planning() {
           <Text style={styles.title}>Planning</Text>
         </View>
 
-        <View style={styles.segment}>
-          {([['production', 'Production'], ['staff', 'Personnel']] as [Mode, string][]).map(([key, label]) => (
-            <Pressable
-              key={key}
-              testID={`mode-${key}`}
-              onPress={() => setMode(key)}
-              style={[styles.segBtn, mode === key && styles.segBtnOn]}
-            >
-              <Text style={[styles.segText, mode === key && styles.segTextOn]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          testID="mode"
+          options={[{ key: 'production' as Mode, label: 'Production' }, { key: 'staff' as Mode, label: 'Personnel' }]}
+          value={mode}
+          onChange={setMode}
+        />
 
         {mode === 'production' && plan && plan.productions_limit != null && (
           <Pressable
@@ -327,11 +322,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: 8 },
   quotaText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
   quotaLink: { fontSize: 12, color: colors.brand, fontWeight: '700' },
-  segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginTop: 12 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
-  segBtnOn: { backgroundColor: colors.brand },
-  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: colors.onBrandPrimary },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 12 },
   card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },

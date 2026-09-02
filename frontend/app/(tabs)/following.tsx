@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { EmptyState } from '@/src/EmptyState';
 
 type FeedItem = {
   kind: 'recipe' | 'creation';
@@ -117,22 +118,16 @@ export default function Following() {
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} /> : null}
           ListEmptyComponent={
             followingCount === 0 ? (
-              <View style={styles.emptyBox}>
-                <Feather name="rss" size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>Votre fil est vide</Text>
-                <Text style={styles.emptySubtitle}>
-                  Suivez des boulangers et créateurs pour retrouver leurs nouvelles recettes et créations ici.
-                </Text>
-                <Pressable testID="discover-profiles-btn" onPress={() => router.push('/(tabs)/friends' as any)} style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Découvrir des profils</Text>
-                </Pressable>
-              </View>
+              <EmptyState
+                icon="rss"
+                title="Votre fil est vide"
+                subtitle="Suivez des boulangers et créateurs pour retrouver leurs nouvelles recettes et créations ici."
+                ctaLabel="Découvrir des profils"
+                onCta={() => router.push('/(tabs)/friends' as any)}
+                testID="discover-profiles-btn"
+              />
             ) : (
-              <View style={styles.emptyBox}>
-                <Feather name="check-circle" size={40} color={colors.muted} />
-                <Text style={styles.emptyTitle}>Aucune nouvelle publication</Text>
-                <Text style={styles.emptySubtitle}>Vous êtes à jour !</Text>
-              </View>
+              <EmptyState icon="check-circle" title="Aucune nouvelle publication" subtitle="Vous êtes à jour !" />
             )
           }
           renderItem={({ item }) => (
@@ -184,11 +179,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   brandLabel: { fontSize: 11, letterSpacing: 3, color: colors.muted, fontWeight: '500' },
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },
-  emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center', marginTop: 6 },
-  emptySubtitle: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  emptyBtn: { marginTop: 16, backgroundColor: colors.brand, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 4 },
-  emptyBtnText: { color: colors.onBrandPrimary, fontWeight: '600' },
   card: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14, gap: 12 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

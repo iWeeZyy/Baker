@@ -14,6 +14,8 @@ import { ActionSheet } from '@/src/ActionSheet';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { Chip } from '@/src/Chip';
+import { Button } from '@/src/Button';
 
 const CREATION_CATEGORIES = ['Pain', 'Viennoiserie', 'Pâtisserie', 'Traiteur', 'Autre'];
 const DESCRIPTION_MAX_LENGTH = 500;
@@ -231,9 +233,7 @@ export default function CreationForm() {
           <Field label="Catégorie">
             <View style={styles.chipsRow}>
               {CREATION_CATEGORIES.map(c => (
-                <Pressable key={c} testID={`creation-cat-${c}`} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
-                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-                </Pressable>
+                <Chip key={c} testID={`creation-cat-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
               ))}
             </View>
           </Field>
@@ -277,12 +277,10 @@ export default function CreationForm() {
 
           {error && <Text style={styles.error} testID="creation-error">{error}</Text>}
 
-          <Pressable
-            testID="publish-creation-btn" onPress={save} disabled={saving || stillUploading}
-            style={[styles.publishBtn, (saving || stillUploading) && { opacity: 0.6 }]}
-          >
-            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.publishText}>{isEdit ? 'Enregistrer' : 'Publier'}</Text>}
-          </Pressable>
+          <Button
+            testID="publish-creation-btn" onPress={save} disabled={saving || stillUploading} loading={saving}
+            label={isEdit ? 'Enregistrer' : 'Publier'} style={{ marginTop: 8 }}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -291,8 +289,8 @@ export default function CreationForm() {
         title="Ajouter des photos"
         onClose={() => setPhotoMenuOpen(false)}
         options={[
-          { key: 'camera', emoji: '📷', label: 'Prendre une photo', onPress: pickFromCamera },
-          { key: 'library', emoji: '🖼️', label: 'Choisir dans la photothèque', onPress: pickFromLibrary },
+          { key: 'camera', icon: 'camera', label: 'Prendre une photo', onPress: pickFromCamera },
+          { key: 'library', icon: 'image', label: 'Choisir dans la photothèque', onPress: pickFromLibrary },
         ]}
       />
     </SafeAreaView>
@@ -311,13 +309,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   textArea: { minHeight: 90, textAlignVertical: 'top' },
   charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   error: { color: colors.error, fontSize: 13, marginBottom: 12 },
-  publishBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
-  publishText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
   photoThumbWrap: { width: 84, height: 84, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: colors.surfaceSecondary },
   photoThumb: { width: '100%', height: '100%' },

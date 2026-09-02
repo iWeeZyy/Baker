@@ -161,15 +161,15 @@ export default function TeamList() {
         title={menuFor?.name || ''}
         onClose={() => setMenuFor(null)}
         options={menuFor ? [
-          { key: 'role', emoji: '🏷️', label: 'Modifier le rôle', onPress: () => setRoleFor(menuFor) },
-          { key: 'remove', emoji: '🗑️', label: 'Retirer de ma Team', onPress: () => removeMember(menuFor), destructive: true },
+          { key: 'role', icon: 'tag', label: 'Modifier le rôle', onPress: () => setRoleFor(menuFor) },
+          { key: 'remove', icon: 'trash-2', label: 'Retirer de ma Team', onPress: () => removeMember(menuFor), destructive: true },
         ] : []}
       />
       <ActionSheet
         visible={!!roleFor}
         title="Rôle dans la Team"
         onClose={() => setRoleFor(null)}
-        options={ROLE_OPTIONS.map(r => ({ key: r, emoji: '🏷️', label: r, onPress: () => setRole(r) }))}
+        options={ROLE_OPTIONS.map(r => ({ key: r, icon: 'tag', label: r, onPress: () => setRole(r) }))}
       />
     </SafeAreaView>
   );

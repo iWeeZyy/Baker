@@ -5,6 +5,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { filterTips, pickRandomTip, summarize, type Tip } from '@/src/tips/tipsSearch';
+import { Chip } from '@/src/Chip';
+import { SegmentedControl } from '@/src/SegmentedControl';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -138,24 +140,16 @@ export default function Tips() {
           )}
         </View>
 
-        <View style={styles.segment}>
-          {([['toutes', 'Toutes les astuces'], ['favoris', 'Mes favoris']] as const).map(([key, label]) => (
-            <Pressable key={key} testID={`tips-view-${key}`} onPress={() => setView(key)} style={[styles.segBtn, view === key && styles.segBtnOn]}>
-              <Text style={[styles.segText, view === key && styles.segTextOn]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          testID="tips-view"
+          options={[{ key: 'toutes', label: 'Toutes les astuces' }, { key: 'favoris', label: 'Mes favoris' }]}
+          value={view}
+          onChange={setView}
+        />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
           {CATEGORIES.map(c => (
-            <Pressable
-              key={c}
-              testID={`tips-chip-${c}`}
-              onPress={() => setCategory(c)}
-              style={[styles.chip, category === c && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-            </Pressable>
+            <Chip key={c} testID={`tips-chip-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
           ))}
         </ScrollView>
       </View>
@@ -215,16 +209,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 16, height: 44,
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
-  segment: { flexDirection: 'row', gap: 8, marginHorizontal: 24, marginBottom: 14 },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, backgroundColor: colors.surfaceSecondary },
-  segBtnOn: { backgroundColor: colors.brand },
-  segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
-  segTextOn: { color: colors.onBrandPrimary },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
-  chip: { paddingHorizontal: 16, height: 36, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 40 },
   emptyTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, textAlign: 'center' },
   emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },

@@ -13,6 +13,7 @@ import { formatDuration } from '@/src/format';
 import { recipeImage, recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { SectionHeader } from '@/src/SectionHeader';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
 
@@ -85,7 +86,7 @@ export default function Home() {
 
         <Pressable testID="cost-calculator-card" onPress={() => router.push('/cost/new')} style={styles.calcCard}>
           <View style={styles.calcIcon}>
-            <Text style={{ fontSize: 18 }}>💰</Text>
+            <Feather name="dollar-sign" size={20} color={colors.brand} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.calcTitle}>Coût de revient</Text>
@@ -143,9 +144,7 @@ export default function Home() {
 
         {classics.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Grands classiques</Text>
-            </View>
+            <SectionHeader title="Grands classiques" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
               {classics.map(r => (
                 <Pressable key={r.id} testID={`classic-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>
@@ -160,9 +159,7 @@ export default function Home() {
 
         {community.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recettes de la communauté</Text>
-            </View>
+            <SectionHeader title="Recettes de la communauté" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, gap: 16 }}>
               {community.map(r => (
                 <Pressable key={r.id} testID={`community-${r.id}`} onPress={() => router.push(`/recipe/${r.id}`)} style={styles.classicCard}>

@@ -172,9 +172,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: { flex: 1 },
   menu: {
     position: 'absolute', right: 16, bottom: TAB_BAR_HEIGHT + 8, width: 200,
-    backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 6,
+    backgroundColor: colors.surface, borderRadius: theme.radius.xl, paddingVertical: 6,
     borderWidth: 1, borderColor: colors.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },

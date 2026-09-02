@@ -17,6 +17,7 @@ import { confirmAsync } from '@/src/confirm';
 import { formatDuration } from '@/src/format';
 import { recipeImageSource } from '@/src/products';
 import { SwipeableRow } from '@/src/SwipeableRow';
+import { Chip } from '@/src/Chip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -183,14 +184,7 @@ export default function CollectionDetail() {
 
       <View style={styles.sortRow}>
         {SORT_OPTIONS.map(opt => (
-          <Pressable
-            key={opt.key}
-            testID={`collection-sort-${opt.key}`}
-            onPress={() => setSort(opt.key)}
-            style={[styles.chip, sort === opt.key && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, sort === opt.key && styles.chipTextActive]}>{opt.label}</Text>
-          </Pressable>
+          <Chip key={opt.key} testID={`collection-sort-${opt.key}`} label={opt.label} active={sort === opt.key} onPress={() => setSort(opt.key)} />
         ))}
       </View>
 
@@ -283,10 +277,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
   sortRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 12, marginBottom: 4 },
-  chip: { paddingHorizontal: 14, height: 32, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  chipActive: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse },
-  chipText: { fontSize: 12, color: colors.onSurfaceSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.onSurfaceInverse },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.md,
