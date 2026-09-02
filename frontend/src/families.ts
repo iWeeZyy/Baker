@@ -68,7 +68,7 @@ export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
   'carres': require('../assets/images/families/carres-photo.jpg'),
   'petites-patisseries': require('../assets/images/families/petites-patisseries-photo.jpg'),
   'muffins-scones': require('../assets/images/families/muffins-scones-photo.jpg'),
-  'garnitures': require('../assets/images/families/garnitures.png'),
+  'garnitures': require('../assets/images/families/garnitures-photo.jpg'),
   // Les fourre-tout partagent l'épi de blé : ils n'ont pas de forme propre,
   // puisqu'ils recueillent ce qui n'a pas de famille. Il y en a un par
   // catégorie, donc six.
