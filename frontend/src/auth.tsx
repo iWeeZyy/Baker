@@ -8,10 +8,12 @@ export type User = {
   user_id: string;
   email: string;
   name?: string;
+  username?: string;
   picture?: string;
   bio?: string | null;
   instagram_username?: string | null;
   profession?: string | null;
+  specialties?: string[];
   team_visibility?: 'public' | 'authenticated' | 'private';
   message_privacy?: 'friends_only' | 'followers' | 'friends_and_followers' | 'everyone';
   notify_new_follower?: boolean;
@@ -20,15 +22,27 @@ export type User = {
   level_detail?: LevelDetail;
 };
 
+export type RegisterPayload = {
+  email: string;
+  password: string;
+  name: string;
+  username: string;
+  bio?: string;
+  instagram_username?: string;
+  profession?: string;
+  specialties?: string[];
+};
+
 type AuthCtx = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateProfile: (fields: {
-    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string; message_privacy?: string;
+    bio?: string; instagram_username?: string; profession?: string; username?: string; specialties?: string[];
+    team_visibility?: string; message_privacy?: string;
     notify_new_follower?: boolean; notify_new_recipe?: boolean; notify_new_creation?: boolean;
   }) => Promise<void>;
 };
@@ -74,8 +88,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await applyAuth(data.token, data.user);
   };
 
-  const register = async (email: string, password: string, name: string) => {
-    const data = await api('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
+  const register = async (payload: RegisterPayload) => {
+    const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
     await applyAuth(data.token, data.user);
   };
 
@@ -102,7 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Même séquence que l'upload d'avatar : on écrit, puis on relit la source
   // de vérité serveur plutôt que de corriger l'état local à la main.
   const updateProfile = async (fields: {
-    bio?: string; instagram_username?: string; profession?: string; team_visibility?: string;
+    bio?: string; instagram_username?: string; profession?: string; username?: string; specialties?: string[];
+    team_visibility?: string; message_privacy?: string;
     notify_new_follower?: boolean; notify_new_recipe?: boolean; notify_new_creation?: boolean;
   }) => {
     await api('/auth/me', { method: 'PUT', body: JSON.stringify(fields) });

@@ -222,6 +222,7 @@ export default function BakerProfile() {
               )}
             </View>
             <Text style={styles.name} testID="baker-name">{user.name}</Text>
+            {!!user.username && <Text style={styles.username} testID="baker-username">@{user.username}</Text>}
             <LevelBadge level={user.level} />
             {memberSince && <Text style={styles.since}>Boulanger depuis {memberSince}</Text>}
             {!!user.profession && <Text style={styles.profession} testID="baker-profession">{user.profession}</Text>}
@@ -369,6 +370,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   avatar: { width: 88, height: 88, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginTop: 4 },
   avatarText: { fontSize: 34, color: colors.onBrandTertiary, fontFamily: theme.serif },
   name: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 14 },
+  username: { fontSize: 14, color: colors.muted, marginTop: 2 },
   since: { fontSize: 13, color: colors.muted, marginTop: 4, fontStyle: 'italic' },
   profession: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 6 },
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 12, textAlign: 'center' },
