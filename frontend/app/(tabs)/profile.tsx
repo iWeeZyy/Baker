@@ -828,7 +828,10 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   tabText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
   tabTextActive: { color: colors.onSurface },
   card: { flex: 1 },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary },
+  cardImage: {
+    width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
+  },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
   commentCard: {
