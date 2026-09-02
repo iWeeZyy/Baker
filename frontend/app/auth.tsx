@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Redirect } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
@@ -10,11 +10,10 @@ import { useTheme } from '@/src/ThemeContext';
 export default function AuthScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { user, login, register } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const router = useRouter();
+  const { user, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,8 +21,7 @@ export default function AuthScreen() {
     setError(null);
     setLoading(true);
     try {
-      if (mode === 'signup') await register(email.trim(), password, name.trim() || email.split('@')[0]);
-      else await login(email.trim(), password);
+      await login(email.trim(), password);
     } catch (e: any) {
       setError(e.message || 'Erreur');
     } finally {
@@ -50,20 +48,14 @@ export default function AuthScreen() {
 
         <View style={styles.form}>
           <View style={styles.tabs}>
-            <Pressable testID="tab-login" onPress={() => setMode('login')} style={[styles.tab, mode === 'login' && styles.tabActive]}>
-              <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>Connexion</Text>
-            </Pressable>
-            <Pressable testID="tab-signup" onPress={() => setMode('signup')} style={[styles.tab, mode === 'signup' && styles.tabActive]}>
-              <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>Inscription</Text>
+            <View style={[styles.tab, styles.tabActive]}>
+              <Text style={[styles.tabText, styles.tabTextActive]}>Connexion</Text>
+            </View>
+            <Pressable testID="tab-signup" onPress={() => router.push('/signup')} style={styles.tab}>
+              <Text style={styles.tabText}>Inscription</Text>
             </Pressable>
           </View>
 
-          {mode === 'signup' && (
-            <View style={styles.field}>
-              <Text style={styles.label}>Nom</Text>
-              <TextInput testID="input-name" value={name} onChangeText={setName} placeholder="Votre nom" placeholderTextColor={colors.muted} style={styles.input} />
-            </View>
-          )}
           <View style={styles.field}>
             <Text style={styles.label}>Email</Text>
             <TextInput testID="input-email" value={email} onChangeText={setEmail} placeholder="email@exemple.com" placeholderTextColor={colors.muted} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
@@ -76,7 +68,11 @@ export default function AuthScreen() {
           {error ? <Text style={styles.error} testID="auth-error">{error}</Text> : null}
 
           <Pressable testID="submit-auth" onPress={submit} disabled={loading} style={[styles.primaryBtn, loading && { opacity: 0.6 }]}>
-            {loading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
+            {loading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>Se connecter</Text>}
+          </Pressable>
+
+          <Pressable testID="go-to-signup" onPress={() => router.push('/signup')} style={styles.signupLink}>
+            <Text style={styles.signupLinkText}>Pas encore de compte ? <Text style={styles.signupLinkStrong}>Créer un compte</Text></Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -102,4 +98,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   primaryBtn: { backgroundColor: colors.brand, paddingVertical: 16, alignItems: 'center', borderRadius: 4, marginTop: 8 },
   primaryBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600', letterSpacing: 0.5 },
   error: { color: colors.error, fontSize: 13, marginBottom: 8 },
+  signupLink: { marginTop: 20, alignItems: 'center' },
+  signupLinkText: { fontSize: 13, color: colors.muted },
+  signupLinkStrong: { color: colors.brand, fontWeight: '600' },
 });

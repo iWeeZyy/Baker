@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { AdSlot } from '@/src/ads';
 import { avatarUrl } from '@/src/avatar';
 import { formatDuration } from '@/src/format';
@@ -18,6 +19,7 @@ type Recipe = { id: string; title: string; category: string; image_url: string; 
 export default function Home() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { user } = useAuth();
 
   const AuthorAvatar = ({ name, picture }: { name?: string; picture?: string | null }) => {
     const uri = avatarUrl(picture, API_BASE);
@@ -67,7 +69,7 @@ export default function Home() {
       >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>BAKERS</Text>
-          <Text style={styles.headerTitle}>Bonjour, boulanger</Text>
+          <Text style={styles.headerTitle} testID="home-greeting">{user?.name ? `Bonjour ${user.name} 👋` : 'Bonjour, boulanger'}</Text>
         </View>
 
         <Pressable testID="calculator-card" onPress={() => router.push('/calculator')} style={styles.calcCard}>

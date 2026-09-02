@@ -179,6 +179,18 @@ class RegisterInput(BaseModel):
     email: EmailStr
     password: str
     name: str
+    # Optionnel : le nouvel assistant d'inscription par étapes en envoie
+    # toujours un (choisi et vérifié disponible par l'utilisateur, aucune
+    # étape "Passer" sur ce champ) ; un appelant direct de l'API (dont toute
+    # la suite de tests existante, écrite avant l'introduction de ce champ)
+    # qui n'en fournit pas reçoit un nom d'utilisateur généré automatiquement
+    # à partir de l'email — même filet que l'ancien repli de `name` sur la
+    # partie locale de l'email dans `auth.tsx`.
+    username: Optional[str] = None
+    bio: Optional[str] = None
+    instagram_username: Optional[str] = None
+    profession: Optional[str] = None
+    specialties: Optional[List[str]] = None
 
 class LoginInput(BaseModel):
     email: EmailStr
@@ -212,9 +224,81 @@ class UserProfileUpdate(BaseModel):
     notify_new_follower: Optional[bool] = None
     notify_new_recipe: Optional[bool] = None
     notify_new_creation: Optional[bool] = None
+    # Comme username : Optional[str] plutôt que le champ dédié — omis = inchangé,
+    # fourni = doit passer le même format+unicité qu'à l'inscription.
+    username: Optional[str] = None
+    # Liste fournie = remplace entièrement (jamais d'ajout/retrait par élément) ;
+    # [] = tout retirer, contrairement à bio/instagram il n'y a pas d'ambiguïté
+    # à lever avec une chaîne vide puisque c'est déjà une liste.
+    specialties: Optional[List[str]] = None
 
 BIO_MAX_LENGTH = 300
 PROFESSION_MAX_LENGTH = 60
+
+# Nom d'utilisateur (@handle) — un concept nouveau, distinct du nom d'affichage
+# `name` qui reste utilisé partout ailleurs dans l'app. Toujours stocké en
+# minuscules (même convention que l'email), jamais avec le `@`.
+USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
+
+# Onboarding — spécialités déclarées à l'inscription (section 19 de la demande),
+# liste fermée, éditable plus tard via PUT /auth/me comme le reste du profil.
+SPECIALTY_OPTIONS = ["pain", "viennoiserie", "patisserie", "levain", "pain_traditionnel", "autre"]
+
+def _normalize_username(raw: str) -> Optional[str]:
+    """Jamais d'exception — utilisé par la vérification de disponibilité, qui
+    doit pouvoir répondre "format invalide" sans passer par un try/except."""
+    candidate = (raw or "").strip().lower()
+    if not USERNAME_RE.match(candidate):
+        return None
+    return candidate
+
+def _validate_username(raw: str) -> str:
+    normalized = _normalize_username(raw)
+    if normalized is None:
+        raise HTTPException(422, "Nom d'utilisateur invalide (3 à 20 caractères : lettres minuscules, chiffres, underscore).")
+    return normalized
+
+def _validate_bio(raw: str) -> Optional[str]:
+    """Factorisée hors de `update_profile` pour que `register` applique
+    exactement la même modération, jamais une deuxième implémentation."""
+    bio = raw.strip()
+    if not bio:
+        return None
+    if len(bio) > BIO_MAX_LENGTH:
+        raise HTTPException(422, f"La description ne peut pas dépasser {BIO_MAX_LENGTH} caractères.")
+    return bio
+
+def _validate_profession(raw: str) -> Optional[str]:
+    profession = raw.strip()
+    if not profession:
+        return None
+    if len(profession) > PROFESSION_MAX_LENGTH:
+        raise HTTPException(422, f"La profession ne peut pas dépasser {PROFESSION_MAX_LENGTH} caractères.")
+    return profession
+
+async def _auto_username_from_email(email: str) -> str:
+    """Filet de compatibilité pour un appel direct de l'API sans `username`
+    (toute la suite de tests existante, écrite avant l'introduction de ce
+    champ) — jamais utilisé par l'assistant d'inscription, qui fait toujours
+    choisir et vérifier un nom d'utilisateur réel à l'utilisateur."""
+    base = re.sub(r"[^a-z0-9_]", "", email.split("@")[0].lower())[:16] or "boulanger"
+    if len(base) < 3:
+        base = (base + "boulanger")[:16]
+    candidate = base
+    for _ in range(6):
+        if not await db.users.find_one({"username": candidate}, {"_id": 0, "user_id": 1}):
+            return candidate
+        candidate = f"{base[:14]}{uuid.uuid4().hex[:4]}"[:20]
+    return f"boulanger{uuid.uuid4().hex[:8]}"
+
+def _validate_specialties(raw: List[str]) -> List[str]:
+    cleaned = []
+    for item in raw:
+        if item not in SPECIALTY_OPTIONS:
+            raise HTTPException(422, "Spécialité invalide.")
+        if item not in cleaned:
+            cleaned.append(item)
+    return cleaned
 
 class Recipe(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -407,34 +491,84 @@ class CollectionInput(BaseModel):
     description: str = ""
 
 # ---------- Auth Endpoints ----------
+
+# Vérifications de disponibilité — non authentifiées, puisqu'appelées PENDANT
+# l'inscription par étapes, avant que le compte n'existe (le compte n'est créé
+# qu'à la toute dernière étape). Ne renvoient jamais rien d'autre qu'un booléen
+# de disponibilité : aucune fuite d'information sur un compte existant.
+@api_router.get("/auth/username-available")
+async def username_available(username: str):
+    normalized = _normalize_username(username)
+    if normalized is None:
+        return {"available": False, "reason": "format", "username": None}
+    taken = await db.users.find_one({"username": normalized}, {"_id": 0, "user_id": 1})
+    if taken:
+        return {"available": False, "reason": "taken", "username": normalized}
+    return {"available": True, "reason": None, "username": normalized}
+
+@api_router.get("/auth/email-available")
+async def email_available(email: str):
+    taken = await db.users.find_one({"email": email.strip().lower()}, {"_id": 0, "user_id": 1})
+    return {"available": not bool(taken)}
+
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
     existing = await db.users.find_one({"email": inp.email.lower()}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Email déjà utilisé")
+    if inp.username:
+        username = _validate_username(inp.username)
+        if await db.users.find_one({"username": username}, {"_id": 0}):
+            raise HTTPException(400, "Nom d'utilisateur déjà utilisé")
+    else:
+        username = await _auto_username_from_email(inp.email)
     user_id = f"user_{uuid.uuid4().hex[:12]}"
+
+    bio = _validate_bio(inp.bio) if inp.bio is not None else None
+    if bio is not None:
+        moderation_result = text_moderation.classify_comment(bio)
+        await _moderate_and_flag(moderation_result, "bio", user_id, user_id)
+
+    instagram_username = None
+    if inp.instagram_username is not None and inp.instagram_username.strip():
+        try:
+            instagram_username = instagram.parse_instagram_username(inp.instagram_username.strip())
+        except ValueError:
+            raise HTTPException(422, "Nom d'utilisateur ou lien Instagram invalide.")
+
+    profession = _validate_profession(inp.profession) if inp.profession is not None else None
+    specialties = _validate_specialties(inp.specialties) if inp.specialties else []
+
     pw_hash = bcrypt.hashpw(inp.password.encode(), bcrypt.gensalt()).decode()
     user_doc = {
         "user_id": user_id,
         "email": inp.email.lower(),
         "name": inp.name,
+        "username": username,
         "password_hash": pw_hash,
         "provider": "email",
         "picture": None,
-        "bio": None,
-        "instagram_username": None,
-        "profession": None,
+        "bio": bio,
+        "instagram_username": instagram_username,
+        "profession": profession,
+        "specialties": specialties,
         "team_visibility": "public",
         "message_privacy": "friends_and_followers",
         "created_at": datetime.now(timezone.utc),
     }
-    await db.users.insert_one(user_doc)
+    try:
+        await db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        # Filet de course : le pré-contrôle ci-dessus a laissé passer une
+        # inscription concurrente sur le même email OU le même nom
+        # d'utilisateur entre-temps — l'index unique tranche, jamais un
+        # doublon silencieux.
+        raise HTTPException(400, "Email ou nom d'utilisateur déjà utilisé")
     token = sign_jwt(user_id)
-    user_doc.pop("password_hash", None)
-    user_doc.pop("_id", None)
     return {"token": token, "user": {
-        "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "picture": None,
-        "bio": None, "instagram_username": None, "profession": None, "team_visibility": "public",
+        "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "username": username, "picture": None,
+        "bio": bio, "instagram_username": instagram_username, "profession": profession, "specialties": specialties,
+        "team_visibility": "public",
         "message_privacy": "friends_and_followers",
         "notify_new_follower": True, "notify_new_recipe": True, "notify_new_creation": True,
     }}
@@ -448,9 +582,11 @@ async def login(inp: LoginInput):
         raise HTTPException(401, "Email ou mot de passe invalide")
     token = sign_jwt(user["user_id"])
     return {"token": token, "user": {
-        "user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"),
+        "user_id": user["user_id"], "email": user["email"], "name": user["name"],
+        "username": user.get("username"), "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
-        "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "profession": user.get("profession"), "specialties": user.get("specialties") or [],
+        "team_visibility": user.get("team_visibility") or "public",
         "message_privacy": user.get("message_privacy") or "friends_and_followers",
         "notify_new_follower": user.get("notify_new_follower", True),
         "notify_new_recipe": user.get("notify_new_recipe", True),
@@ -460,9 +596,11 @@ async def login(inp: LoginInput):
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return {
-        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
+        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"),
+        "username": user.get("username"), "picture": user.get("picture"),
         "bio": user.get("bio"), "instagram_username": user.get("instagram_username"),
-        "profession": user.get("profession"), "team_visibility": user.get("team_visibility") or "public",
+        "profession": user.get("profession"), "specialties": user.get("specialties") or [],
+        "team_visibility": user.get("team_visibility") or "public",
         "message_privacy": user.get("message_privacy") or "friends_and_followers",
         "notify_new_follower": user.get("notify_new_follower", True),
         "notify_new_recipe": user.get("notify_new_recipe", True),
@@ -478,15 +616,11 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
     updates: dict = {}
 
     if inp.bio is not None:
-        bio = inp.bio.strip()
-        if not bio:
-            updates["bio"] = None
-        else:
-            if len(bio) > BIO_MAX_LENGTH:
-                raise HTTPException(422, f"La description ne peut pas dépasser {BIO_MAX_LENGTH} caractères.")
+        bio = _validate_bio(inp.bio)
+        if bio is not None:
             moderation_result = text_moderation.classify_comment(bio)
             await _moderate_and_flag(moderation_result, "bio", user["user_id"], user["user_id"])
-            updates["bio"] = bio
+        updates["bio"] = bio
 
     if inp.instagram_username is not None:
         handle = inp.instagram_username.strip()
@@ -499,13 +633,17 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
                 raise HTTPException(422, "Nom d'utilisateur ou lien Instagram invalide.")
 
     if inp.profession is not None:
-        profession = inp.profession.strip()
-        if not profession:
-            updates["profession"] = None
-        else:
-            if len(profession) > PROFESSION_MAX_LENGTH:
-                raise HTTPException(422, f"La profession ne peut pas dépasser {PROFESSION_MAX_LENGTH} caractères.")
-            updates["profession"] = profession
+        updates["profession"] = _validate_profession(inp.profession)
+
+    if inp.username is not None:
+        new_username = _validate_username(inp.username)
+        clash = await db.users.find_one({"username": new_username, "user_id": {"$ne": user["user_id"]}}, {"_id": 0})
+        if clash:
+            raise HTTPException(422, "Nom d'utilisateur déjà utilisé.")
+        updates["username"] = new_username
+
+    if inp.specialties is not None:
+        updates["specialties"] = _validate_specialties(inp.specialties)
 
     if inp.team_visibility is not None:
         if inp.team_visibility not in TEAM_VISIBILITY_OPTIONS:
@@ -528,9 +666,11 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
 
     return {
-        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"), "picture": user.get("picture"),
+        "user_id": user["user_id"], "email": user["email"], "name": user.get("name"),
+        "username": updates.get("username", user.get("username")), "picture": user.get("picture"),
         "bio": updates.get("bio", user.get("bio")), "instagram_username": updates.get("instagram_username", user.get("instagram_username")),
         "profession": updates.get("profession", user.get("profession")),
+        "specialties": updates.get("specialties", user.get("specialties") or []),
         "team_visibility": updates.get("team_visibility", user.get("team_visibility") or "public"),
         "message_privacy": updates.get("message_privacy", user.get("message_privacy") or "friends_and_followers"),
         "notify_new_follower": updates.get("notify_new_follower", user.get("notify_new_follower", True)),
@@ -1724,7 +1864,8 @@ def _public_user(u: dict, level: Optional[dict] = None) -> dict:
     besoin d'afficher le niveau (Amis, Team, Messagerie) n'incluent
     simplement pas ce champ plutôt que d'en émettre un inexact."""
     out = {
-        "user_id": u["user_id"], "name": u.get("name") or "Boulanger", "picture": u.get("picture"),
+        "user_id": u["user_id"], "name": u.get("name") or "Boulanger", "username": u.get("username"),
+        "picture": u.get("picture"),
         "bio": u.get("bio"), "instagram_username": u.get("instagram_username"),
         "profession": u.get("profession"),
     }
@@ -3862,6 +4003,9 @@ async def startup():
     # Indexes
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
+    # sparse=True : les comptes créés avant l'introduction du nom d'utilisateur
+    # n'ont pas ce champ — ne doivent jamais entrer en collision entre eux.
+    await db.users.create_index("username", unique=True, sparse=True)
     await db.recipes.create_index("id", unique=True)
     await db.recipes.create_index("category")
     await db.favorites.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)

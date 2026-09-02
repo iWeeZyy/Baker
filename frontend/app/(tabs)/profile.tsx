@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, Platform, TextInput, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, FlatList, Modal, Alert, Linking, TextInput, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/src/auth';
-import { api, API_BASE, getToken } from '@/src/api';
+import { api, API_BASE } from '@/src/api';
+import { uploadAvatar } from '@/src/avatarUpload';
 import { ActionSheet } from '@/src/ActionSheet';
 import { avatarUrl } from '@/src/avatar';
 import { confirmAsync } from '@/src/confirm';
@@ -17,6 +18,7 @@ import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
 import type { Badge } from '@/src/gamification/types';
+import { useUsernameAvailability } from '@/src/onboarding/useUsernameAvailability';
 
 const BIO_MAX_LENGTH = 300;
 const PROFESSION_MAX_LENGTH = 60;
@@ -51,6 +53,7 @@ export default function Profile() {
   const [commentsLoadingMore, setCommentsLoadingMore] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [bioDraft, setBioDraft] = useState('');
+  const [usernameDraft, setUsernameDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -191,21 +194,7 @@ export default function Profile() {
     setUploading(true);
     setAvatarError(null);
     try {
-      const form = new FormData();
-      if (Platform.OS === 'web') {
-        const blob = await (await fetch(pendingImage.uri)).blob();
-        form.append('file', blob, pendingImage.name);
-      } else {
-        form.append('file', { uri: pendingImage.uri, name: pendingImage.name, type: `image/${pendingImage.name.split('.').pop()}` } as any);
-      }
-      const token = await getToken();
-      const res = await fetch(`${API_BASE}/auth/me/picture`, {
-        method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: form,
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.detail || 'Impossible de modifier votre photo. Vérifiez votre connexion et réessayez.');
+      await uploadAvatar(pendingImage.uri, pendingImage.name);
       await refreshUser();
       setPendingImage(null);
     } catch (e: any) {
@@ -230,17 +219,20 @@ export default function Profile() {
   const openProfileEdit = () => {
     setProfileError(null);
     setBioDraft(user?.bio || '');
+    setUsernameDraft(user?.username || '');
     setInstagramDraft(user?.instagram_username ? `@${user.instagram_username}` : '');
     setProfessionDraft(user?.profession || '');
     setVisibilityDraft(user?.team_visibility || 'public');
     setEditingProfile(true);
   };
 
-  const instagramDraftError = instagramDraft.trim() && parseInstagramUsername(instagramDraft) === null;
+  const instagramDraftError = !!instagramDraft.trim() && parseInstagramUsername(instagramDraft) === null;
+  const usernameStatus = useUsernameAvailability(editingProfile ? usernameDraft : '', user?.username);
+  const usernameDraftError = usernameStatus === 'invalid' || usernameStatus === 'taken';
 
   const saveProfile = async () => {
-    if (instagramDraftError) {
-      setProfileError('Nom d’utilisateur ou lien Instagram invalide.');
+    if (instagramDraftError || usernameDraftError) {
+      setProfileError(usernameDraftError ? 'Nom d’utilisateur invalide ou déjà utilisé.' : 'Nom d’utilisateur ou lien Instagram invalide.');
       return;
     }
     setProfileSaving(true);
@@ -248,6 +240,7 @@ export default function Profile() {
     try {
       await updateProfile({
         bio: bioDraft.trim(),
+        username: usernameDraft.trim() || undefined,
         instagram_username: instagramDraft.trim() ? (parseInstagramUsername(instagramDraft) || '') : '',
         profession: professionDraft.trim(),
         team_visibility: visibilityDraft,
@@ -299,6 +292,7 @@ export default function Profile() {
           </View>
         </View>
         <Text style={styles.name}>{user?.name || 'Boulanger'}</Text>
+        {!!user?.username && <Text style={styles.username} testID="profile-username">@{user.username}</Text>}
         <Text style={styles.email}>{user?.email}</Text>
 
         {!editingProfile && !!user?.profession && (
@@ -413,6 +407,24 @@ export default function Profile() {
 
         {editingProfile && (
           <View style={styles.editProfileCard}>
+            <Text style={styles.editLabel}>Nom d’utilisateur</Text>
+            <TextInput
+              testID="username-input"
+              value={usernameDraft}
+              onChangeText={(v) => setUsernameDraft(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              placeholder="votre_pseudo"
+              placeholderTextColor={colors.muted}
+              style={styles.editInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {!!usernameDraft.trim() && usernameStatus === 'taken' && (
+              <Text style={styles.avatarError} testID="username-taken-error">Ce nom d’utilisateur est déjà utilisé.</Text>
+            )}
+            {!!usernameDraft.trim() && usernameStatus === 'invalid' && (
+              <Text style={styles.avatarError}>Nom d’utilisateur invalide (3 à 20 caractères : lettres, chiffres, underscore).</Text>
+            )}
+
             <Text style={styles.editLabel}>Description</Text>
             <TextInput
               testID="bio-input"
@@ -751,6 +763,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   notifBadge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   notifBadgeText: { color: colors.onBrandPrimary, fontSize: 9, fontWeight: '700' },
   name: { fontFamily: theme.serif, fontSize: 28, color: colors.onSurface, marginTop: 14 },
+  username: { fontSize: 14, color: colors.muted, marginTop: 2 },
   email: { fontSize: 13, color: colors.muted, marginTop: 2 },
   statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 20, paddingHorizontal: 4 },
   stat: { alignItems: 'center' },
