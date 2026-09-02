@@ -137,13 +137,13 @@
     },
     {
       "name": "Profil",
-      "purpose": "Manage saved recipes, own shared recipes, and settings.",
+      "purpose": "Identity card: who the baker is (avatar, bio, Instagram), their standing (stats, level/XP progression, badges), and their published work (recipes, creations, comments) — plus a link to their professional Team.",
       "states": {
         "loading": "Skeleton UI.",
         "empty": "'Vous n\\'avez pas encore partagé de recette.'",
         "error": "Standard error."
       },
-      "layout": "Editorial header with user avatar (or initials). Two tabs: 'Mes Recettes' and 'Sauvegardées'. Settings accessible via a subtle gear icon in the header."
+      "layout": "Editorial header with user avatar (or initials), name, @username, bio and Instagram link. Horizontal stats row (recipes, comments, likes, followers, following). Level/XP progression card. Badges preview row linking to the full badge collection. 'Mes créations' gallery (up to 6, with a link to the rest). Team preview (up to 6 members, with a link to the rest). Below that, three tabs: 'Mes recettes', 'Sauvegardées', 'Mes commentaires'. Settings accessible via a subtle gear icon in the header; Amis/Abonnements/Classement/Messagerie/Collections/Mes badges are reached from the Profil tab's own menu, not from this screen."
     }
   ],
   "images": {

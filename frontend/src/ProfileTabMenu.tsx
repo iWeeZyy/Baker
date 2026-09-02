@@ -25,12 +25,22 @@ const TAB_BAR_HEIGHT = 88;
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
   route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges';
+  // Préfixes de pathname qui comptent comme "dans cette section" — source
+  // unique pour l'état actif du bouton d'onglet ET de la ligne de menu
+  // correspondante (avant, deux calculs divergents existaient : le bouton
+  // savait que Collections/Badges ont des sous-pages, pas les lignes du
+  // menu, donc `/collections/{id}` ou `/badge/{id}` n'allumait jamais la
+  // bonne ligne alors que le bouton restait actif).
+  matchPrefixes: string[];
   showBadge?: boolean;
   // Pastille numérique (Amis, Messagerie) — différente du simple point
   // showBadge, réutilise le style déjà existant du badge de la cloche
   // notifications sur profile.tsx, jamais un composant inventé pour l'occasion.
   badgeCount?: number;
 };
+
+const isItemActive = (item: MenuItem, pathname: string) =>
+  item.matchPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`));
 
 export function ProfileTabButton() {
   const { colors } = useTheme();
@@ -42,17 +52,6 @@ export function ProfileTabButton() {
   const [friendsBadge, setFriendsBadge] = useState(0);
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-
-  // Groupe actif : Profil doit rester mis en avant quand on est sur Amis,
-  // Abonnements, Classement, Messagerie ou Collections aussi, pour que
-  // l'utilisateur comprenne que ces pages en dépendent — comparaison
-  // stricte pour la plupart de ces routes plates, sauf Collections qui a
-  // une sous-page de détail (`/collections/{id}`) : `startsWith` y est
-  // nécessaire pour que le bouton reste actif une fois entré dans une
-  // collection, pas seulement sur la grille "Mes collections".
-  const active = pathname === '/profile' || pathname === '/friends' || pathname === '/following'
-    || pathname === '/classement' || pathname === '/messagerie' || pathname.startsWith('/collections')
-    || pathname.startsWith('/badges') || pathname.startsWith('/badge/');
 
   const loadBadges = () => {
     // Un seul appel pour les deux compteurs de Messagerie (conversations +
@@ -87,31 +86,40 @@ export function ProfileTabButton() {
   const toggleMenu = () => (menuOpen ? closeMenu() : openMenu());
 
   const items: MenuItem[] = [
-    { key: 'profile', label: 'Profil', icon: 'user', route: '/(tabs)/profile' },
-    { key: 'friends', label: 'Amis', icon: 'users', route: '/(tabs)/friends', badgeCount: friendsBadge },
+    { key: 'profile', label: 'Profil', icon: 'user', route: '/(tabs)/profile', matchPrefixes: ['/profile'] },
+    { key: 'friends', label: 'Amis', icon: 'users', route: '/(tabs)/friends', badgeCount: friendsBadge, matchPrefixes: ['/friends'] },
     // Le point qui vivait ici (nouveaux abonnés/recettes/créations, via
     // /notifications/unread-count) est retiré : ce même signal fait
     // désormais partie du compteur Messagerie ci-dessous — deux pastilles
     // pour la même information serait exactement le genre de doublon
     // visuel que la demande écarte explicitement.
-    { key: 'following', label: 'Abonnements', icon: 'rss', route: '/(tabs)/following' },
+    { key: 'following', label: 'Abonnements', icon: 'rss', route: '/(tabs)/following', matchPrefixes: ['/following'] },
     // "award" est déjà l'icône du badge "coup de cœur" (contenu le plus
     // aimé) ailleurs dans l'app — cohérent avec un classement, pas une
     // icône inventée pour l'occasion.
-    { key: 'classement', label: 'Classement', icon: 'award', route: '/classement' },
-    { key: 'messagerie', label: 'Messagerie', icon: 'message-circle', route: '/messagerie', badgeCount: messagerieBadge },
+    { key: 'classement', label: 'Classement', icon: 'award', route: '/classement', matchPrefixes: ['/classement'] },
+    { key: 'messagerie', label: 'Messagerie', icon: 'message-circle', route: '/messagerie', badgeCount: messagerieBadge, matchPrefixes: ['/messagerie'] },
     // Ni `showBadge` ni `badgeCount` : pas de pastille sur Collections par
     // défaut, à la différence d'Amis/Messagerie — décision explicite.
-    { key: 'collections', label: 'Collections', icon: 'folder', route: '/collections' },
+    // `/collections` couvre aussi `/collections/{id}` (une collection
+    // précise) via la règle startsWith de isItemActive.
+    { key: 'collections', label: 'Collections', icon: 'folder', route: '/collections', matchPrefixes: ['/collections'] },
     // "star" plutôt que "award" (déjà pris par Classement) — pas de pastille
     // ici non plus, aucun compteur "non lu" pertinent pour des badges.
-    { key: 'badges', label: 'Mes badges', icon: 'star', route: '/badges' },
+    // Deux préfixes : `/badges` (la liste) et `/badge` (le détail singulier
+    // `/badge/{id}`, une route distincte, pas une sous-page de `/badges`).
+    { key: 'badges', label: 'Mes badges', icon: 'star', route: '/badges', matchPrefixes: ['/badges', '/badge'] },
   ];
 
   const select = (item: MenuItem) => {
     closeMenu();
     router.push(item.route as any);
   };
+
+  // Le bouton d'onglet reste mis en avant tant qu'on est dans n'importe
+  // laquelle des 7 sections du menu — même source que la mise en évidence
+  // de chaque ligne ci-dessous, plus de calcul dupliqué.
+  const active = items.some(item => isItemActive(item, pathname));
 
   const hasAnyBadge = messagerieBadge > 0 || friendsBadge > 0;
 
@@ -133,7 +141,7 @@ export function ProfileTabButton() {
         <Pressable style={styles.backdrop} onPress={closeMenu}>
           <Animated.View style={[styles.menu, { opacity, transform: [{ scale }] }]}>
             {items.map((item, i) => {
-              const itemActive = pathname === item.route.replace('/(tabs)', '');
+              const itemActive = isItemActive(item, pathname);
               return (
                 <Pressable
                   key={item.key}
