@@ -16,7 +16,27 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { SectionHeader } from '@/src/SectionHeader';
 import { cardElevation } from '@/src/elevation';
 
-type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
+type Recipe = { id: string; title: string; category: string; family?: string | null; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
+
+// « À la une » doit toujours montrer un produit fini, jamais une pâte de
+// base ou une garniture — plus utile comme composant d'une autre recette
+// qu'à présenter telle quelle à l'accueil. Ces quatre familles sont les
+// seules du catalogue à n'être jamais un produit fini (voir CLAUDE.md,
+// section « Recipe families »).
+const BASE_COMPONENT_FAMILIES = ['levains', 'pates-tourees', 'pates-a-tarte', 'garnitures'];
+
+// Indice pseudo-aléatoire mais stable pour la journée locale en cours :
+// recalculé à chaque chargement, il retombe toujours sur le même indice
+// tant que la date n'a pas changé, et change automatiquement le
+// lendemain — pas besoin de stocker quoi que ce soit.
+function dailyIndex(length: number): number {
+  if (length <= 0) return 0;
+  const today = new Date();
+  const key = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(hash) % length;
+}
 
 export default function Home() {
   const { colors, mode } = useTheme();
@@ -55,7 +75,8 @@ export default function Home() {
   // jamais le dessin générique d'archétype, répété sur des dizaines de
   // recettes, ni la bande de couleur unie faute d'image.
   const withPhoto = recipes.filter(r => r.image_path || r.image_url);
-  const featured = withPhoto[0];
+  const featuredEligible = withPhoto.filter(r => !BASE_COMPONENT_FAMILIES.includes(r.family || ''));
+  const featured = featuredEligible.length > 0 ? featuredEligible[dailyIndex(featuredEligible.length)] : undefined;
   const coupsDeCoeur = withPhoto.filter((r: any) => r.coup_de_coeur);
   const classics = withPhoto.filter(r => !r.is_user_submitted).slice(1, 8);
   const community = withPhoto.filter((r: any) => r.is_user_submitted).slice(0, 6);
