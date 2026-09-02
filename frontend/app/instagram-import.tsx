@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { api, API_BASE, getToken } from '@/src/api';
+import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
@@ -18,21 +18,31 @@ import { uploadImage } from '@/src/recipeVerify/uploadImage';
 
 const CATEGORIES = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 const DIFFICULTIES = ['Facile', 'Intermédiaire', 'Avancé'];
-const MAX_PAGES = 6;
+const MIN_CAPTION_LENGTH = 20;
 
-type Page = { uri: string; name: string };
+const ANALYSIS_MESSAGES = ['Lecture de la légende…', 'Extraction de la recette…', 'Vérification des données…'];
 
-const ANALYSIS_MESSAGES = ['Analyse de votre fiche…', 'Extraction des ingrédients…', 'Vérification des données…'];
-
-export default function ScanRecipe() {
+/**
+ * Import d'une recette depuis une légende Instagram collée par
+ * l'utilisateur — jamais une récupération automatique depuis un lien :
+ * Instagram ne fournit aucune API publique non authentifiée pour ça
+ * (l'oEmbed nécessite une revue d'app Meta). Même chantier que scan.tsx
+ * (extraction assistée par IA → vérification éditable → POST /recipes,
+ * réutilisant la même modération/famille/gamification), simplement à
+ * partir d'un texte collé plutôt que d'une photo — d'où le partage de
+ * `src/recipeVerify/*` entre les deux écrans plutôt que deux implémentations
+ * séparées du même formulaire de vérification.
+ */
+export default function InstagramImport() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const router = useRouter();
   const { refreshUser } = useAuth();
-  const [phase, setPhase] = useState<'capture' | 'analyzing' | 'verify'>('capture');
-  const [pages, setPages] = useState<Page[]>([]);
-  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'paste' | 'analyzing' | 'verify'>('paste');
+  const [caption, setCaption] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [analysisMsgIndex, setAnalysisMsgIndex] = useState(0);
 
   const idCounter = useRef(0);
@@ -50,7 +60,9 @@ export default function ScanRecipe() {
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [steps, setSteps] = useState<StepRow[]>([]);
   const [technical, setTechnical] = useState<Record<string, string>>({});
-  const [coverPageIndex, setCoverPageIndex] = useState<number | null>(null);
+  const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
+  const [coverImagePath, setCoverImagePath] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,82 +72,23 @@ export default function ScanRecipe() {
     return () => clearInterval(t);
   }, [phase]);
 
-  // ---------- Capture ----------
-  const requestAndPick = async (kind: 'camera' | 'library') => {
-    setCaptureError(null);
-    const perm = kind === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      if (!perm.canAskAgain) {
-        Alert.alert(
-          kind === 'camera' ? 'Accès à la caméra refusé' : 'Accès à la photothèque refusé',
-          `Autorisez l'accès dans Réglages › Baker › ${kind === 'camera' ? 'Appareil photo' : 'Photos'}.`,
-          [
-            { text: 'Annuler', style: 'cancel' },
-            { text: 'Ouvrir Réglages', onPress: () => Linking.openSettings() },
-          ],
-        );
-      } else {
-        setCaptureError(kind === 'camera' ? 'Permission caméra refusée' : 'Permission photothèque refusée');
-      }
-      return;
-    }
-    const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'] as any, quality: 0.8, allowsEditing: true, aspect: [3, 4] };
-    const result = kind === 'camera' ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    if (pages.length >= MAX_PAGES) {
-      setCaptureError(`${MAX_PAGES} pages maximum par scan`);
-      return;
-    }
-    const name = `page.${(asset.uri.split('.').pop() || 'jpg').toLowerCase()}`;
-    setPages(prev => [...prev, { uri: asset.uri, name }]);
-  };
-
-  const removePage = (index: number) => {
-    setPages(prev => prev.filter((_, i) => i !== index));
-    setCoverPageIndex(idx => (idx === index ? null : idx != null && idx > index ? idx - 1 : idx));
-  };
-
-  const movePage = (index: number, dir: -1 | 1) => {
-    setPages(prev => {
-      const target = index + dir;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
+  // ---------- Analyse ----------
   const analyze = async () => {
-    if (pages.length === 0) return;
-    setCaptureError(null);
+    const trimmed = caption.trim();
+    if (trimmed.length < MIN_CAPTION_LENGTH) return;
+    setPasteError(null);
     setPhase('analyzing');
     setAnalysisMsgIndex(0);
     try {
-      const form = new FormData();
-      for (const p of pages) {
-        if (Platform.OS === 'web') {
-          const blob = await (await fetch(p.uri)).blob();
-          form.append('files', blob, p.name);
-        } else {
-          form.append('files', { uri: p.uri, name: p.name, type: `image/${p.name.split('.').pop()}` } as any);
-        }
-      }
-      const token = await getToken();
-      const res = await fetch(`${API_BASE}/recipes/scan/analyze`, {
+      const j = await api('/recipes/instagram-import/analyze', {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: form,
+        body: JSON.stringify({ caption: trimmed }),
       });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.detail || "L'analyse a échoué");
       applyExtraction(j as RecipeExtraction);
       setPhase('verify');
     } catch (e: any) {
-      setCaptureError(e.message || "L'analyse a échoué");
-      setPhase('capture');
+      setPasteError(e.message || "L'analyse a échoué");
+      setPhase('paste');
     }
   };
 
@@ -190,19 +143,52 @@ export default function ScanRecipe() {
 
   const stats = computeBakerStats(ingredients);
 
+  // Pas de photo source pour une légende collée (contrairement au scan, qui
+  // a les pages photographiées) — un unique bouton optionnel, upload direct
+  // dès le choix plutôt qu'un différé à la soumission comme dans share.tsx,
+  // pour donner un retour immédiat si l'envoi échoue.
+  const pickCoverImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setSubmitError('Permission photothèque refusée');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.8, allowsEditing: true, aspect: [4, 3] });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setCoverImageUri(asset.uri);
+    setCoverUploading(true);
+    setSubmitError(null);
+    try {
+      const name = `cover.${(asset.uri.split('.').pop() || 'jpg').toLowerCase()}`;
+      const path = await uploadImage(asset.uri, name);
+      setCoverImagePath(path);
+    } catch (e: any) {
+      setSubmitError(e.message || "Envoi de la photo impossible");
+      setCoverImageUri(null);
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
+  const removeCoverImage = () => {
+    setCoverImageUri(null);
+    setCoverImagePath(null);
+  };
+
   const submit = async () => {
     if (!title.trim() || !description.trim() || !timeMinutes.trim() || ingredients.length === 0 || steps.length === 0) {
       setSubmitError('Merci de compléter le nom, la durée totale, la description, au moins un ingrédient et une étape.');
       return;
     }
+    if (coverUploading) {
+      setSubmitError('Patientez, la photo est encore en cours d’envoi.');
+      return;
+    }
     setSubmitError(null);
     setSubmitting(true);
     try {
-      let imagePath: string | null = null;
-      if (coverPageIndex != null && pages[coverPageIndex]) {
-        imagePath = await uploadImage(pages[coverPageIndex].uri, pages[coverPageIndex].name);
-      }
-      const technicalDict: Record<string, string> = { ...technical, imported_via: 'scan' };
+      const technicalDict: Record<string, string> = { ...technical, imported_via: 'instagram_caption' };
       const doc = await api('/recipes', {
         method: 'POST',
         body: JSON.stringify({
@@ -217,7 +203,8 @@ export default function ScanRecipe() {
           ingredients: ingredients.filter(r => r.name.trim()).map(ingredientToLine),
           steps: steps.map(s => s.text.trim()).filter(Boolean),
           technical: technicalDict,
-          image_path: imagePath,
+          image_path: coverImagePath,
+          source: sourceUrl.trim() || null,
         }),
       });
       showGamificationToast(doc.gamification);
@@ -246,46 +233,46 @@ export default function ScanRecipe() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }}>
             <View style={styles.headerRow}>
-              <Pressable testID="scan-back-to-capture" onPress={() => setPhase('capture')}>
+              <Pressable testID="instagram-back-to-paste" onPress={() => setPhase('paste')}>
                 <Feather name="arrow-left" size={22} color={colors.onSurface} />
               </Pressable>
               <Text style={styles.title}>Vérifiez votre recette</Text>
             </View>
 
             <FieldLabel label="Nom" confidence={titleConfidence} />
-            <TextInput testID="scan-title" value={title} onChangeText={setTitle} style={styles.input} placeholder="Nom de la recette" />
+            <TextInput testID="instagram-verify-title" value={title} onChangeText={setTitle} style={styles.input} placeholder="Nom de la recette" />
 
             <Text style={styles.label}>Catégorie</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {CATEGORIES.map(c => (
-                <Chip key={c} testID={`scan-category-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
+                <Chip key={c} testID={`instagram-verify-category-${c}`} label={c} active={category === c} onPress={() => setCategory(c)} />
               ))}
             </ScrollView>
 
             <Text style={styles.label}>Difficulté</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {DIFFICULTIES.map(d => (
-                <Chip key={d} testID={`scan-difficulty-${d}`} label={d} active={difficulty === d} onPress={() => setDifficulty(d)} />
+                <Chip key={d} testID={`instagram-verify-difficulty-${d}`} label={d} active={difficulty === d} onPress={() => setDifficulty(d)} />
               ))}
             </ScrollView>
 
             <Text style={styles.label}>Durée totale (minutes)</Text>
-            <TextInput testID="scan-time" value={timeMinutes} onChangeText={setTimeMinutes} keyboardType="number-pad" style={styles.input} placeholder="Non détectée — à compléter" />
+            <TextInput testID="instagram-verify-time" value={timeMinutes} onChangeText={setTimeMinutes} keyboardType="number-pad" style={styles.input} placeholder="Non détectée — à compléter" />
 
             <Text style={styles.label}>Nombre de pièces</Text>
-            <TextInput testID="scan-yield" value={yieldPieces} onChangeText={setYieldPieces} keyboardType="number-pad" style={styles.input} placeholder="Non détecté" />
+            <TextInput testID="instagram-verify-yield" value={yieldPieces} onChangeText={setYieldPieces} keyboardType="number-pad" style={styles.input} placeholder="Non détecté" />
 
             <FieldLabel label="Description / méthode" confidence={descriptionConfidence} />
-            <TextInput testID="scan-description" value={description} onChangeText={setDescription} multiline style={[styles.input, styles.multiline]} placeholder="Non détectée — à compléter" />
+            <TextInput testID="instagram-verify-description" value={description} onChangeText={setDescription} multiline style={[styles.input, styles.multiline]} placeholder="Non détectée — à compléter" />
 
             <Text style={styles.sectionTitle}>Ingrédients</Text>
             {stats.hydration > 0 && <Text style={styles.statLine}>Hydratation calculée : {stats.hydration}%</Text>}
             {ingredients.map((row, i) => (
-              <View key={row.id} style={styles.ingredientRow} testID={`scan-ingredient-${i}`}>
+              <View key={row.id} style={styles.ingredientRow} testID={`instagram-verify-ingredient-${i}`}>
                 <View style={{ flex: 1 }}>
                   <View style={styles.ingredientTopRow}>
                     <TextInput
-                      testID={`scan-ingredient-name-${i}`}
+                      testID={`instagram-verify-ingredient-name-${i}`}
                       value={row.name}
                       onChangeText={t => updateIngredient(row.id, { name: t })}
                       style={[styles.input, { flex: 1, marginBottom: 6 }]}
@@ -295,7 +282,7 @@ export default function ScanRecipe() {
                   </View>
                   <View style={styles.ingredientBottomRow}>
                     <TextInput
-                      testID={`scan-ingredient-qty-${i}`}
+                      testID={`instagram-verify-ingredient-qty-${i}`}
                       value={row.quantity}
                       onChangeText={t => updateIngredient(row.id, { quantity: t })}
                       keyboardType="numeric"
@@ -303,7 +290,7 @@ export default function ScanRecipe() {
                       placeholder="Qté"
                     />
                     <TextInput
-                      testID={`scan-ingredient-unit-${i}`}
+                      testID={`instagram-verify-ingredient-unit-${i}`}
                       value={row.unit}
                       onChangeText={t => updateIngredient(row.id, { unit: t })}
                       style={[styles.input, styles.unitInput]}
@@ -315,24 +302,24 @@ export default function ScanRecipe() {
                   </View>
                 </View>
                 <View style={styles.rowActions}>
-                  <Pressable testID={`scan-ingredient-up-${i}`} onPress={() => moveIngredient(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
-                  <Pressable testID={`scan-ingredient-down-${i}`} onPress={() => moveIngredient(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
-                  <Pressable testID={`scan-ingredient-remove-${i}`} onPress={() => removeIngredient(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
+                  <Pressable testID={`instagram-verify-ingredient-up-${i}`} onPress={() => moveIngredient(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`instagram-verify-ingredient-down-${i}`} onPress={() => moveIngredient(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`instagram-verify-ingredient-remove-${i}`} onPress={() => removeIngredient(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
                 </View>
               </View>
             ))}
-            <Pressable testID="scan-add-ingredient" onPress={addIngredient} style={styles.addBtn}>
+            <Pressable testID="instagram-verify-add-ingredient" onPress={addIngredient} style={styles.addBtn}>
               <Feather name="plus" size={16} color={colors.brand} />
               <Text style={styles.addBtnText}>Ajouter un ingrédient</Text>
             </Pressable>
 
             <Text style={styles.sectionTitle}>Étapes</Text>
             {steps.map((row, i) => (
-              <View key={row.id} style={styles.ingredientRow} testID={`scan-step-${i}`}>
+              <View key={row.id} style={styles.ingredientRow} testID={`instagram-verify-step-${i}`}>
                 <View style={styles.stepTextRow}>
                   <Text style={styles.stepNumber}>{i + 1}.</Text>
                   <TextInput
-                    testID={`scan-step-text-${i}`}
+                    testID={`instagram-verify-step-text-${i}`}
                     value={row.text}
                     onChangeText={t => updateStep(row.id, t)}
                     multiline
@@ -341,13 +328,13 @@ export default function ScanRecipe() {
                   {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
                 </View>
                 <View style={styles.rowActions}>
-                  <Pressable testID={`scan-step-up-${i}`} onPress={() => moveStep(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
-                  <Pressable testID={`scan-step-down-${i}`} onPress={() => moveStep(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
-                  <Pressable testID={`scan-step-remove-${i}`} onPress={() => removeStep(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
+                  <Pressable testID={`instagram-verify-step-up-${i}`} onPress={() => moveStep(row.id, -1)}><Feather name="chevron-up" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`instagram-verify-step-down-${i}`} onPress={() => moveStep(row.id, 1)}><Feather name="chevron-down" size={18} color={colors.muted} /></Pressable>
+                  <Pressable testID={`instagram-verify-step-remove-${i}`} onPress={() => removeStep(row.id)}><Feather name="trash-2" size={18} color={colors.error} /></Pressable>
                 </View>
               </View>
             ))}
-            <Pressable testID="scan-add-step" onPress={addStep} style={styles.addBtn}>
+            <Pressable testID="instagram-verify-add-step" onPress={addStep} style={styles.addBtn}>
               <Feather name="plus" size={16} color={colors.brand} />
               <Text style={styles.addBtnText}>Ajouter une étape</Text>
             </Pressable>
@@ -359,7 +346,7 @@ export default function ScanRecipe() {
                   <View key={key}>
                     <Text style={styles.label}>{label}</Text>
                     <TextInput
-                      testID={`scan-technical-${key}`}
+                      testID={`instagram-verify-technical-${key}`}
                       value={technical[key]}
                       onChangeText={t => setTechnical(prev => ({ ...prev, [key]: t }))}
                       style={styles.input}
@@ -369,23 +356,27 @@ export default function ScanRecipe() {
               </>
             )}
 
-            {pages.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Photo de la recette</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {pages.map((p, i) => (
-                    <Pressable key={i} testID={`scan-cover-${i}`} onPress={() => setCoverPageIndex(idx => (idx === i ? null : i))} style={styles.coverThumbWrap}>
-                      <Image source={{ uri: p.uri }} style={[styles.coverThumb, coverPageIndex === i && styles.coverThumbSelected]} contentFit="cover" />
-                      {coverPageIndex === i && <View style={styles.coverCheck}><Feather name="check" size={14} color={colors.onBrandPrimary} /></View>}
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>
+            <Text style={styles.sectionTitle}>Photo de la recette</Text>
+            {coverImageUri ? (
+              <View style={styles.coverThumbWrap}>
+                <Image source={{ uri: coverImageUri }} style={styles.coverThumb} contentFit="cover" />
+                {coverUploading && (
+                  <View style={styles.coverUploadingOverlay}><ActivityIndicator color={colors.onBrandPrimary} /></View>
+                )}
+                <Pressable testID="instagram-verify-remove-cover" onPress={removeCoverImage} style={styles.coverRemoveBtn}>
+                  <Feather name="x" size={14} color={colors.onBrandPrimary} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable testID="instagram-verify-pick-cover" onPress={pickCoverImage} style={styles.addBtn}>
+                <Feather name="image" size={16} color={colors.brand} />
+                <Text style={styles.addBtnText}>Ajouter une photo</Text>
+              </Pressable>
             )}
 
             {submitError && <Text style={styles.error}>{submitError}</Text>}
 
-            <Pressable testID="scan-submit" onPress={submit} disabled={submitting} style={[styles.submitBtn, submitting && { opacity: 0.6 }]}>
+            <Pressable testID="instagram-verify-submit" onPress={submit} disabled={submitting} style={[styles.submitBtn, submitting && { opacity: 0.6 }]}>
               {submitting ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.submitBtnText}>Ajouter à mes recettes</Text>}
             </Pressable>
           </ScrollView>
@@ -394,53 +385,62 @@ export default function ScanRecipe() {
     );
   }
 
-  // ---------- Capture phase ----------
+  // ---------- Paste phase ----------
+  const canAnalyze = caption.trim().length >= MIN_CAPTION_LENGTH;
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerRow}>
-        <Pressable testID="scan-close" onPress={() => router.back()}>
-          <Feather name="x" size={22} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.title}>Scanner une recette</Text>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: 24 }}>
-        <Text style={styles.subtitle}>Photographiez chaque page de la fiche, dans l&apos;ordre.</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={styles.headerRow}>
+          <Pressable testID="instagram-close" onPress={() => router.back()}>
+            <Feather name="x" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>Importer depuis Instagram</Text>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 24 }}>
+          <Text style={styles.subtitle}>
+            L&apos;application ne peut pas récupérer une légende automatiquement depuis un lien —
+            copiez-la depuis l&apos;app Instagram, puis collez-la ci-dessous.
+          </Text>
 
-        {pages.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
-            {pages.map((p, i) => (
-              <View key={i} style={styles.pageThumbWrap} testID={`scan-page-${i}`}>
-                <Image source={{ uri: p.uri }} style={styles.pageThumb} contentFit="cover" />
-                <View style={styles.pageThumbActions}>
-                  <Pressable testID={`scan-page-up-${i}`} onPress={() => movePage(i, -1)} style={styles.pageThumbBtn}><Feather name="chevron-left" size={14} color={colors.onBrandPrimary} /></Pressable>
-                  <Pressable testID={`scan-page-remove-${i}`} onPress={() => removePage(i)} style={styles.pageThumbBtn}><Feather name="x" size={14} color={colors.onBrandPrimary} /></Pressable>
-                  <Pressable testID={`scan-page-down-${i}`} onPress={() => movePage(i, 1)} style={styles.pageThumbBtn}><Feather name="chevron-right" size={14} color={colors.onBrandPrimary} /></Pressable>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
+          <Text style={styles.label}>Légende de la publication</Text>
+          <TextInput
+            testID="instagram-caption-input"
+            value={caption}
+            onChangeText={setCaption}
+            multiline
+            style={[styles.input, styles.captionInput]}
+            placeholder="Collez ici la légende de la publication…"
+            placeholderTextColor={colors.muted}
+          />
 
-        <Pressable testID="scan-take-photo" onPress={() => requestAndPick('camera')} style={styles.actionBtn}>
-          <Feather name="camera" size={20} color={colors.onBrandPrimary} />
-          <Text style={styles.actionBtnText}>Prendre une photo</Text>
-        </Pressable>
-        <Pressable testID="scan-pick-library" onPress={() => requestAndPick('library')} style={[styles.actionBtn, styles.actionBtnSecondary]}>
-          <Feather name="image" size={20} color={colors.brand} />
-          <Text style={[styles.actionBtnText, { color: colors.brand }]}>Choisir depuis la photothèque</Text>
-        </Pressable>
+          <Text style={styles.label}>Lien de la publication (facultatif)</Text>
+          <TextInput
+            testID="instagram-source-url-input"
+            value={sourceUrl}
+            onChangeText={setSourceUrl}
+            style={styles.input}
+            placeholder="https://www.instagram.com/p/…"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+          <Text style={styles.hint}>
+            Affiché comme crédit sur la recette, jamais utilisé pour aller chercher des informations automatiquement.
+          </Text>
 
-        {captureError && <Text style={styles.error}>{captureError}</Text>}
+          {pasteError && <Text style={styles.error}>{pasteError}</Text>}
 
-        <Pressable
-          testID="scan-analyze"
-          onPress={analyze}
-          disabled={pages.length === 0}
-          style={[styles.submitBtn, pages.length === 0 && { opacity: 0.4 }]}
-        >
-          <Text style={styles.submitBtnText}>Analyser{pages.length > 0 ? ` (${pages.length} page${pages.length > 1 ? 's' : ''})` : ''}</Text>
-        </Pressable>
-      </ScrollView>
+          <Pressable
+            testID="instagram-analyze"
+            onPress={analyze}
+            disabled={!canAnalyze}
+            style={[styles.submitBtn, !canAnalyze && { opacity: 0.4 }]}
+          >
+            <Text style={styles.submitBtnText}>Analyser</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -450,13 +450,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, gap: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
-  subtitle: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: 20 },
+  subtitle: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: 20, lineHeight: 20 },
   analysisText: { fontSize: 16, color: colors.onSurface, fontWeight: '500' },
   label: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600', marginBottom: 6, marginTop: 14 },
+  hint: { fontSize: 12, color: colors.muted, marginTop: 6, lineHeight: 16 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 20, color: colors.onSurface, marginTop: 28, marginBottom: 8 },
   statLine: { fontSize: 13, color: colors.brand, fontWeight: '600', marginBottom: 10 },
   input: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.onSurface },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
+  captionInput: { minHeight: 160, textAlignVertical: 'top' },
   ingredientRow: { flexDirection: 'row', gap: 10, marginBottom: 12, alignItems: 'flex-start' },
   ingredientTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ingredientBottomRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -468,18 +470,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowActions: { flexDirection: 'row', gap: 10, paddingTop: 10 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
   addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.brand, borderRadius: 8, paddingVertical: 16, marginBottom: 12 },
-  actionBtnSecondary: { backgroundColor: colors.surfaceSecondary },
-  actionBtnText: { fontSize: 15, fontWeight: '600', color: colors.onBrandPrimary },
   submitBtn: { backgroundColor: colors.brand, borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
   submitBtnText: { fontSize: 15, fontWeight: '600', color: colors.onBrandPrimary },
   error: { color: colors.error, fontSize: 13, marginTop: 8 },
-  pageThumbWrap: { marginRight: 12, alignItems: 'center' },
-  pageThumb: { width: 100, height: 130, borderRadius: 8, backgroundColor: colors.surfaceSecondary },
-  pageThumbActions: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  pageThumbBtn: { width: 24, height: 24, borderRadius: 999, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' },
-  coverThumbWrap: { marginRight: 12, position: 'relative' },
-  coverThumb: { width: 70, height: 90, borderRadius: 6, borderWidth: 2, borderColor: 'transparent' },
-  coverThumbSelected: { borderColor: colors.brand },
-  coverCheck: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  coverThumbWrap: { position: 'relative', width: 140, height: 105, marginTop: 4 },
+  coverThumb: { width: 140, height: 105, borderRadius: 8, backgroundColor: colors.surfaceSecondary },
+  coverUploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  coverRemoveBtn: { position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 999, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' },
 });

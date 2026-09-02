@@ -1015,6 +1015,114 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     extraction["hydration"] = scan.compute_hydration(ingredient_lines)
     return extraction
 
+# ---------- Import Instagram (légende collée) ----------
+# Instagram ne fournit aucune API publique non authentifiée pour récupérer
+# une légende depuis un lien (l'oEmbed nécessite une revue d'app Meta) : la
+# route ne fait donc jamais de requête sortante vers instagram.com, elle
+# analyse uniquement le texte que l'utilisateur a lui-même collé. Même
+# contrat que /recipes/scan/analyze : rien n'est inséré en base ici, c'est
+# POST /recipes qui crée réellement la recette, donc modération/famille/
+# photo s'appliquent déjà sans rien dupliquer.
+MAX_CAPTION_LENGTH = 5000  # au-delà des ~2200 caractères qu'Instagram autorise, pour tolérer un copier-coller un peu large
+
+INSTAGRAM_CAPTION_SYSTEM_PROMPT = (
+    "Tu es un expert boulanger qui lit une légende de publication Instagram, "
+    "collée telle quelle par l'utilisateur, pour en extraire une recette de "
+    "boulangerie vers l'outil submit_instagram_recipe_extraction. Une légende "
+    "Instagram mélange souvent recette, anecdote personnelle, hashtags, "
+    "emojis et appels à l'action (\"swipe up\", \"abonnez-vous\", \"lien en "
+    "bio\") : ignore tout ce qui n'est pas une information de recette et "
+    "n'extrais que ce qui décrit réellement la recette. Règle absolue : "
+    "n'invente JAMAIS une valeur non présente dans le texte — laisse le champ "
+    "à null et marque sa confiance \"absent\". Utilise \"low\" pour une valeur "
+    "présente mais ambiguë ou incomplète, et \"high\" pour une valeur "
+    "explicite et sans ambiguïté."
+)
+
+INSTAGRAM_CAPTION_TOOL = {
+    "name": "submit_instagram_recipe_extraction",
+    "description": "Soumet les informations de recette extraites d'une légende Instagram collée par l'utilisateur.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": _confidence_field({"type": ["string", "null"]}),
+            "category": _confidence_field({"type": ["string", "null"], "enum": CATEGORIES + [None]}),
+            "yield_pieces": _confidence_field({"type": ["integer", "null"]}),
+            "description": _confidence_field({"type": ["string", "null"], "description": "La méthode de fabrication résumée, si présente dans la légende."}),
+            "ingredients": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "quantity": {"type": ["number", "null"]},
+                        "unit": {"type": ["string", "null"], "enum": ["g", "kg", "ml", "cl", "l", "piece", None]},
+                        "ingredient_type": {"type": ["string", "null"]},
+                        "stated_percentage": {"type": ["number", "null"], "description": "Le pourcentage boulanger s'il est déjà indiqué dans la légende, sans le recalculer."},
+                        "confidence": {"type": "string", "enum": ["high", "low"]},
+                    },
+                    "required": ["name", "confidence"],
+                },
+            },
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string"},
+                        "confidence": {"type": "string", "enum": ["high", "low"]},
+                    },
+                    "required": ["text", "confidence"],
+                },
+            },
+            "technical": {
+                "type": "object",
+                "properties": {key: _confidence_field({"type": ["string", "null"]}) for key in SCAN_TECHNICAL_KEYS},
+            },
+        },
+        "required": ["title", "ingredients", "steps"],
+    },
+}
+
+class InstagramCaptionInput(BaseModel):
+    caption: str
+
+@api_router.post("/recipes/instagram-import/analyze")
+async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Depends(get_current_user)):
+    """Extrait une recette d'une légende Instagram collée par l'utilisateur —
+    même client Anthropic et même mécanisme tool-use que /recipes/scan/
+    analyze, sans aucune image (texte seul, comme /adapt/interpret)."""
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    caption = inp.caption.strip()
+    if not caption:
+        raise HTTPException(400, "Aucun texte reçu")
+    if len(caption) > MAX_CAPTION_LENGTH:
+        raise HTTPException(400, f"{MAX_CAPTION_LENGTH} caractères maximum")
+
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=4000,
+            system=INSTAGRAM_CAPTION_SYSTEM_PROMPT,
+            tools=[INSTAGRAM_CAPTION_TOOL],
+            tool_choice={"type": "tool", "name": "submit_instagram_recipe_extraction"},
+            messages=[{"role": "user", "content": caption}],
+        )
+    except anthropic.APIError as e:
+        logger.error(f"Anthropic API error (instagram-import): {e}")
+        raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    tool_use = next((b for b in response.content if b.type == "tool_use"), None)
+    if not tool_use:
+        raise HTTPException(502, "L'analyse n'a pas pu être réalisée, réessaie")
+    extraction = tool_use.input
+
+    ingredient_lines = _scan_ingredient_lines(extraction.get("ingredients", []))
+    extraction["bakers_percentages"] = scan.bakers_percentages(ingredient_lines)
+    extraction["hydration"] = scan.compute_hydration(ingredient_lines)
+    return extraction
+
 # ---------- Adapter la recette ----------
 # Même calque exact que SCAN_TOOL : l'IA interprète une demande en langage
 # naturel vers des paramètres structurés, jamais vers un chiffre final —

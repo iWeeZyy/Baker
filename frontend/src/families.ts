@@ -49,22 +49,26 @@ export type Family = {
 const AUTRES = require('../assets/images/families/autres.png');
 
 export const FAMILY_TILES: Record<FamilyKey, ImageSourcePropType> = {
-  'pains-classiques': require('../assets/images/families/pains-classiques.png'),
-  'pains-speciaux': require('../assets/images/families/pains-speciaux.png'),
-  'levains': require('../assets/images/families/levains.png'),
-  'snacking': require('../assets/images/families/snacking.png'),
-  'feuilletees': require('../assets/images/families/feuilletees.png'),
-  'brioches': require('../assets/images/families/brioches.png'),
-  'pates-tourees': require('../assets/images/families/pates-tourees.png'),
-  'tartes': require('../assets/images/families/tartes.png'),
-  'pates-a-tarte': require('../assets/images/families/pates-a-tarte.png'),
-  'gateaux': require('../assets/images/families/gateaux.png'),
-  'cakes': require('../assets/images/families/cakes.png'),
-  'biscuits': require('../assets/images/families/biscuits.png'),
-  'carres': require('../assets/images/families/carres.png'),
-  'petites-patisseries': require('../assets/images/families/petites-patisseries.png'),
-  'muffins-scones': require('../assets/images/families/muffins-scones.png'),
-  'garnitures': require('../assets/images/families/garnitures.png'),
+  // Exceptions assumées : ces familles sont illustrées par une vraie photo
+  // plutôt qu'un dessin, à la demande explicite de Lucas — voir la note
+  // dans CLAUDE.md (section « Recipe families »). Les .svg/.png d'origine
+  // restent en place, inutilisés, comme filet de secours.
+  'pains-classiques': require('../assets/images/families/pains-classiques-photo.jpg'),
+  'pains-speciaux': require('../assets/images/families/pains-speciaux-photo.jpg'),
+  'levains': require('../assets/images/families/levains-photo.jpg'),
+  'snacking': require('../assets/images/families/snacking-photo.jpg'),
+  'feuilletees': require('../assets/images/families/feuilletees-photo.jpg'),
+  'brioches': require('../assets/images/families/brioches-photo.jpg'),
+  'pates-tourees': require('../assets/images/families/pates-tourees-photo.jpg'),
+  'tartes': require('../assets/images/families/tartes-photo.jpg'),
+  'pates-a-tarte': require('../assets/images/families/pates-a-tarte-photo.jpg'),
+  'gateaux': require('../assets/images/families/gateaux-photo.jpg'),
+  'cakes': require('../assets/images/families/cakes-photo.jpg'),
+  'biscuits': require('../assets/images/families/biscuits-photo.jpg'),
+  'carres': require('../assets/images/families/carres-photo.jpg'),
+  'petites-patisseries': require('../assets/images/families/petites-patisseries-photo.jpg'),
+  'muffins-scones': require('../assets/images/families/muffins-scones-photo.jpg'),
+  'garnitures': require('../assets/images/families/garnitures-photo.jpg'),
   // Les fourre-tout partagent l'épi de blé : ils n'ont pas de forme propre,
   // puisqu'ils recueillent ce qui n'a pas de famille. Il y en a un par
   // catégorie, donc six.
