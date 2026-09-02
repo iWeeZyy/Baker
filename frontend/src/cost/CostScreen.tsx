@@ -8,7 +8,8 @@ import { scaleIngredientLine } from '@/src/ingredientScale';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import {
   computeRecipeCost, computeSaleMetrics, formatCurrency, formatCurrencyPrecise, formatPercent,
   normalizeName, type RawMaterial, type SaleMetrics, type RecipeCostResult,
@@ -29,8 +30,8 @@ const VAT_PRESETS = ['5,5', '10', '20'];
 type Snapshot = { result: RecipeCostResult; sale: SaleMetrics };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   return (
     <View style={{ marginBottom: 14 }}>
       <Text style={styles.label}>{label}</Text>
@@ -45,8 +46,8 @@ function CostItemList({ items, setItems, testPrefix, placeholder }: {
   testPrefix: string;
   placeholder: string;
 }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   return (
     <View style={styles.card}>
       {items.map((item, i) => (
@@ -82,8 +83,8 @@ function CostItemList({ items, setItems, testPrefix, placeholder }: {
 }
 
 export function CostScreen({ recipeId }: { recipeId?: string }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
 
   const SectionTitle = ({ icon, label }: { icon: any; label: string }) => (
     <View style={styles.sectionTitleRow}>
@@ -525,7 +526,7 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -537,7 +538,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   segText: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '600' },
   segTextOn: { color: colors.onBrandPrimary },
   body: { padding: 24, paddingBottom: 60 },
-  card: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 8 },
+  card: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16, marginBottom: 8,
+    ...cardElevation(mode, colors),
+  },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 20, marginBottom: 8 },
   sectionTitle: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600' },
   label: { fontSize: 11, letterSpacing: 2, color: colors.muted, marginBottom: 6, fontWeight: '600' },
@@ -560,7 +564,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   addItemText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
-  totalCard: { backgroundColor: colors.surfaceInverse, borderRadius: 8, padding: 20, marginTop: 8 },
+  totalCard: {
+    backgroundColor: colors.surfaceInverse, borderRadius: theme.radius.lg, padding: 20, marginTop: 8,
+    ...cardElevation(mode, colors),
+  },
   divider: { height: 1, backgroundColor: TOTAL_CARD_DIVIDER, marginVertical: 10 },
   dividerLight: { height: 1, backgroundColor: colors.borderStrong, marginVertical: 10 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
@@ -588,7 +595,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   compareAfter: { fontSize: 12, color: colors.onSurface, fontWeight: '700' },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 15, borderRadius: 8, marginTop: 28 },
   saveBtnText: { color: colors.onBrandPrimary, fontSize: 15, fontWeight: '600' },
-  historyCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 12 },
+  historyCard: {
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary,
+    borderRadius: theme.radius.lg, padding: 16, marginBottom: 12,
+    ...cardElevation(mode, colors),
+  },
   historyTitle: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
   historyMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
   historyCost: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 6, fontWeight: '600' },
