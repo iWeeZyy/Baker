@@ -6,7 +6,8 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import type { RawMaterial } from '@/src/cost/costCalc';
 
@@ -23,8 +24,8 @@ function unitPriceOf(m: RawMaterial): { value: number; label: string } | null {
  * enregistré dans l'historique, qui reste figé à son propre prix).
  */
 export default function RawMaterials() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,13 +115,16 @@ export default function RawMaterials() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
-  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
+  card: {
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16,
+    ...cardElevation(mode, colors),
+  },
   name: { fontSize: 16, fontWeight: '600', color: colors.onSurface },
   meta: { fontSize: 13, color: colors.onSurfaceSecondary, marginTop: 4 },
   metaSecondary: { fontSize: 12, color: colors.muted, marginTop: 2 },

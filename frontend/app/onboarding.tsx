@@ -120,7 +120,10 @@ export default function Onboarding() {
         style={{ flex: 1 }}
       >
         {SLIDES.map((slide, i) => (
-          <View key={slide.title} style={[styles.slide, { width: SCREEN_WIDTH }]}>
+          <View
+            key={slide.title}
+            style={[styles.slide, { width: SCREEN_WIDTH }, !slide.bullets && styles.slideCentered]}
+          >
             <View style={[styles.iconCircle, { backgroundColor: colors[CIRCLE_COLORS[i % 2]] }]}>
               <Feather name={slide.icon} size={48} color={colors.onBrandPrimary} />
             </View>
@@ -160,6 +163,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, height: 40 },
   loginText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
   slide: { flex: 1, alignItems: 'center', paddingHorizontal: 32, paddingTop: 24 },
+  // Une diapositive sans puces (Bienvenue, dernière diapositive) n'a que le
+  // titre et le sous-titre : les centrer verticalement évite le grand vide
+  // qui se formait entre le sous-titre et les points de progression quand
+  // le contenu restait ancré en haut comme les diapositives à puces.
+  slideCentered: { justifyContent: 'center', paddingTop: 0 },
   iconCircle: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
   title: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface, textAlign: 'center', lineHeight: 32, marginBottom: 12 },
   subtitle: { fontSize: 15, color: colors.muted, textAlign: 'center', lineHeight: 21, marginBottom: 20 },

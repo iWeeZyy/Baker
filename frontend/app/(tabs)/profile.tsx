@@ -15,7 +15,8 @@ import { openInstagram, parseInstagramUsername } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { formatRelativeDate } from '@/src/relativeDate';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 import type { Badge } from '@/src/gamification/types';
@@ -36,8 +37,8 @@ type MyComment = {
 };
 
 export default function Profile() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const { user, logout, refreshUser, updateProfile } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'mine' | 'favorites' | 'comments'>('mine');
@@ -785,7 +786,7 @@ export default function Profile() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   emptyCenter: { paddingTop: 60, alignItems: 'center' },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -806,7 +807,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // d'entrée principal.
   collectionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
   collectionsRowText: { flex: 1, fontSize: 13, color: colors.muted },
-  progressionCard: { marginTop: 16, padding: 14, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary },
+  progressionCard: {
+    marginTop: 16, padding: 14, borderRadius: theme.radius.xl, backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
+  },
   progressionHeader: { marginBottom: 8 },
   progressionXp: { fontSize: 12, color: colors.muted, marginTop: 8 },
   badgesRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -824,10 +828,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tabText: { fontSize: 14, color: colors.muted, fontWeight: '500' },
   tabTextActive: { color: colors.onSurface },
   card: { flex: 1 },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary },
+  cardImage: {
+    width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
+  },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  commentCard: { flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 14, marginHorizontal: 24 },
+  commentCard: {
+    flexDirection: 'row', gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 14, marginHorizontal: 24,
+    ...cardElevation(mode, colors),
+  },
   commentThumb: { width: 56, height: 56, borderRadius: theme.radius.lg, backgroundColor: colors.surfaceTertiary },
   commentCardKind: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
   commentCardReplyTo: { fontSize: 12, color: colors.brand, fontWeight: '500', marginTop: 2 },
@@ -843,7 +853,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   bio: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: 10 },
   instagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   instagramText: { fontSize: 13, color: colors.brand, fontWeight: '600' },
-  editProfileCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 16, marginTop: 14 },
+  editProfileCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 16, marginTop: 14,
+    ...cardElevation(mode, colors),
+  },
   editLabel: { fontSize: 12, color: colors.muted, fontWeight: '600', marginBottom: 6, marginTop: 10 },
   bioInput: { fontSize: 14, color: colors.onSurface, minHeight: 70, textAlignVertical: 'top', backgroundColor: colors.surface, borderRadius: theme.radius.lg, padding: 10 },
   charCount: { fontSize: 11, color: colors.muted, textAlign: 'right', marginTop: 4 },
@@ -860,7 +873,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   creationsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   creationTile: { width: '32%', aspectRatio: 1, borderRadius: theme.radius.md, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
   creationTileImage: { width: '100%', height: '100%' },
-  creationsEmpty: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 20, alignItems: 'center', gap: 12 },
+  creationsEmpty: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.xl, padding: 20, alignItems: 'center', gap: 12,
+    ...cardElevation(mode, colors),
+  },
   creationsEmptyText: { fontSize: 13, color: colors.muted, textAlign: 'center' },
   addCreationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand, paddingHorizontal: 16, paddingVertical: 10, borderRadius: theme.radius.pill },
   addCreationBtnText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 13 },

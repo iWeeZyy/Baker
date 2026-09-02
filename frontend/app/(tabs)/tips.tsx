@@ -10,7 +10,8 @@ import { SegmentedControl } from '@/src/SegmentedControl';
 import { EmptyState } from '@/src/EmptyState';
 import { tapFeedback } from '@/src/haptics';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 
 const CATEGORIES = [
   'Toutes', 'Pétrissage', 'Farines', 'Hydratation', 'Température', 'Fermentation',
@@ -62,8 +63,8 @@ function TipCard({ tip, favorited, scale, colors, styles, onToggleFavorite, onPr
  * que dispersées entre l'accueil et les fiches recette.
  */
 export default function Tips() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
 
   // Une valeur par astuce, sur la durée de vie de l'écran plutôt que du
   // rendu courant : sans ça l'animation n'aurait jamais le temps de jouer
@@ -236,7 +237,7 @@ export default function Tips() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   stickyHeader: { backgroundColor: colors.surface, paddingTop: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -251,7 +252,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.onSurface },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
-  card: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16 },
+  card: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: colors.surfaceSecondary,
+    borderRadius: theme.radius.lg, padding: 16,
+    ...cardElevation(mode, colors),
+  },
   cardIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardCategory: { fontSize: 10, letterSpacing: 1.5, color: colors.muted, fontWeight: '600' },

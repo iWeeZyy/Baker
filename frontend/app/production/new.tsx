@@ -11,7 +11,8 @@ import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { isPlanLimitError } from '@/src/plan';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { syncWidgetData } from '@/src/widgetData';
 import { Button } from '@/src/Button';
 import { EmptyState } from '@/src/EmptyState';
@@ -25,8 +26,8 @@ function todayISO() {
 }
 
 export default function ProductionForm() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode: themeMode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, themeMode), [colors, themeMode]);
   const router = useRouter();
   const { user } = useAuth();
   // Same screen for both: `id` present means we are editing.
@@ -291,7 +292,7 @@ export default function ProductionForm() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -303,7 +304,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 9 },
   hint: { fontSize: 12, color: colors.muted, marginTop: 8, lineHeight: 17 },
   emptyLines: { fontSize: 13, color: colors.muted, fontStyle: 'italic', marginBottom: 4 },
-  lineCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10 },
+  lineCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 14, marginBottom: 10,
+    ...cardElevation(mode, colors),
+  },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lineTitle: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
   removeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },

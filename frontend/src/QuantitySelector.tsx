@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import {
   QUANTITY_MAX, QUANTITY_MIN, formatMultiplierForInput, resolveManualQuantity, stepDown, stepUp,
 } from '@/src/ingredientScale';
@@ -24,8 +25,8 @@ type Props = {
  * caractère sans se faire corriger avant d'avoir fini.
  */
 export function QuantitySelector({ value, onChange, testID }: Props) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const [text, setText] = useState(formatMultiplierForInput(value));
   const focused = useRef(false);
 
@@ -96,12 +97,13 @@ export function QuantitySelector({ value, onChange, testID }: Props) {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   card: {
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
     backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
     alignItems: 'center',
+    ...cardElevation(mode, colors),
   },
   label: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: theme.spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg },

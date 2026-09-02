@@ -9,7 +9,8 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { Button } from '@/src/Button';
 import { EmptyState } from '@/src/EmptyState';
 import { ExportLayout, EXPORT_WIDTH } from '@/src/schedule/ExportLayout';
@@ -43,8 +44,8 @@ function toDraft(e: ScheduleEmployee): Draft {
 }
 
 export default function ScheduleScreen() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
@@ -505,7 +506,7 @@ export default function ScheduleScreen() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -528,7 +529,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   weekRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   weekBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary },
   weekInput: { flex: 1, fontSize: 16, color: colors.onSurface, textAlign: 'center', paddingVertical: 12, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg },
-  personCard: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 12, marginBottom: 12 },
+  personCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 12, marginBottom: 12,
+    ...cardElevation(mode, colors),
+  },
   personTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   nameInput: { flex: 1, fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, paddingVertical: 8 },
   removeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -559,7 +563,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: theme.radius.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
   addBtnText: { fontSize: 14, color: colors.brand, fontWeight: '600' },
   notesInput: { fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 12, textAlignVertical: 'top' },
-  totalsCard: { marginTop: 24, backgroundColor: colors.surfaceInverse, borderRadius: theme.radius.lg, padding: 16 },
+  totalsCard: {
+    marginTop: 24, backgroundColor: colors.surfaceInverse, borderRadius: theme.radius.lg, padding: 16,
+    ...cardElevation(mode, colors),
+  },
   totalsLabel: { fontSize: 10, letterSpacing: 2, color: colors.brandSecondary, fontWeight: '700' },
   totalsValue: { fontFamily: theme.serif, fontSize: 34, color: colors.onSurfaceInverse, marginTop: 2 },
   dayTotals: { flexDirection: 'row', marginTop: 12, gap: 4 },

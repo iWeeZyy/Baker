@@ -11,7 +11,8 @@ import { usePlan } from '@/src/plan';
 import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { SegmentedControl } from '@/src/SegmentedControl';
 import { EmptyState } from '@/src/EmptyState';
 import { endBakeActivity } from '@/modules/levanea-live-activity';
@@ -43,8 +44,8 @@ export function formatDate(iso: string) {
 type Mode = 'production' | 'staff';
 
 export default function Planning() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode: themeMode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, themeMode), [colors, themeMode]);
   const router = useRouter();
   const { user } = useAuth();
   const { plan, reload: reloadPlan } = usePlan();
@@ -312,17 +313,24 @@ export default function Planning() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
-  quotaBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg },
+  quotaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8,
+    paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
+    ...cardElevation(mode, colors),
+  },
   quotaText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
   quotaLink: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 12 },
-  card: { backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16 },
+  card: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16,
+    ...cardElevation(mode, colors),
+  },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardDate: { flex: 1, fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, textTransform: 'capitalize' },
   timePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.brandTertiary, paddingHorizontal: 9, paddingVertical: 4, borderRadius: theme.radius.pill },

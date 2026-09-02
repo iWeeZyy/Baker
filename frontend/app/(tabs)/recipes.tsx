@@ -9,8 +9,9 @@ import { ActionSheet } from '@/src/ActionSheet';
 import { Chip } from '@/src/Chip';
 import { familyTile, type Family } from '@/src/families';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { cardElevation } from '@/src/elevation';
 
 // Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
 // une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
@@ -26,8 +27,8 @@ const CATEGORY_ORDER = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioch
  * puces de catégorie restent, mais réduisent désormais les familles affichées.
  */
 export default function Recipes() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const [families, setFamilies] = useState<Family[]>([]);
   const [category, setCategory] = useState('Tous');
   const [loading, setLoading] = useState(true);
@@ -133,7 +134,7 @@ export default function Recipes() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   stickyHeader: { backgroundColor: colors.surface, paddingTop: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -144,11 +145,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
   gridRow: { flexDirection: 'row', gap: 16, paddingHorizontal: 24 },
   card: { flex: 1 },
+  // Le relief (ombre en clair, filet en sombre) remplace la bordure fixe
+  // qu'il fallait avant pour que la vignette se détache du fond de l'écran.
   cardImage: {
-    width: '100%', aspectRatio: 4 / 3, borderRadius: 4,
-    // Le fond de la vignette frôle celui de l'écran : sans ce filet, la carte
-    // n'a pas de bord.
-    borderWidth: 1, borderColor: colors.border,
+    width: '100%', aspectRatio: 4 / 3, borderRadius: theme.radius.lg,
+    backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
   },
   cardTitle: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },

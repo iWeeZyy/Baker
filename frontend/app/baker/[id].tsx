@@ -11,13 +11,14 @@ import { tapFeedback } from '@/src/haptics';
 import { openInstagram } from '@/src/instagram';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 
 export default function BakerProfile() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [data, setData] = useState<any>(null);
@@ -365,7 +366,7 @@ export default function BakerProfile() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 8, alignItems: 'center' },
@@ -410,7 +411,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   teamChipRole: { fontSize: 10, color: colors.muted, marginTop: 1, textAlign: 'center' },
   card: { flex: 1 },
   cardBadge: { position: 'absolute', top: 8, left: 8, width: 26, height: 26, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  cardImage: { width: '100%', aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  cardImage: {
+    width: '100%', aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
+  },
   cardTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface, marginTop: 10 },
   cardMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
 });

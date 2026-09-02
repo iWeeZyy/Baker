@@ -9,7 +9,8 @@ import { useAuth } from '@/src/auth';
 import { avatarUrl } from '@/src/avatar';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 import { Chip } from '@/src/Chip';
 import { EmptyState } from '@/src/EmptyState';
@@ -27,8 +28,8 @@ type RecipeRow = { id: string; title: string; category?: string; image_path?: st
 type CreationRow = { id: string; title: string; category?: string; photos: string[]; user_id: string; user_name?: string; user_picture?: string | null; like_count: number; rank: number };
 
 export default function Classement() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -251,7 +252,7 @@ export default function Classement() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -278,7 +279,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   followBtnMutedText: { color: colors.onSurfaceSecondary, fontSize: 12, fontWeight: '600' },
   contentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   contentImage: { width: 64, height: 64, borderRadius: 8, backgroundColor: colors.surfaceTertiary },
-  myRankCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 16, marginTop: 12 },
+  myRankCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16, marginTop: 12,
+    ...cardElevation(mode, colors),
+  },
   myRankTitle: { fontSize: 11, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: 10 },
   myRankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   myRankNumber: { fontFamily: theme.serif, fontSize: 20, color: colors.brand, width: 44 },

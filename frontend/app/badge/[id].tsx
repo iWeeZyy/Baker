@@ -8,7 +8,8 @@ import { useAuth } from '@/src/auth';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
 import type { Badge } from '@/src/gamification/types';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 
 function formatDate(iso: string): string {
   try {
@@ -17,8 +18,8 @@ function formatDate(iso: string): string {
 }
 
 export default function BadgeDetail() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -106,7 +107,7 @@ export default function BadgeDetail() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -116,6 +117,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   iconWrap: {
     width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surfaceSecondary,
     alignItems: 'center', justifyContent: 'center', marginTop: 16, marginBottom: 16,
+    ...cardElevation(mode, colors),
   },
   icon: { fontSize: 44 },
   iconLocked: { opacity: 0.6 },
