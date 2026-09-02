@@ -12,14 +12,15 @@ import { avatarUrl } from '@/src/avatar';
 import { formatDuration } from '@/src/format';
 import { recipeImage, recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { SectionHeader } from '@/src/SectionHeader';
+import { cardElevation } from '@/src/elevation';
 
 type Recipe = { id: string; title: string; category: string; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
 
 export default function Home() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const { user } = useAuth();
 
   const AuthorAvatar = ({ name, picture }: { name?: string; picture?: string | null }) => {
@@ -182,17 +183,17 @@ export default function Home() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '500' },
   headerTitle: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
-  calcCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, padding: 16, backgroundColor: colors.surfaceSecondary, borderRadius: 8, gap: 14 },
+  calcCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, padding: 16, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, gap: 14, ...cardElevation(mode, colors) },
   calcIcon: { width: 40, height: 40, borderRadius: 999, backgroundColor: colors.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   calcTitle: { fontSize: 15, fontWeight: '600', color: colors.onSurface },
   calcSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  hero: { height: 380, marginHorizontal: 24, position: 'relative', overflow: 'hidden', borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary, ...cardElevation(mode, colors) },
   heroContent: { position: 'absolute', bottom: 20, left: 20, right: 20 },
   heroBadge: { color: colors.brandSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '600', marginBottom: 6 },
   heroTitle: { fontFamily: theme.serif, fontSize: 28, color: colors.onBrandPrimary, lineHeight: 32 },
@@ -203,7 +204,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 24, color: colors.onSurface },
   classicCard: { width: 180 },
-  classicImage: { width: 180, height: 180, borderRadius: 4, backgroundColor: colors.surfaceSecondary },
+  classicImage: { width: 180, height: 180, borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary, ...cardElevation(mode, colors) },
   classicTitle: { fontFamily: theme.serif, fontSize: 18, color: colors.onSurface, marginTop: 10 },
   classicMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },

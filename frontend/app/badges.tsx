@@ -8,7 +8,8 @@ import { useAuth } from '@/src/auth';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
 import type { Badge, BadgeCategory } from '@/src/gamification/types';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { cardElevation } from '@/src/elevation';
 
 const CATEGORIES: [BadgeCategory, string, string][] = [
   ['boulanger', '🥖', 'Boulanger'],
@@ -20,8 +21,8 @@ const CATEGORIES: [BadgeCategory, string, string][] = [
 ];
 
 export default function Badges() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -92,7 +93,7 @@ export default function Badges() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -106,6 +107,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     width: '31%', minWidth: 100, alignItems: 'center', gap: 4, padding: 10,
     borderRadius: theme.radius.lg, backgroundColor: colors.surfaceSecondary,
+    ...cardElevation(mode, colors),
   },
   cardLocked: { opacity: 0.55 },
   cardIcon: { fontSize: 28 },

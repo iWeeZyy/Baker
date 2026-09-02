@@ -17,9 +17,10 @@ import { scaleIngredientLine, scaleStepLine, scaleYieldLabel } from '@/src/ingre
 import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { cardElevation } from '@/src/elevation';
 
 type Comment = {
   id: string; user_id: string; user_name: string; user_picture?: string | null; content: string;
@@ -117,8 +118,8 @@ function unbreakable(text: string) {
  * déjà l'ouvrage en bas de la fiche technique. Aucun écran nouveau.
  */
 export default function RecipeDetail() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
 
   const PhotoCredit = ({ credit }: { credit?: Record<string, any> | null }) => {
     if (!credit?.author || !credit?.page) return null;
@@ -813,7 +814,7 @@ export default function RecipeDetail() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   heroWrap: { height: 420, position: 'relative' },
@@ -856,6 +857,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: theme.spacing.md, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg,
     backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
+    ...cardElevation(mode, colors),
   },
   costBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.onSurface },
   costBadge: { fontSize: 12, color: colors.brand, fontWeight: '700' },
@@ -863,6 +865,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: theme.spacing.xl, marginHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg, paddingHorizontal: theme.spacing.lg,
     backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
+    ...cardElevation(mode, colors),
   },
   sheetTitle: { fontSize: 10, letterSpacing: 2, color: colors.muted, fontWeight: '600', marginBottom: theme.spacing.md },
   // Label and value side by side, the value taking the width it needs: a
@@ -887,7 +890,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
   seqBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.brand, paddingVertical: 12, borderRadius: 8, marginBottom: 24 },
   seqBtnText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '600' },
-  noteCard: { backgroundColor: colors.surfaceSecondary, borderRadius: 8, padding: 16, marginBottom: 28 },
+  noteCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg, padding: 16, marginBottom: 28,
+    ...cardElevation(mode, colors),
+  },
   noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   noteTitle: { fontSize: 14, fontWeight: '600', color: colors.onSurface },
   noteInput: { fontSize: 15, color: colors.onSurface, minHeight: 60, textAlignVertical: 'top' },
