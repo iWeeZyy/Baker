@@ -60,7 +60,6 @@ export default function AuthScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
-            <Image source={require('../assets/images/icon.png')} style={styles.logo} contentFit="contain" />
             <Text style={styles.title}>Bienvenue sur Levanea</Text>
             <Text style={styles.subtitle}>L'art de la boulangerie française</Text>
           </View>
@@ -126,7 +125,6 @@ function makeStyles() {
     background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
     brandBlock: { alignItems: 'center', marginBottom: 44 },
-    logo: { width: 88, height: 88, marginBottom: 24 },
     title: { fontFamily: theme.serif, fontSize: 30, color: colors.onSurface, textAlign: 'center' },
     subtitle: { fontSize: 15, color: colors.muted, textAlign: 'center', marginTop: 8 },
     form: { gap: 20 },
