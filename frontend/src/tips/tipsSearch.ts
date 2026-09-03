@@ -6,6 +6,7 @@
  * réseau puis un filtrage entièrement local — jamais un appel serveur par
  * frappe.
  */
+import { normalize } from '@/src/textNormalize';
 
 export type Tip = {
   id: string;
@@ -19,15 +20,6 @@ export type Tip = {
   causes?: string[];
   solutions?: string[];
 };
-
-export function normalize(text: string): string {
-  return (text || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ');
-}
 
 function haystackOf(tip: Tip): string {
   return normalize([

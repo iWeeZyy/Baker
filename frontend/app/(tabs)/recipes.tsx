@@ -16,7 +16,7 @@ import { cardElevation } from '@/src/elevation';
 // Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
 // une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
 // revient de lui-même au premier ajout — mieux qu'une puce qui n'ouvre sur rien.
-const CATEGORY_ORDER = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
+export const CATEGORY_ORDER = ['Pains', 'Levains', 'Snacking', 'Viennoiseries', 'Brioches', 'Pâtisseries'];
 
 /**
  * L'entrée du catalogue : les familles, pas les deux cents fiches.
@@ -74,9 +74,20 @@ export default function Recipes() {
             <Text style={styles.brandLabel}>LA BIBLIOTHÈQUE</Text>
             <Text style={styles.title}>Recettes</Text>
           </View>
-          <Pressable testID="share-recipe-btn" onPress={() => setCreateMenuOpen(true)} style={styles.shareBtn}>
-            <Feather name="plus" size={20} color={colors.onBrandPrimary} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              testID="search-recipes-btn"
+              onPress={() => router.push('/recipe-search')}
+              style={styles.searchBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Rechercher une recette"
+            >
+              <Feather name="search" size={20} color={colors.onSurface} />
+            </Pressable>
+            <Pressable testID="share-recipe-btn" onPress={() => setCreateMenuOpen(true)} style={styles.shareBtn}>
+              <Feather name="plus" size={20} color={colors.onBrandPrimary} />
+            </Pressable>
+          </View>
         </View>
         <ScrollView
           horizontal
@@ -142,6 +153,8 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 24, marginBottom: 20 },
   brandLabel: { fontSize: 11, letterSpacing: 3, color: colors.muted, fontWeight: '500' },
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  searchBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   shareBtn: { width: 44, height: 44, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   chipsRow: { paddingHorizontal: 24, gap: 8, paddingBottom: 16 },
   gridRow: { flexDirection: 'row', gap: 16, paddingHorizontal: 24 },
