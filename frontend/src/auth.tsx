@@ -97,7 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Effacé avant même que le token ne le soit : aucune fenêtre où le widget
     // pourrait encore republier les données de ce compte.
     clearWidgetData();
-    try { await api('/auth/logout', { method: 'POST' }); } catch {}
+    // Best-effort, jamais attendu : le JWT est sans état, il n'y a rien à
+    // invalider côté serveur (voir /auth/logout) — un `await` ici bloquerait
+    // toute la déconnexion locale si la requête reste bloquée (pas de
+    // timeout sur `api()`), ce qui se voit comme un bouton qui ne fait rien.
+    api('/auth/logout', { method: 'POST' }).catch(() => {});
     disconnectRealtime();
     await clearToken();
     setInMemoryToken(null);
