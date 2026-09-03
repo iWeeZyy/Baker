@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -6,8 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/src/auth';
-import { theme, type ThemeColors } from '@/src/theme';
-import { useTheme } from '@/src/ThemeContext';
+import { theme, LIGHT_COLORS } from '@/src/theme';
 import { storage } from '@/src/utils/storage';
 import { api } from '@/src/api';
 import { ONBOARDING_COMPLETED_KEY, SIGNUP_DRAFT_KEY } from '@/src/onboarding/storageKeys';
@@ -38,9 +37,12 @@ type Draft = {
   instagram?: string; profession?: string | null; professionOther?: string; specialties?: string[];
 };
 
+// Même fond de marque fixe qu'`auth.tsx` (voir sa note) — l'inscription
+// reste toujours en clair, quel que soit le thème choisi.
+const colors = LIGHT_COLORS;
+const styles = makeStyles();
+
 export default function SignupScreen() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { register, refreshUser } = useAuth();
 
@@ -251,6 +253,12 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Image
+        source={require('../assets/images/auth-background.png')}
+        style={styles.background}
+        contentFit="cover"
+        pointerEvents="none"
+      />
       <View style={styles.header}>
         <Pressable testID="signup-back" onPress={goBack} style={styles.iconBtn} hitSlop={10} accessibilityRole="button" accessibilityLabel="Retour">
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
@@ -531,11 +539,19 @@ export default function SignupScreen() {
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+function makeStyles() {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
+  // Plein écran, derrière tout le reste (premier enfant du SafeAreaView) —
+  // jamais interactif : pointerEvents="none". Même asset qu'auth.tsx.
+  background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 24, paddingBottom: 40, flexGrow: 1 },
+  // paddingTop généreux : le fond de marque (auth-background.png) a son
+  // décor le plus chargé dans le quart supérieur de l'écran — les titres y
+  // seraient illisibles sans cet espace, contrairement à auth.tsx où le logo
+  // joue déjà ce rôle de respiration.
+  body: { padding: 24, paddingTop: 140, paddingBottom: 40, flexGrow: 1 },
   title: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface, lineHeight: 32, marginBottom: 10 },
   subtitle: { fontSize: 14, color: colors.muted, lineHeight: 20, marginBottom: 24 },
   input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10, marginBottom: 8 },
@@ -563,4 +579,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   reviewInstagramRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   reviewInstagramText: { fontSize: 13, color: colors.brand, fontWeight: '500' },
   footer: { paddingHorizontal: 24, paddingVertical: 16 },
-});
+  });
+}
