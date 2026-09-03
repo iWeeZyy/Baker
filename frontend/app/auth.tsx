@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Pla
 import { Image } from 'expo-image';
 import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
@@ -21,6 +22,7 @@ export default function AuthScreen() {
   const { user, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Purement visuel — le contour terracotta au focus d'un champ. N'affecte
@@ -43,6 +45,12 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Image
+        source={require('../assets/images/decorative/auth-wheat.png')}
+        style={styles.decoration}
+        contentFit="contain"
+        pointerEvents="none"
+      />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
@@ -70,18 +78,30 @@ export default function AuthScreen() {
             </View>
             <View style={styles.field}>
               <Text style={styles.label}>Mot de passe</Text>
-              <TextInput
-                testID="input-password"
-                value={password}
-                onChangeText={setPassword}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField(null)}
-                placeholder="Votre mot de passe"
-                placeholderTextColor={colors.muted}
-                style={[styles.input, focusedField === 'password' && styles.inputFocused]}
-                secureTextEntry
-                autoComplete="password"
-              />
+              <View style={styles.passwordField}>
+                <TextInput
+                  testID="input-password"
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="Votre mot de passe"
+                  placeholderTextColor={colors.muted}
+                  style={[styles.input, styles.passwordInput, focusedField === 'password' && styles.inputFocused]}
+                  secureTextEntry={!showPassword}
+                  autoComplete="password"
+                />
+                <Pressable
+                  testID="toggle-password"
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  style={styles.passwordToggle}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.muted} />
+                </Pressable>
+              </View>
             </View>
 
             {error ? <Text style={styles.error} testID="auth-error">{error}</Text> : null}
@@ -106,6 +126,10 @@ export default function AuthScreen() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  // Purement décoratif, jamais interactif (pointerEvents="none") — épinglé
+  // en bas à droite, derrière le formulaire (premier enfant du SafeAreaView,
+  // donc sous le ScrollView dans l'ordre d'empilement).
+  decoration: { position: 'absolute', bottom: -30, right: -30, width: 260, height: 260 },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
   brandBlock: { alignItems: 'center', marginBottom: 44 },
   logo: { width: 88, height: 88, marginBottom: 24 },
@@ -128,6 +152,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null),
   },
   inputFocused: { borderColor: colors.brand },
+  passwordField: { position: 'relative', justifyContent: 'center' },
+  passwordInput: { paddingRight: 48 },
+  passwordToggle: { position: 'absolute', right: 8, padding: 10 },
   error: { color: colors.error, fontSize: 13, textAlign: 'center' },
   submitBtn: { borderRadius: theme.radius.xl, marginTop: 4 },
   signupLink: { marginTop: 32, alignItems: 'center' },
