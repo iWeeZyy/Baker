@@ -25,6 +25,14 @@ const BACKGROUNDS = {
   dark: require('../assets/images/auth-background-dark.png'),
 };
 
+// Essai du nouveau logo (nœud + épi) : Lucas a fourni un second export
+// dédié au mode sombre (auth-logo-trial-dark.png), distinct de celui du
+// mode clair — deux détourages séparés, pas une seule image réutilisée.
+const LOGOS = {
+  light: require('../assets/images/auth-logo-trial.png'),
+  dark: require('../assets/images/auth-logo-trial-dark.png'),
+};
+
 export default function AuthScreen() {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -67,7 +75,7 @@ export default function AuthScreen() {
                 place qu'occupait l'ancien icon.png avant son retrait — asset
                 -trial, pas encore l'identité définitive. */}
             <Image
-              source={require('../assets/images/auth-logo-trial.png')}
+              source={mode === 'dark' ? LOGOS.dark : LOGOS.light}
               style={styles.logo}
               contentFit="contain"
             />
