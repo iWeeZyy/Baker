@@ -22,6 +22,32 @@
         height: 100%;
         flex: 1;
       }
+      /*
+        Chrome/Safari appliquent leur propre fond (souvent jaune) à un champ
+        qu'ils viennent d'autofiller, via la pseudo-classe :-webkit-autofill —
+        un simple backgroundColor React Native Web ne peut jamais le recouvrir.
+        Seuls les champs qui portent explicitement data-autofill-themed (voir
+        frontend/app/auth.tsx) sont concernés, pour ne jamais affecter un champ
+        qui n'a pas ce style de fond plein. Les variables --rn-input-bg/-fg
+        sont tenues à jour par ThemeContext.tsx (web uniquement) pour suivre
+        le thème clair/sombre actif, y compris lors d'une bascule à chaud ; les
+        valeurs de repli ci-dessous sont celles de LIGHT_COLORS (src/theme.ts),
+        le thème par défaut avant hydratation React.
+      */
+      input[data-autofill-themed]:-webkit-autofill,
+      input[data-autofill-themed]:-webkit-autofill:hover,
+      input[data-autofill-themed]:-webkit-autofill:focus,
+      input[data-autofill-themed]:-webkit-autofill:active {
+        -webkit-text-fill-color: var(--rn-input-fg, #2A1F1A);
+        -webkit-box-shadow: 0 0 0px 1000px var(--rn-input-bg, #F3EFEA) inset;
+        box-shadow: 0 0 0px 1000px var(--rn-input-bg, #F3EFEA) inset;
+        caret-color: var(--rn-input-fg, #2A1F1A);
+        transition: background-color 5000s ease-in-out 0s;
+      }
+      input[data-autofill-themed]:autofill {
+        color: var(--rn-input-fg, #2A1F1A);
+        box-shadow: 0 0 0px 1000px var(--rn-input-bg, #F3EFEA) inset;
+      }
     </style>
     <!--
       Expo génère automatiquement un lien favicon depuis web.favicon (voir

@@ -9,7 +9,7 @@
  * à un changement d'apparence iOS sans code supplémentaire.
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DARK_COLORS, LIGHT_COLORS, type ThemeColors } from './theme';
 
@@ -58,6 +58,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const mode: ThemeMode = preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
   const colors = mode === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+
+  // Le CSS n'a aucun moyen d'exprimer la pseudo-classe :-webkit-autofill via
+  // le style inline de React Native Web — la règle qui neutralise le jaune
+  // d'autofill du navigateur vit dans public/index.html et lit ces variables
+  // pour rester synchronisée avec le thème actif, y compris lors d'une
+  // bascule à chaud (Réglages), sans rechargement de page.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    document.documentElement.style.setProperty('--rn-input-bg', colors.surfaceSecondary);
+    document.documentElement.style.setProperty('--rn-input-fg', colors.onSurface);
+  }, [colors]);
 
   return (
     <Ctx.Provider value={{ colors, mode, preference, setPreference }}>
