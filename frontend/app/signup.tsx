@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -6,7 +6,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/src/auth';
-import { theme, LIGHT_COLORS } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { storage } from '@/src/utils/storage';
 import { api } from '@/src/api';
 import { ONBOARDING_COMPLETED_KEY, SIGNUP_DRAFT_KEY } from '@/src/onboarding/storageKeys';
@@ -37,12 +38,17 @@ type Draft = {
   instagram?: string; profession?: string | null; professionOther?: string; specialties?: string[];
 };
 
-// Même fond de marque fixe qu'`auth.tsx` (voir sa note) — l'inscription
-// reste toujours en clair, quel que soit le thème choisi.
-const colors = LIGHT_COLORS;
-const styles = makeStyles();
+// Même paire clair/sombre qu'`auth.tsx` (voir sa note) — l'inscription est
+// désormais réactive au thème comme le reste de l'app, une vraie variante
+// sombre existant pour ce fond depuis auth.tsx.
+const BACKGROUNDS = {
+  light: require('../assets/images/auth-background.png'),
+  dark: require('../assets/images/auth-background-dark.png'),
+};
 
 export default function SignupScreen() {
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { register, refreshUser } = useAuth();
 
@@ -254,7 +260,7 @@ export default function SignupScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Image
-        source={require('../assets/images/auth-background.png')}
+        source={mode === 'dark' ? BACKGROUNDS.dark : BACKGROUNDS.light}
         style={styles.background}
         contentFit="cover"
         pointerEvents="none"
@@ -539,19 +545,15 @@ export default function SignupScreen() {
   );
 }
 
-function makeStyles() {
+function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   // Plein écran, derrière tout le reste (premier enfant du SafeAreaView) —
-  // jamais interactif : pointerEvents="none". Même asset qu'auth.tsx.
+  // jamais interactif : pointerEvents="none". Même paire d'assets qu'auth.tsx.
   background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  // paddingTop généreux : le fond de marque (auth-background.png) a son
-  // décor le plus chargé dans le quart supérieur de l'écran — les titres y
-  // seraient illisibles sans cet espace, contrairement à auth.tsx où le logo
-  // joue déjà ce rôle de respiration.
-  body: { padding: 24, paddingTop: 140, paddingBottom: 40, flexGrow: 1 },
+  body: { padding: 24, paddingTop: 60, paddingBottom: 40, flexGrow: 1 },
   title: { fontFamily: theme.serif, fontSize: 26, color: colors.onSurface, lineHeight: 32, marginBottom: 10 },
   subtitle: { fontSize: 14, color: colors.muted, lineHeight: 20, marginBottom: 24 },
   input: { fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, paddingVertical: 10, marginBottom: 8 },
