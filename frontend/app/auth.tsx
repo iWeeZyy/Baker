@@ -25,14 +25,6 @@ const BACKGROUNDS = {
   dark: require('../assets/images/auth-background-dark.png'),
 };
 
-// Essai du nouveau logo (nœud + épi) : Lucas a fourni un second export
-// dédié au mode sombre (auth-logo-trial-dark.png), distinct de celui du
-// mode clair — deux détourages séparés, pas une seule image réutilisée.
-const LOGOS = {
-  light: require('../assets/images/auth-logo-trial.png'),
-  dark: require('../assets/images/auth-logo-trial-dark.png'),
-};
-
 export default function AuthScreen() {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -71,14 +63,6 @@ export default function AuthScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
-            {/* Essai du nouveau logo (nœud + épi) fourni par Lucas, à la
-                place qu'occupait l'ancien icon.png avant son retrait — asset
-                -trial, pas encore l'identité définitive. */}
-            <Image
-              source={mode === 'dark' ? LOGOS.dark : LOGOS.light}
-              style={styles.logo}
-              contentFit="contain"
-            />
             <Text style={styles.title}>Bienvenue sur Levanea</Text>
             <Text style={styles.subtitle}>L'art de la boulangerie française</Text>
           </View>
@@ -145,7 +129,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
   brandBlock: { alignItems: 'center', marginBottom: 44 },
-  logo: { width: 128, height: 105, marginBottom: 4 },
   title: { fontFamily: theme.serif, fontSize: 30, color: colors.onSurface, textAlign: 'center' },
   subtitle: { fontSize: 15, color: colors.muted, textAlign: 'center', marginTop: 8 },
   form: { gap: 20 },
