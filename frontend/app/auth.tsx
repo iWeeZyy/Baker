@@ -82,6 +82,7 @@ export default function AuthScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                {...(Platform.OS === 'web' ? { dataSet: { autofillThemed: 'true' } } : null)}
               />
             </View>
             <View style={styles.field}>
@@ -97,6 +98,7 @@ export default function AuthScreen() {
                 style={[styles.input, focusedField === 'password' && styles.inputFocused]}
                 secureTextEntry
                 autoComplete="password"
+                {...(Platform.OS === 'web' ? { dataSet: { autofillThemed: 'true' } } : null)}
               />
             </View>
 
