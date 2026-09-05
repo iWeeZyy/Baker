@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/auth';
-import { theme, LIGHT_COLORS } from '@/src/theme';
+import { theme, type ThemeColors } from '@/src/theme';
+import { useTheme } from '@/src/ThemeContext';
 import { Button } from '@/src/Button';
 
 // La grande photo de four (`auth-hero.jpg`, fournie par Lucas) a été retirée
@@ -14,17 +15,19 @@ import { Button } from '@/src/Button';
 // au cas où — même logique que les .svg/.png de secours laissés en place
 // ailleurs dans le projet (voir CLAUDE.md, section « Recipe families »).
 //
-// `auth-background.png` (fourni par Lucas) est une illustration de marque
-// fixe, pas un fond qui doit s'adapter au thème — décision explicite : cet
-// écran (et `signup.tsx`, même traitement) reste toujours en clair, comme
-// l'icône de l'app ne change jamais avec le thème. D'où `LIGHT_COLORS`
-// utilisé directement ici plutôt que `useTheme()` — même logique que
-// `src/schedule/ExportLayout.tsx`, qui reste volontairement hors du système
-// de thème pour une sortie à palette fixe.
-const colors = LIGHT_COLORS;
-const styles = makeStyles();
+// `auth-background.png`/`auth-background-dark.png` (fournis par Lucas, une
+// paire assortie) portent l'identité de marque de cet écran — contrairement
+// au premier essai (une seule image, l'écran forcé en clair via
+// `LIGHT_COLORS`), l'écran redevient ici pleinement réactif au thème
+// puisqu'une vraie variante sombre existe désormais des deux côtés.
+const BACKGROUNDS = {
+  light: require('../assets/images/auth-background.png'),
+  dark: require('../assets/images/auth-background-dark.png'),
+};
 
 export default function AuthScreen() {
+  const { colors, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { user, login } = useAuth();
   const [email, setEmail] = useState('');
@@ -52,7 +55,7 @@ export default function AuthScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <Image
-        source={require('../assets/images/auth-background.png')}
+        source={mode === 'dark' ? BACKGROUNDS.dark : BACKGROUNDS.light}
         style={styles.background}
         contentFit="cover"
         pointerEvents="none"
@@ -117,37 +120,35 @@ export default function AuthScreen() {
   );
 }
 
-function makeStyles() {
-  return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.surface },
-    // Plein écran, derrière tout le reste (premier enfant du SafeAreaView) —
-    // jamais interactif : pointerEvents="none".
-    background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-    scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
-    brandBlock: { alignItems: 'center', marginBottom: 44 },
-    title: { fontFamily: theme.serif, fontSize: 30, color: colors.onSurface, textAlign: 'center' },
-    subtitle: { fontSize: 15, color: colors.muted, textAlign: 'center', marginTop: 8 },
-    form: { gap: 20 },
-    field: { gap: 8 },
-    label: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500', letterSpacing: 0.2 },
-    input: {
-      fontSize: 16,
-      color: colors.onSurface,
-      backgroundColor: colors.surfaceSecondary,
-      borderRadius: theme.radius.xl,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: 18,
-      paddingVertical: 16,
-      // react-native-web dessine sinon le contour de focus natif du navigateur
-      // (un anneau noir) par-dessus notre bordure terracotta au focus.
-      ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null),
-    },
-    inputFocused: { borderColor: colors.brand },
-    error: { color: colors.error, fontSize: 13, textAlign: 'center' },
-    submitBtn: { borderRadius: theme.radius.xl, marginTop: 4 },
-    signupLink: { marginTop: 32, alignItems: 'center' },
-    signupLinkText: { fontSize: 14, color: colors.muted },
-    signupLinkStrong: { color: colors.brand, fontWeight: '600' },
-  });
-}
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  // Plein écran, derrière tout le reste (premier enfant du SafeAreaView) —
+  // jamais interactif : pointerEvents="none".
+  background: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
+  brandBlock: { alignItems: 'center', marginBottom: 44 },
+  title: { fontFamily: theme.serif, fontSize: 30, color: colors.onSurface, textAlign: 'center' },
+  subtitle: { fontSize: 15, color: colors.muted, textAlign: 'center', marginTop: 8 },
+  form: { gap: 20 },
+  field: { gap: 8 },
+  label: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: '500', letterSpacing: 0.2 },
+  input: {
+    fontSize: 16,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    // react-native-web dessine sinon le contour de focus natif du navigateur
+    // (un anneau noir) par-dessus notre bordure terracotta au focus.
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null),
+  },
+  inputFocused: { borderColor: colors.brand },
+  error: { color: colors.error, fontSize: 13, textAlign: 'center' },
+  submitBtn: { borderRadius: theme.radius.xl, marginTop: 4 },
+  signupLink: { marginTop: 32, alignItems: 'center' },
+  signupLinkText: { fontSize: 14, color: colors.muted },
+  signupLinkStrong: { color: colors.brand, fontWeight: '600' },
+});
