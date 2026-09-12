@@ -39,6 +39,7 @@ from tips_seed import TIP_CATEGORIES
 from routers.production import router as production_router
 from routers.staff import router as staff_router
 from routers.cost import router as cost_router
+from routers.tips import router as tips_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -3306,45 +3307,6 @@ async def _seed_demo_bots() -> None:
     logger.info(f"Auto-friended {len(DEMO_BOTS)} demo bots with {owner_email}")
 
 
-
-
-# ---------- Tips ----------
-# The library stays small enough (a few hundred entries at most) that the app
-# fetches it whole and searches client-side, the same choice already made for
-# families/recipes browsing — one request, then instant local filtering
-# rather than a round trip on every keystroke.
-@api_router.get("/tips")
-async def list_tips(category: Optional[str] = None):
-    # "Toutes" is the tips chip's "no filter" label ("Tous" is the recipes
-    # one) — both are accepted so a client can't silently get zero results by
-    # sending the wrong one.
-    q = {}
-    if category and category not in ("Tous", "Toutes"):
-        q["category"] = category
-    cursor = db.tips.find(q, {"_id": 0})
-    return await cursor.to_list(500)
-
-@api_router.get("/tips/favorites")
-async def my_tip_favorites(user: dict = Depends(get_current_user)):
-    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(500)
-    ids = [f["tip_id"] for f in favs]
-    return await db.tips.find({"id": {"$in": ids}}, {"_id": 0}).to_list(500)
-
-@api_router.get("/tips/favorite-ids")
-async def my_tip_favorite_ids(user: dict = Depends(get_current_user)):
-    """The bare id set, for marking ⭐ on a whole list without one request per card."""
-    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0, "tip_id": 1}).to_list(500)
-    return [f["tip_id"] for f in favs]
-
-@api_router.post("/tips/{tip_id}/favorite")
-async def toggle_tip_favorite(tip_id: str, user: dict = Depends(get_current_user)):
-    existing = await db.tip_favorites.find_one({"user_id": user["user_id"], "tip_id": tip_id})
-    if existing:
-        await db.tip_favorites.delete_one({"user_id": user["user_id"], "tip_id": tip_id})
-        return {"favorited": False}
-    await db.tip_favorites.insert_one({"user_id": user["user_id"], "tip_id": tip_id, "created_at": datetime.now(timezone.utc)})
-    return {"favorited": True}
-
 # ---------- Categories ----------
 @api_router.get("/categories")
 async def categories():
@@ -3654,6 +3616,7 @@ app.include_router(api_router)
 app.include_router(production_router)
 app.include_router(staff_router)
 app.include_router(cost_router)
+app.include_router(tips_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
