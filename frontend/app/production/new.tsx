@@ -184,7 +184,7 @@ export default function ProductionForm() {
             </View>
           </View>
           <Text style={styles.hint}>
-            L'heure cible sert à calculer à rebours l'horaire de chaque étape.
+            L&apos;heure cible sert à calculer à rebours l&apos;horaire de chaque étape.
           </Text>
 
           <Text style={[styles.label, { marginTop: 26 }]}>RECETTES</Text>
@@ -239,7 +239,7 @@ export default function ProductionForm() {
 
                 {!canUsePieces && (
                   <Text style={styles.lineHint}>
-                    Cette recette n'indique pas combien de pièces elle produit : la quantité se compte en fournées.
+                    Cette recette n&apos;indique pas combien de pièces elle produit : la quantité se compte en fournées.
                   </Text>
                 )}
               </View>

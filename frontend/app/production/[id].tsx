@@ -318,7 +318,7 @@ export default function ProductionDetail() {
 
             {!data.target_time && (
               <Text style={styles.notice}>
-                Aucune heure cible : les étapes ne sont pas datées. Ajoutez-en une en modifiant la production — Levanea calcule alors l'heure de chaque étape en remontant depuis cette heure cible.
+                Aucune heure cible : les étapes ne sont pas datées. Ajoutez-en une en modifiant la production — Levanea calcule alors l&apos;heure de chaque étape en remontant depuis cette heure cible.
               </Text>
             )}
 
@@ -353,7 +353,7 @@ export default function ProductionDetail() {
                   <>
                     <Text style={[styles.sectionLabel, { marginTop: 28 }]}>À VÉRIFIER</Text>
                     <Text style={styles.hint}>
-                      Ces lignes n'indiquent pas de quantité mesurable : elles ne sont pas multipliées.
+                      Ces lignes n&apos;indiquent pas de quantité mesurable : elles ne sont pas multipliées.
                     </Text>
                     {data.ingredients.unparsed.map((raw, i) => (
                       <View key={`${raw}-${i}`} style={styles.ingRow}>

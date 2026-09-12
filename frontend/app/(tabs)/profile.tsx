@@ -354,7 +354,7 @@ export default function Profile() {
             <View style={styles.statDivider} />
             <View style={styles.stat}>
               <Text style={styles.statVal}>{stats.total_likes}</Text>
-              <Text style={styles.statLabel}>J'AIME REÇUS</Text>
+              <Text style={styles.statLabel}>J&apos;AIME REÇUS</Text>
             </View>
             <View style={styles.statDivider} />
             <Pressable testID="my-followers-stat" onPress={() => user && router.push(`/followers/${user.user_id}` as any)} style={styles.stat}>

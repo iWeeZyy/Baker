@@ -216,7 +216,7 @@ export default function Friends() {
         {!error && requests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Demandes d'amis</Text>
+              <Text style={styles.sectionTitle}>Demandes d&apos;amis</Text>
               <View style={styles.countBadge}><Text style={styles.countBadgeText}>{requests.length}</Text></View>
             </View>
             {requests.map(r => (

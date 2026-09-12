@@ -175,7 +175,7 @@ export default function RecipeDetail() {
             <Text style={styles.sheetValue}>{unbreakable(equipment.join(' · '))}</Text>
           </View>
         )}
-        {!!source && <Text style={styles.sheetSource}>D'après {source}</Text>}
+        {!!source && <Text style={styles.sheetSource}>D&apos;après {source}</Text>}
       </View>
     );
   };
@@ -525,7 +525,7 @@ export default function RecipeDetail() {
             <Animated.View style={{ transform: [{ scale: likeScale }] }}>
               <Feather name="heart" size={18} color={likes.liked ? colors.error : colors.onSurfaceSecondary} />
             </Animated.View>
-            <Text style={styles.likeText}>{likes.count} j'aime</Text>
+            <Text style={styles.likeText}>{likes.count} j&apos;aime</Text>
           </Pressable>
           <Pressable testID="comment-jump" onPress={() => setTab('community')} style={styles.likeBtn}>
             <Feather name="message-square" size={18} color={colors.onSurfaceSecondary} />

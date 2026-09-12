@@ -87,11 +87,19 @@ def _b64url(data: bytes) -> str:
 def _b64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + "=" * ((4 - len(data) % 4) % 4))
 
-def sign_jwt(user_id: str) -> str:
+def sign_jwt(user_id: str, token_version: int = 0) -> str:
     header = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
     payload = _b64url(json.dumps({
         "user_id": user_id,
         "exp": int(time.time()) + 60 * 60 * 24 * 30,
+        # Copie de db.users.token_version au moment de l'émission — comparée
+        # à la valeur courante dans get_current_user. Incrémenter ce champ
+        # (POST /auth/logout-all) invalide d'un coup tous les jetons émis
+        # avant, sur tous les appareils, sans liste de révocation ni nouvelle
+        # collection. Absent chez un jeton déjà émis avant l'ajout de ce
+        # champ -> vaut 0 par défaut des deux côtés, donc rien n'est cassé
+        # au déploiement.
+        "tv": token_version,
     }, separators=(",", ":")).encode())
     sig = _b64url(hmac.new(JWT_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
     return f"{header}.{payload}.{sig}"
@@ -119,6 +127,8 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if payload.get("tv", 0) != user.get("token_version", 0):
+        raise HTTPException(status_code=401, detail="Invalid token")
     return user
 
 # ---------- Storage Helpers (local disk) ----------
@@ -554,6 +564,7 @@ async def register(inp: RegisterInput):
         "specialties": specialties,
         "team_visibility": "public",
         "message_privacy": "friends_and_followers",
+        "token_version": 0,
         "created_at": datetime.now(timezone.utc),
     }
     try:
@@ -564,7 +575,7 @@ async def register(inp: RegisterInput):
         # d'utilisateur entre-temps — l'index unique tranche, jamais un
         # doublon silencieux.
         raise HTTPException(400, "Email ou nom d'utilisateur déjà utilisé")
-    token = sign_jwt(user_id)
+    token = sign_jwt(user_id, 0)
     return {"token": token, "user": {
         "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "username": username, "picture": None,
         "bio": bio, "instagram_username": instagram_username, "profession": profession, "specialties": specialties,
@@ -580,7 +591,7 @@ async def login(inp: LoginInput):
         raise HTTPException(401, "Email ou mot de passe invalide")
     if not bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode()):
         raise HTTPException(401, "Email ou mot de passe invalide")
-    token = sign_jwt(user["user_id"])
+    token = sign_jwt(user["user_id"], user.get("token_version", 0))
     return {"token": token, "user": {
         "user_id": user["user_id"], "email": user["email"], "name": user["name"],
         "username": user.get("username"), "picture": user.get("picture"),
@@ -681,6 +692,16 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
 @api_router.post("/auth/logout")
 async def logout():
     # JWT is stateless: the client discards the token. Nothing to invalidate server-side.
+    return {"ok": True}
+
+@api_router.post("/auth/logout-all")
+async def logout_all(user: dict = Depends(get_current_user)):
+    """Invalide d'un coup tous les jetons émis avant cet appel, sur tous les
+    appareils — jamais appelé par la déconnexion normale (un seul appareil ne
+    doit jamais éjecter les autres). Incrémenter plutôt que fixer à une
+    valeur : deux appels concurrents (deux onglets, double-tap) ne
+    retombent jamais sur la même valeur par accident."""
+    await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"token_version": 1}})
     return {"ok": True}
 
 # ---------- Profile picture ----------
@@ -967,8 +988,6 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     projet, appelé différemment (tool-use) pour garantir une sortie
     structurée plutôt que d'analyser du texte libre. Rien n'est écrit sur
     disque ni conservé au-delà de cette requête."""
-    if not anthropic_client:
-        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
     if not files:
         raise HTTPException(400, "Aucune image reçue")
     if len(files) > MAX_SCAN_PAGES:
@@ -991,6 +1010,14 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
         })
 
     content = image_blocks + [{"type": "text", "text": "Extrais les informations de cette fiche recette."}]
+
+    # Vérifié ici, juste avant le seul appel réseau réel de cette route —
+    # jamais avant, pour que le nombre de pages/la validité des images soit
+    # rejeté avec un vrai 400 même sans assistant configuré (voir
+    # tests/test_scan_api.py::TestAnalyzeGuards, dont c'est le contrat
+    # explicite : « rejette avant tout appel au fournisseur »).
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
 
     try:
         response = await anthropic_client.messages.create(

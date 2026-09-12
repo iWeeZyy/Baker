@@ -99,7 +99,7 @@ export default function Pro() {
         )}
 
         <Text style={styles.intro}>
-          L'offre gratuite couvre l'essentiel : planifier une journée, calculer les quantités et
+          L&apos;offre gratuite couvre l&apos;essentiel : planifier une journée, calculer les quantités et
           suivre le déroulé. Baker Pro lève la limite mensuelle et prépare le travail en équipe.
         </Text>
 
@@ -129,8 +129,8 @@ export default function Pro() {
         <View style={styles.noticeBox}>
           <Text style={styles.noticeTitle}>Abonnement pas encore ouvert</Text>
           <Text style={styles.noticeBody}>
-            Baker Pro n'est pas encore commercialisé : aucun paiement n'est possible aujourd'hui,
-            et rien ne vous sera facturé. Les limites de l'offre gratuite restent en place d'ici là.
+            Baker Pro n&apos;est pas encore commercialisé : aucun paiement n&apos;est possible aujourd&apos;hui,
+            et rien ne vous sera facturé. Les limites de l&apos;offre gratuite restent en place d&apos;ici là.
           </Text>
         </View>
 

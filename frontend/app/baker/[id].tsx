@@ -251,7 +251,7 @@ export default function BakerProfile() {
               <View style={styles.statDivider} />
               <View style={styles.stat}>
                 <Text style={styles.statVal}>{total_likes}</Text>
-                <Text style={styles.statLabel}>J'AIME REÇUS</Text>
+                <Text style={styles.statLabel}>J&apos;AIME REÇUS</Text>
               </View>
               <View style={styles.statDivider} />
               <Pressable testID="baker-followers-stat" onPress={() => router.push(`/followers/${user.user_id}` as any)} style={styles.stat}>

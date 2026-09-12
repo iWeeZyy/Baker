@@ -108,10 +108,10 @@ export default function Chat() {
             <View style={styles.photoWarning}>
               <Feather name="alert-triangle" size={20} color={colors.onBrandPrimary} />
               <Text style={styles.photoWarningTitle}>Contenu potentiellement sensible</Text>
-              <Text style={styles.photoWarningText}>L'image peut contenir du contenu à caractère sexuel.</Text>
+              <Text style={styles.photoWarningText}>L&apos;image peut contenir du contenu à caractère sexuel.</Text>
               <View style={styles.photoWarningActions}>
                 <Pressable testID={`photo-reveal-${item.id}`} onPress={reveal} style={styles.photoRevealBtn}>
-                  <Text style={styles.photoRevealBtnText}>Afficher l'image</Text>
+                  <Text style={styles.photoRevealBtnText}>Afficher l&apos;image</Text>
                 </Pressable>
                 <Pressable testID={`photo-hide-${item.id}`} onPress={() => setDismissed(true)} style={styles.photoHideBtn}>
                   <Text style={styles.photoHideBtnText}>Masquer</Text>
@@ -373,7 +373,7 @@ export default function Chat() {
             {sendingPhoto ? (
               <View style={styles.previewOverlay}>
                 <ActivityIndicator color={colors.onBrandPrimary} />
-                <Text style={styles.previewOverlayText}>Vérification de l'image…</Text>
+                <Text style={styles.previewOverlayText}>Vérification de l&apos;image…</Text>
               </View>
             ) : (
               <View style={styles.previewActions}>

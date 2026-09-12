@@ -39,6 +39,7 @@ type AuthCtx = {
   login: (email: string, password: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
+  logoutAllDevices: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateProfile: (fields: {
     bio?: string; instagram_username?: string; profession?: string; username?: string; specialties?: string[];
@@ -108,6 +109,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  // Contrairement à logout() : ici l'appel serveur est attendu, pas
+  // best-effort — le seul but de ce bouton est qu'il ait réellement eu lieu
+  // (token_version incrémenté), donc un échec réseau doit remonter à
+  // l'appelant plutôt qu'être avalé en silence. Le jeton de cet appareil
+  // vient lui aussi d'être invalidé par cet appel, d'où le même nettoyage
+  // local qu'un logout() normal juste après.
+  const logoutAllDevices = async () => {
+    await api('/auth/logout-all', { method: 'POST' });
+    clearWidgetData();
+    disconnectRealtime();
+    await clearToken();
+    setInMemoryToken(null);
+    setUser(null);
+  };
+
   // Relit le compte depuis le serveur plutôt que de corriger l'état local
   // à la main — une seule source de vérité, réutilisée après un
   // changement de photo de profil pour que le nouvel avatar apparaisse
@@ -129,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfile }}>
+    <Ctx.Provider value={{ user, loading, login, register, logout, logoutAllDevices, refreshUser, updateProfile }}>
       {children}
     </Ctx.Provider>
   );

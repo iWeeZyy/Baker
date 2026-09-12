@@ -64,7 +64,7 @@ export default function AuthScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
             <Text style={styles.title}>Bienvenue sur Levanea</Text>
-            <Text style={styles.subtitle}>L'art de la boulangerie française</Text>
+            <Text style={styles.subtitle}>L&apos;art de la boulangerie française</Text>
           </View>
 
           <View style={styles.form}>

@@ -5,12 +5,16 @@ a user may be shown an ad. They need no server, so the Pro-never-sees-an-ad
 guarantee is checked directly rather than inferred from an HTTP response.
 """
 import os
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
 import requests
 
-from plans import FREE, PRO, ads_allowed, ads_config
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from plans import FREE, PRO, ads_allowed, ads_config  # noqa: E402
 
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'http://localhost:8000').rstrip('/')
 API = f"{BASE_URL}/api"

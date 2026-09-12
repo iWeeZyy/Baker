@@ -261,12 +261,12 @@ export default function ScheduleScreen() {
               ) : null}
               {dirty && (
                 <Text style={styles.dirtyHint}>
-                  Modifications non enregistrées : l'aperçu montre la dernière version enregistrée.
+                  Modifications non enregistrées : l&apos;aperçu montre la dernière version enregistrée.
                 </Text>
               )}
             </>
           ) : (
-            <Text style={styles.hint}>Enregistrez l'emploi du temps pour voir l'aperçu.</Text>
+            <Text style={styles.hint}>Enregistrez l&apos;emploi du temps pour voir l&apos;aperçu.</Text>
           )}
         </ScrollView>
       ) : (
