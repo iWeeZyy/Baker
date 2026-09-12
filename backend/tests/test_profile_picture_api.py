@@ -9,6 +9,7 @@ indépendants du fournisseur et tournent toujours.
 """
 import io
 import os
+import uuid
 
 import pytest
 import requests
@@ -17,11 +18,21 @@ from PIL import Image
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 API = f"{BASE_URL}/api"
 
-TEST_EMAIL = "test.avatar.a@bakers.app"
+# Suffixed with a per-process random token rather than fixed: pytest-xdist's
+# --dist loadscope schedules different CLASSES of this same module onto
+# different worker processes, which can run concurrently. A fixed email
+# meant every worker's `token`/`token_b` fixture logged into (or raced to
+# register) the exact same account, so two classes running in parallel could
+# clobber each other's `picture` mid-test — a real, previously-observed race
+# (see the removed xdist-race skip this replaces), not an application bug.
+# Each worker importing this module gets its own suffix, so two concurrent
+# workers now always operate on genuinely different accounts.
+_SUFFIX = uuid.uuid4().hex[:8]
+TEST_EMAIL = f"test.avatar.a.{_SUFFIX}@bakers.app"
 TEST_PASS = "TestAvatarA2026!"
 TEST_NAME = "Chef Avatar A"
 
-TEST_EMAIL_B = "test.avatar.b@bakers.app"
+TEST_EMAIL_B = f"test.avatar.b.{_SUFFIX}@bakers.app"
 TEST_PASS_B = "TestAvatarB2026!"
 TEST_NAME_B = "Chef Avatar B"
 
@@ -171,17 +182,6 @@ class TestLiveFreshness:
     celle du compte au moment de la lecture, jamais une copie figée au
     moment de la création."""
 
-    @pytest.mark.skip(
-        reason="Course connue, pas un bug applicatif : pytest-xdist --dist loadscope "
-        "planifie chaque CLASSE (pas tout le module) sur un worker, or `token` est un "
-        "fixture module-scope adossé à un email FIXE (test.avatar.a@bakers.app) — si une "
-        "autre classe de ce module tourne en parallèle sur un autre worker, elle se "
-        "connecte au même compte (login-ou-register sur le même email) et peut réécrire "
-        "sa photo entre notre upload et notre lecture. Reproduit uniquement en lançant ce "
-        "fichier avec d'autres (jamais seul) ; même famille que test_team_api.py et "
-        "test_messaging.py. À corriger en donnant à `token`/`token_b` un email généré par "
-        "run plutôt qu'en touchant pytest.ini (addopts verrouillé)."
-    )
     def test_comment_reflects_current_picture_not_a_snapshot(self, token):
         recipe_id = requests.get(f"{API}/recipes", timeout=30).json()[0]["id"]
         comment = requests.post(

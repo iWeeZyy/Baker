@@ -111,8 +111,15 @@ class TestSearch:
         "planifie chaque CLASSE (pas tout le module) sur un worker, donc TestSearch et "
         "TestInviteAndAccept peuvent tourner en parallèle — or elles partagent les mêmes "
         "comptes A/B module-scope, donc l'invitation créée par l'autre classe peut déjà "
-        "être acceptée quand cette assertion s'exécute. À corriger en donnant à chaque "
-        "classe ses propres comptes plutôt qu'en touchant pytest.ini (addopts verrouillé)."
+        "être acceptée quand cette assertion s'exécute. Note : suffixer les e-mails par "
+        "worker (essayé) casse d'autres tests de ce même fichier qui dépendent, eux, du "
+        "fait que toutes les classes du module retombent sur le même compte partagé "
+        "(TestRoleUpdateAndPermissions suppose la relation déjà créée par "
+        "TestInviteAndAccept, même sur un worker différent) — le vrai correctif est de "
+        "restructurer ce fichier pour que chaque classe ait des comptes indépendants ET "
+        "que les dépendances inter-classes deviennent explicites (fixtures partagées ou "
+        "un seul gros test), pas une correction ponctuelle. Hors périmètre de cette "
+        "session ; ne pas toucher pytest.ini (addopts verrouillé)."
     )
     def test_search_result_carries_team_status(self, token_a, user_b):
         r = requests.get(f"{API}/users/search?q=Chef Team B", headers=h(token_a), timeout=30)

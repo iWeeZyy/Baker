@@ -1,17 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 import anthropic
 import os
 import uuid
 import logging
-import hashlib
-import hmac
 import base64
 import json
 import time
@@ -27,6 +24,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
+from core import db, client, get_current_user, sign_jwt, verify_jwt
 import production
 import staff
 import costing
@@ -44,11 +42,6 @@ from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
 
 # ---------- Config ----------
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-JWT_SECRET = os.environ['JWT_SECRET']
 APP_NAME = "bakers-app"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -79,57 +72,6 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-# ---------- Auth Helpers (JWT) ----------
-def _b64url(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode().rstrip("=")
-
-def _b64url_decode(data: str) -> bytes:
-    return base64.urlsafe_b64decode(data + "=" * ((4 - len(data) % 4) % 4))
-
-def sign_jwt(user_id: str, token_version: int = 0) -> str:
-    header = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    payload = _b64url(json.dumps({
-        "user_id": user_id,
-        "exp": int(time.time()) + 60 * 60 * 24 * 30,
-        # Copie de db.users.token_version au moment de l'émission — comparée
-        # à la valeur courante dans get_current_user. Incrémenter ce champ
-        # (POST /auth/logout-all) invalide d'un coup tous les jetons émis
-        # avant, sur tous les appareils, sans liste de révocation ni nouvelle
-        # collection. Absent chez un jeton déjà émis avant l'ajout de ce
-        # champ -> vaut 0 par défaut des deux côtés, donc rien n'est cassé
-        # au déploiement.
-        "tv": token_version,
-    }, separators=(",", ":")).encode())
-    sig = _b64url(hmac.new(JWT_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
-    return f"{header}.{payload}.{sig}"
-
-def verify_jwt(token: str) -> Optional[dict]:
-    try:
-        h, p, s = token.split(".")
-        expected = _b64url(hmac.new(JWT_SECRET.encode(), f"{h}.{p}".encode(), hashlib.sha256).digest())
-        if not hmac.compare_digest(expected, s):
-            return None
-        payload = json.loads(_b64url_decode(p))
-        if payload.get("exp", 0) < time.time():
-            return None
-        return payload
-    except Exception:
-        return None
-
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization[7:]
-    payload = verify_jwt(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    if payload.get("tv", 0) != user.get("token_version", 0):
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return user
 
 # ---------- Storage Helpers (local disk) ----------
 def _resolve_upload_path(path: str) -> Path:
