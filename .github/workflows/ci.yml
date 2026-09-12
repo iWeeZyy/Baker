@@ -30,6 +30,13 @@ jobs:
       MODERATION_PROVIDER: stub
       TEXT_MODERATION_TEST_BAN_WORDS: flibberdoodle-ci-only
       TEXT_MODERATION_TEST_BAN_WORD_FOR_TESTS: flibberdoodle-ci-only
+      # Test/dev only — there is no billing provider (see plans.py), so Pro is
+      # granted purely by email allowlist. Setting it here lets
+      # test_ads.py::TestPlanEndpoint::test_pro_user_has_ads_off and
+      # test_productions_api.py::TestProPlan actually exercise the Pro path in
+      # CI instead of asserting against a permanently-free test account (the
+      # former) or self-skipping (the latter).
+      PRO_EMAILS: test.pro@bakers.app
     defaults:
       run:
         working-directory: backend
