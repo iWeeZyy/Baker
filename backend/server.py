@@ -1,17 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 import anthropic
 import os
 import uuid
 import logging
-import hashlib
-import hmac
 import base64
 import json
 import time
@@ -27,9 +24,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
-import production
-import staff
-import costing
+from core import db, client, get_current_user, sign_jwt, verify_jwt
 import leaderboard
 import imaging
 import moderation
@@ -39,16 +34,14 @@ import recipe_adapt
 import instagram
 import gamification
 import badges
-from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
+from routers.production import router as production_router
+from routers.staff import router as staff_router
+from routers.cost import router as cost_router
+from routers.tips import router as tips_router
 
 # ---------- Config ----------
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-JWT_SECRET = os.environ['JWT_SECRET']
 APP_NAME = "bakers-app"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -79,47 +72,6 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-# ---------- Auth Helpers (JWT) ----------
-def _b64url(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode().rstrip("=")
-
-def _b64url_decode(data: str) -> bytes:
-    return base64.urlsafe_b64decode(data + "=" * ((4 - len(data) % 4) % 4))
-
-def sign_jwt(user_id: str) -> str:
-    header = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    payload = _b64url(json.dumps({
-        "user_id": user_id,
-        "exp": int(time.time()) + 60 * 60 * 24 * 30,
-    }, separators=(",", ":")).encode())
-    sig = _b64url(hmac.new(JWT_SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
-    return f"{header}.{payload}.{sig}"
-
-def verify_jwt(token: str) -> Optional[dict]:
-    try:
-        h, p, s = token.split(".")
-        expected = _b64url(hmac.new(JWT_SECRET.encode(), f"{h}.{p}".encode(), hashlib.sha256).digest())
-        if not hmac.compare_digest(expected, s):
-            return None
-        payload = json.loads(_b64url_decode(p))
-        if payload.get("exp", 0) < time.time():
-            return None
-        return payload
-    except Exception:
-        return None
-
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization[7:]
-    payload = verify_jwt(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
 
 # ---------- Storage Helpers (local disk) ----------
 def _resolve_upload_path(path: str) -> Path:
@@ -407,60 +359,6 @@ class MessageReportInput(BaseModel):
     reason: str
     note: Optional[str] = None
 
-class ProductionLineInput(BaseModel):
-    recipe_id: str
-    quantity: float
-    mode: str = "batches"  # "pieces" | "batches"
-
-class ProductionInput(BaseModel):
-    date: str  # YYYY-MM-DD
-    target_time: Optional[str] = None  # HH:MM
-    notes: str = ""
-    lines: List[ProductionLineInput] = Field(default_factory=list)
-
-class StepPatchInput(BaseModel):
-    status: Optional[str] = None
-    duration_minutes: Optional[int] = None
-
-class ScheduleDayInput(BaseModel):
-    off: bool = False
-    start: str = ""
-    end: str = ""
-
-class ScheduleEmployeeInput(BaseModel):
-    employee_id: Optional[str] = None
-    name: str = ""
-    days: List[Optional[ScheduleDayInput]] = Field(default_factory=list)
-    overtime_minutes: int = 0
-
-class ScheduleInput(BaseModel):
-    week_start: str  # YYYY-MM-DD, the Sunday that opens the week
-    notes: str = ""
-    employees: List[ScheduleEmployeeInput] = Field(default_factory=list)
-
-class RawMaterialInput(BaseModel):
-    name: str
-    category: Optional[str] = None
-    supplier: Optional[str] = None
-    purchase_price: float
-    purchase_quantity: float
-    purchase_unit: str  # kg | g | l | ml | cl | piece
-
-class CostLineItemInput(BaseModel):
-    label: str
-    cost: float
-
-class CostHistoryInput(BaseModel):
-    recipe_id: Optional[str] = None
-    recipe_title: Optional[str] = None
-    ingredients: List[str] = Field(default_factory=list)
-    pieces: Optional[float] = None
-    packaging: List[CostLineItemInput] = Field(default_factory=list)
-    other_costs: List[CostLineItemInput] = Field(default_factory=list)
-    price_overrides: dict = Field(default_factory=dict)  # normalized ingredient name -> unit price
-    sale_price_ht: Optional[float] = None
-    vat_rate: Optional[float] = None
-
 # Liste fixe et volontairement différente de families.CATEGORIES (recettes) :
 # "Traiteur" n'a pas d'équivalent côté recette, réutiliser la hiérarchie des
 # familles perdrait cette information plutôt que de l'exprimer.
@@ -554,6 +452,7 @@ async def register(inp: RegisterInput):
         "specialties": specialties,
         "team_visibility": "public",
         "message_privacy": "friends_and_followers",
+        "token_version": 0,
         "created_at": datetime.now(timezone.utc),
     }
     try:
@@ -564,7 +463,7 @@ async def register(inp: RegisterInput):
         # d'utilisateur entre-temps — l'index unique tranche, jamais un
         # doublon silencieux.
         raise HTTPException(400, "Email ou nom d'utilisateur déjà utilisé")
-    token = sign_jwt(user_id)
+    token = sign_jwt(user_id, 0)
     return {"token": token, "user": {
         "user_id": user_id, "email": inp.email.lower(), "name": inp.name, "username": username, "picture": None,
         "bio": bio, "instagram_username": instagram_username, "profession": profession, "specialties": specialties,
@@ -580,7 +479,7 @@ async def login(inp: LoginInput):
         raise HTTPException(401, "Email ou mot de passe invalide")
     if not bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode()):
         raise HTTPException(401, "Email ou mot de passe invalide")
-    token = sign_jwt(user["user_id"])
+    token = sign_jwt(user["user_id"], user.get("token_version", 0))
     return {"token": token, "user": {
         "user_id": user["user_id"], "email": user["email"], "name": user["name"],
         "username": user.get("username"), "picture": user.get("picture"),
@@ -681,6 +580,16 @@ async def update_profile(inp: UserProfileUpdate, user: dict = Depends(get_curren
 @api_router.post("/auth/logout")
 async def logout():
     # JWT is stateless: the client discards the token. Nothing to invalidate server-side.
+    return {"ok": True}
+
+@api_router.post("/auth/logout-all")
+async def logout_all(user: dict = Depends(get_current_user)):
+    """Invalide d'un coup tous les jetons émis avant cet appel, sur tous les
+    appareils — jamais appelé par la déconnexion normale (un seul appareil ne
+    doit jamais éjecter les autres). Incrémenter plutôt que fixer à une
+    valeur : deux appels concurrents (deux onglets, double-tap) ne
+    retombent jamais sur la même valeur par accident."""
+    await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"token_version": 1}})
     return {"ok": True}
 
 # ---------- Profile picture ----------
@@ -967,8 +876,6 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     projet, appelé différemment (tool-use) pour garantir une sortie
     structurée plutôt que d'analyser du texte libre. Rien n'est écrit sur
     disque ni conservé au-delà de cette requête."""
-    if not anthropic_client:
-        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
     if not files:
         raise HTTPException(400, "Aucune image reçue")
     if len(files) > MAX_SCAN_PAGES:
@@ -991,6 +898,14 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
         })
 
     content = image_blocks + [{"type": "text", "text": "Extrais les informations de cette fiche recette."}]
+
+    # Vérifié ici, juste avant le seul appel réseau réel de cette route —
+    # jamais avant, pour que le nombre de pages/la validité des images soit
+    # rejeté avec un vrai 400 même sans assistant configuré (voir
+    # tests/test_scan_api.py::TestAnalyzeGuards, dont c'est le contrat
+    # explicite : « rejette avant tout appel au fournisseur »).
+    if not anthropic_client:
+        raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
 
     try:
         response = await anthropic_client.messages.create(
@@ -3391,562 +3306,6 @@ async def _seed_demo_bots() -> None:
         await _create_friendship(owner["user_id"], bot["user_id"])
     logger.info(f"Auto-friended {len(DEMO_BOTS)} demo bots with {owner_email}")
 
-# ---------- Production planning ----------
-STEP_STATUSES = ("todo", "doing", "done")
-
-def _validate_date(value: str) -> str:
-    try:
-        datetime.strptime(value, "%Y-%m-%d")
-    except (ValueError, TypeError):
-        raise HTTPException(422, "Date invalide (format attendu : AAAA-MM-JJ)")
-    return value
-
-def _validate_time(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    try:
-        datetime.strptime(value, "%H:%M")
-    except ValueError:
-        raise HTTPException(422, "Heure invalide (format attendu : HH:MM)")
-    return value
-
-async def _build_lines_and_steps(inp: ProductionInput):
-    """Snapshot each recipe into the production.
-
-    Ingredients, steps and yield are copied in rather than referenced, so a
-    later edit to the recipe never silently rewrites a planning the baker has
-    already organised their night around.
-    """
-    lines, steps = [], []
-    for item in inp.lines:
-        if item.quantity is None or item.quantity <= 0:
-            raise HTTPException(422, "La quantité doit être supérieure à 0")
-        if item.mode not in ("pieces", "batches"):
-            raise HTTPException(422, "Mode invalide (attendu : pieces ou batches)")
-        recipe = await db.recipes.find_one({"id": item.recipe_id}, {"_id": 0})
-        if not recipe:
-            raise HTTPException(404, "Recette introuvable")
-        line_id = str(uuid.uuid4())
-        lines.append({
-            "line_id": line_id,
-            "recipe_id": recipe["id"],
-            "recipe_title": recipe.get("title") or "Recette",
-            "mode": item.mode,
-            "quantity": float(item.quantity),
-            "yield_pieces": recipe.get("yield_pieces"),
-            "ingredients": recipe.get("ingredients") or [],
-        })
-        steps.extend(production.build_steps(line_id, recipe.get("title") or "Recette", recipe.get("steps") or []))
-    return lines, steps
-
-def _carry_over_step_state(old_doc: dict, new_lines: list, new_steps: list) -> None:
-    """Preserve progress across an edit.
-
-    Steps are rebuilt from the recipes on every update, so they are matched back
-    to the old ones by (recipe, position). Without this, changing a quantity
-    would wipe the ticks of a baker already halfway through their morning.
-    """
-    old_line_recipe = {l["line_id"]: l.get("recipe_id") for l in old_doc.get("lines", [])}
-    previous = {}
-    for step in old_doc.get("steps", []):
-        key = (old_line_recipe.get(step.get("line_id")), step.get("order"))
-        previous[key] = step
-    new_line_recipe = {l["line_id"]: l.get("recipe_id") for l in new_lines}
-    for step in new_steps:
-        old = previous.get((new_line_recipe.get(step["line_id"]), step["order"]))
-        if not old:
-            continue
-        step["status"] = old.get("status", "todo")
-        # A duration the baker typed in is theirs to keep; one read from the
-        # recipe is re-derived so recipe fixes flow through.
-        if old.get("duration_source") == "manual" and old.get("duration_minutes") is not None:
-            step["duration_minutes"] = old["duration_minutes"]
-            step["duration_source"] = "manual"
-
-async def _productions_used_this_month(user_id: str) -> int:
-    now = datetime.now(timezone.utc)
-    start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-    return await db.productions.count_documents({"user_id": user_id, "created_at": {"$gte": start}})
-
-async def _plan_state(user: dict) -> dict:
-    plan = resolve_plan(user)
-    quota = production_quota(plan)
-    used = await _productions_used_this_month(user["user_id"])
-    return {
-        "plan": plan,
-        "limits": limits_for(plan),
-        "productions_used": used,
-        "productions_limit": quota,
-        "productions_remaining": None if quota is None else max(0, quota - used),
-        # Whether this user may be shown ads at all. Decided here rather than in
-        # the app so a Pro account can never be served one by a client bug.
-        "ads": ads_config(plan),
-    }
-
-async def _enforce_production_quota(user: dict) -> None:
-    """Server-side gate. The client is never trusted with this decision."""
-    state = await _plan_state(user)
-    quota = state["productions_limit"]
-    if quota is None or state["productions_used"] < quota:
-        return
-    # A structured payload, not a bare error: it lets the app present Baker Pro
-    # instead of a dead end.
-    raise HTTPException(403, {
-        "error": "plan_limit_reached",
-        "limit": quota,
-        "used": state["productions_used"],
-        "period": "month",
-        "message": f"Vous avez utilisé vos {quota} productions gratuites de ce mois-ci.",
-    })
-
-def _production_detail(doc: dict) -> dict:
-    doc.pop("_id", None)
-    computed = production.summarize(doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"))
-    return {**doc, **computed}
-
-def _production_summary(doc: dict) -> dict:
-    steps = doc.get("steps") or []
-    done = sum(1 for s in steps if s.get("status") == "done")
-    return {
-        "id": doc["id"],
-        "date": doc.get("date"),
-        "target_time": doc.get("target_time"),
-        "notes": doc.get("notes", ""),
-        "recipe_titles": [l.get("recipe_title") for l in doc.get("lines") or []],
-        "line_count": len(doc.get("lines") or []),
-        "steps_total": len(steps),
-        "steps_done": done,
-        "total_pieces": production.total_pieces([production.normalize_line(l) for l in doc.get("lines") or []]),
-        "created_at": doc.get("created_at"),
-    }
-
-@api_router.get("/me/plan")
-async def my_plan(user: dict = Depends(get_current_user)):
-    return await _plan_state(user)
-
-@api_router.get("/productions")
-async def list_productions(
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    user: dict = Depends(get_current_user),
-):
-    q = {"user_id": user["user_id"]}
-    if date_from or date_to:
-        rng = {}
-        if date_from:
-            rng["$gte"] = _validate_date(date_from)
-        if date_to:
-            rng["$lte"] = _validate_date(date_to)
-        q["date"] = rng
-    docs = await db.productions.find(q, {"_id": 0}).sort("date", -1).to_list(500)
-    return [_production_summary(d) for d in docs]
-
-@api_router.post("/productions")
-async def create_production(inp: ProductionInput, user: dict = Depends(get_current_user)):
-    await _enforce_production_quota(user)
-    date = _validate_date(inp.date)
-    target_time = _validate_time(inp.target_time)
-    lines, steps = await _build_lines_and_steps(inp)
-    now = datetime.now(timezone.utc)
-    doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
-        "date": date,
-        "target_time": target_time,
-        "notes": (inp.notes or "").strip(),
-        "lines": lines,
-        "steps": steps,
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db.productions.insert_one(doc)
-    return _production_detail(doc)
-
-@api_router.get("/productions/{production_id}")
-async def get_production(production_id: str, user: dict = Depends(get_current_user)):
-    # Scoped by user_id: someone else's id is indistinguishable from a missing one.
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Production introuvable")
-    return _production_detail(doc)
-
-@api_router.put("/productions/{production_id}")
-async def update_production(production_id: str, inp: ProductionInput, user: dict = Depends(get_current_user)):
-    existing = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not existing:
-        raise HTTPException(404, "Production introuvable")
-    date = _validate_date(inp.date)
-    target_time = _validate_time(inp.target_time)
-    lines, steps = await _build_lines_and_steps(inp)
-    _carry_over_step_state(existing, lines, steps)
-    update = {
-        "date": date,
-        "target_time": target_time,
-        "notes": (inp.notes or "").strip(),
-        "lines": lines,
-        "steps": steps,
-        "updated_at": datetime.now(timezone.utc),
-    }
-    await db.productions.update_one({"id": production_id, "user_id": user["user_id"]}, {"$set": update})
-    return _production_detail({**existing, **update})
-
-@api_router.delete("/productions/{production_id}")
-async def delete_production(production_id: str, user: dict = Depends(get_current_user)):
-    res = await db.productions.delete_one({"id": production_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "Production introuvable")
-    return {"status": "deleted"}
-
-@api_router.patch("/productions/{production_id}/steps/{step_id}")
-async def update_production_step(
-    production_id: str,
-    step_id: str,
-    inp: StepPatchInput,
-    user: dict = Depends(get_current_user),
-):
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Production introuvable")
-    step = next((s for s in doc.get("steps", []) if s.get("step_id") == step_id), None)
-    if not step:
-        raise HTTPException(404, "Étape introuvable")
-    if inp.status is not None:
-        if inp.status not in STEP_STATUSES:
-            raise HTTPException(422, f"Statut invalide (attendu : {', '.join(STEP_STATUSES)})")
-        step["status"] = inp.status
-    if inp.duration_minutes is not None:
-        if inp.duration_minutes < 0:
-            raise HTTPException(422, "La durée ne peut pas être négative")
-        step["duration_minutes"] = inp.duration_minutes
-        step["duration_source"] = "manual"
-    await db.productions.update_one(
-        {"id": production_id, "user_id": user["user_id"]},
-        {"$set": {"steps": doc["steps"], "updated_at": datetime.now(timezone.utc)}},
-    )
-    return _production_detail(doc)
-
-# ---------- Staff schedules ----------
-def _validate_week_start(value: str) -> str:
-    """The week always opens on a Sunday, matching the printed grid."""
-    try:
-        d = datetime.strptime(value, "%Y-%m-%d")
-    except (ValueError, TypeError):
-        raise HTTPException(422, "Date invalide (format attendu : AAAA-MM-JJ)")
-    # Monday is 0 in Python; Sunday is 6.
-    if d.weekday() != 6:
-        raise HTTPException(422, "La semaine doit commencer un dimanche")
-    return value
-
-def _build_schedule_employees(inp: ScheduleInput) -> list:
-    if len(inp.employees) > staff.MAX_EMPLOYEES:
-        raise HTTPException(422, f"{staff.MAX_EMPLOYEES} personnes au maximum")
-
-    employees = []
-    for item in inp.employees:
-        name = (item.name or "").strip()
-        if not name:
-            raise HTTPException(422, "Chaque personne doit avoir un nom")
-        if item.overtime_minutes < 0:
-            raise HTTPException(422, "Les heures supplémentaires ne peuvent pas être négatives")
-
-        days = [(d.model_dump() if d else None) for d in item.days][:staff.DAYS]
-        days += [None] * (staff.DAYS - len(days))
-        for day in days:
-            # Refuse unreadable times here rather than storing a cell that would
-            # silently count as zero hours in every total downstream.
-            if day and not day.get("off") and (day.get("start") or day.get("end")):
-                if staff.shift_minutes(day.get("start", ""), day.get("end", "")) is None:
-                    raise HTTPException(422, f"Horaire invalide pour {name} (format attendu : 8:00)")
-
-        employees.append({
-            "employee_id": item.employee_id or str(uuid.uuid4()),
-            "name": name,
-            "days": days,
-            "overtime_minutes": int(item.overtime_minutes),
-        })
-    return employees
-
-def _schedule_detail(doc: dict) -> dict:
-    doc.pop("_id", None)
-    return {**doc, **staff.summarize(doc.get("employees"))}
-
-def _schedule_summary(doc: dict) -> dict:
-    computed = staff.summarize(doc.get("employees"))
-    return {
-        "id": doc["id"],
-        "week_start": doc.get("week_start"),
-        "notes": doc.get("notes", ""),
-        "employee_count": len(doc.get("employees") or []),
-        "grand_total_minutes": computed["grand_total_minutes"],
-        "updated_at": doc.get("updated_at"),
-    }
-
-@api_router.get("/schedules")
-async def list_schedules(user: dict = Depends(get_current_user)):
-    docs = await db.schedules.find({"user_id": user["user_id"]}, {"_id": 0}).sort("week_start", -1).to_list(200)
-    return [_schedule_summary(d) for d in docs]
-
-@api_router.post("/schedules")
-async def create_schedule(inp: ScheduleInput, user: dict = Depends(get_current_user)):
-    week_start = _validate_week_start(inp.week_start)
-    employees = _build_schedule_employees(inp)
-    now = datetime.now(timezone.utc)
-    doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
-        "week_start": week_start,
-        "notes": (inp.notes or "").strip(),
-        "employees": employees,
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db.schedules.insert_one(doc)
-    return _schedule_detail(doc)
-
-@api_router.get("/schedules/{schedule_id}")
-async def get_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
-    doc = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Emploi du temps introuvable")
-    return _schedule_detail(doc)
-
-@api_router.put("/schedules/{schedule_id}")
-async def update_schedule(schedule_id: str, inp: ScheduleInput, user: dict = Depends(get_current_user)):
-    existing = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not existing:
-        raise HTTPException(404, "Emploi du temps introuvable")
-    update = {
-        "week_start": _validate_week_start(inp.week_start),
-        "notes": (inp.notes or "").strip(),
-        "employees": _build_schedule_employees(inp),
-        "updated_at": datetime.now(timezone.utc),
-    }
-    await db.schedules.update_one({"id": schedule_id, "user_id": user["user_id"]}, {"$set": update})
-    return _schedule_detail({**existing, **update})
-
-@api_router.delete("/schedules/{schedule_id}")
-async def delete_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
-    res = await db.schedules.delete_one({"id": schedule_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "Emploi du temps introuvable")
-    return {"status": "deleted"}
-
-@api_router.post("/schedules/{schedule_id}/duplicate")
-async def duplicate_schedule(schedule_id: str, inp: dict = None, user: dict = Depends(get_current_user)):
-    """Copy a week onto another one, keeping names, shifts and days off."""
-    source = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not source:
-        raise HTTPException(404, "Emploi du temps introuvable")
-
-    week_start = _validate_week_start((inp or {}).get("week_start") or "")
-    now = datetime.now(timezone.utc)
-    doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
-        "week_start": week_start,
-        # The note belongs to its week ("Armand off jeudi"), so it is not copied.
-        "notes": "",
-        "employees": [
-            {**e, "employee_id": str(uuid.uuid4())}
-            for e in (source.get("employees") or [])
-        ],
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db.schedules.insert_one(doc)
-    return _schedule_detail(doc)
-
-# ---------- Cost calculator (matières premières, coût de revient) ----------
-# Prices are per baker (user_id-scoped), not global: two bakeries pay two
-# different suppliers. A raw material is identified by its normalized name,
-# same key as `production.normalize_name` uses for the shopping list — one
-# matching rule for both features rather than two that could disagree.
-def _raw_material_doc(inp: RawMaterialInput, user_id: str, existing: Optional[dict] = None) -> dict:
-    name = inp.name.strip()
-    if not name:
-        raise HTTPException(422, "Le nom est obligatoire")
-    try:
-        derived = costing.derive_unit_prices(inp.purchase_price, inp.purchase_quantity, inp.purchase_unit)
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    now = datetime.now(timezone.utc)
-    doc = {
-        "name": name,
-        "category": (inp.category or None),
-        "supplier": (inp.supplier or None),
-        "purchase_price": inp.purchase_price,
-        "purchase_quantity": inp.purchase_quantity,
-        "purchase_unit": inp.purchase_unit,
-        **derived,
-        "updated_at": now,
-    }
-    if existing:
-        return {**existing, **doc}
-    doc.update({
-        "id": str(uuid.uuid4()),
-        "user_id": user_id,
-        "normalized_name": production.normalize_name(name),
-        "created_at": now,
-    })
-    return doc
-
-@api_router.get("/raw-materials")
-async def list_raw_materials(user: dict = Depends(get_current_user)):
-    return await db.raw_materials.find({"user_id": user["user_id"]}, {"_id": 0}).sort("name", 1).to_list(1000)
-
-@api_router.post("/raw-materials")
-async def upsert_raw_material(inp: RawMaterialInput, user: dict = Depends(get_current_user)):
-    """Create a raw material, or update it in place if the name already exists.
-
-    This is the "modifier facilement le prix" path: re-entering "Farine T65"
-    with a new price updates the same record instead of creating a duplicate
-    that the matching logic would then have to choose between.
-    """
-    normalized = production.normalize_name(inp.name.strip())
-    existing = await db.raw_materials.find_one({"user_id": user["user_id"], "normalized_name": normalized}, {"_id": 0})
-    doc = _raw_material_doc(inp, user["user_id"], existing)
-    if existing:
-        await db.raw_materials.update_one({"id": existing["id"]}, {"$set": doc})
-    else:
-        await db.raw_materials.insert_one(doc)
-        doc.pop("_id", None)
-    return doc
-
-@api_router.put("/raw-materials/{material_id}")
-async def update_raw_material(material_id: str, inp: RawMaterialInput, user: dict = Depends(get_current_user)):
-    existing = await db.raw_materials.find_one({"id": material_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not existing:
-        raise HTTPException(404, "Matière première introuvable")
-    normalized = production.normalize_name(inp.name.strip())
-    conflict = await db.raw_materials.find_one({
-        "user_id": user["user_id"], "normalized_name": normalized, "id": {"$ne": material_id},
-    })
-    if conflict:
-        raise HTTPException(409, f"« {conflict['name']} » existe déjà")
-    doc = _raw_material_doc(inp, user["user_id"], existing)
-    doc["normalized_name"] = normalized
-    await db.raw_materials.update_one({"id": material_id}, {"$set": doc})
-    return doc
-
-@api_router.delete("/raw-materials/{material_id}")
-async def delete_raw_material(material_id: str, user: dict = Depends(get_current_user)):
-    res = await db.raw_materials.delete_one({"id": material_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "Matière première introuvable")
-    return {"status": "deleted"}
-
-@api_router.get("/recipes/{recipe_id}/cost")
-async def recipe_cost_badge(recipe_id: str, user: dict = Depends(get_current_user)):
-    """The small "Coût estimé" badge on the recipe screen.
-
-    `available` is false whenever any ingredient's price is unknown — never a
-    number computed by silently skipping what's missing, which would read as
-    a real cost while actually being wrong.
-    """
-    recipe = await db.recipes.find_one({"id": recipe_id}, {"_id": 0})
-    if not recipe:
-        raise HTTPException(404, "Recette introuvable")
-    materials = await db.raw_materials.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
-    result = costing.compute_recipe_cost(
-        recipe.get("ingredients") or [], materials, [], [], recipe.get("yield_pieces"),
-    )
-    if result["has_missing_prices"] or result["cost_per_piece"] is None:
-        return {"available": False}
-    return {
-        "available": True,
-        "cost_per_piece": result["cost_per_piece"],
-        "total_cost": result["total_cost"],
-        "pieces": result["pieces"],
-    }
-
-@api_router.post("/cost/history")
-async def save_cost_calculation(inp: CostHistoryInput, user: dict = Depends(get_current_user)):
-    """Save a calculation as a frozen snapshot.
-
-    Results are computed once, here, and stored as-is: a later change to a
-    raw material's price must never rewrite a calculation already saved (the
-    baker priced last month's croissants at last month's flour price, and
-    that figure has to stay what it was).
-    """
-    materials = await db.raw_materials.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
-    packaging = [p.dict() for p in inp.packaging]
-    other_costs = [o.dict() for o in inp.other_costs]
-    result = costing.compute_recipe_cost(
-        inp.ingredients, materials, packaging, other_costs, inp.pieces, inp.price_overrides,
-    )
-    sale = costing.compute_sale_metrics(result["cost_per_piece"], inp.pieces, inp.sale_price_ht, inp.vat_rate)
-    now = datetime.now(timezone.utc)
-    doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
-        "recipe_id": inp.recipe_id,
-        "recipe_title": inp.recipe_title or "Calcul libre",
-        "input": inp.dict(),
-        "result": result,
-        "sale": sale,
-        "created_at": now,
-    }
-    await db.cost_calculations.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-@api_router.get("/cost/history")
-async def list_cost_history(recipe_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    q = {"user_id": user["user_id"]}
-    if recipe_id:
-        q["recipe_id"] = recipe_id
-    return await db.cost_calculations.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
-
-@api_router.get("/cost/history/{calc_id}")
-async def get_cost_history_entry(calc_id: str, user: dict = Depends(get_current_user)):
-    doc = await db.cost_calculations.find_one({"id": calc_id, "user_id": user["user_id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Calcul introuvable")
-    return doc
-
-@api_router.delete("/cost/history/{calc_id}")
-async def delete_cost_history_entry(calc_id: str, user: dict = Depends(get_current_user)):
-    res = await db.cost_calculations.delete_one({"id": calc_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "Calcul introuvable")
-    return {"status": "deleted"}
-
-# ---------- Tips ----------
-# The library stays small enough (a few hundred entries at most) that the app
-# fetches it whole and searches client-side, the same choice already made for
-# families/recipes browsing — one request, then instant local filtering
-# rather than a round trip on every keystroke.
-@api_router.get("/tips")
-async def list_tips(category: Optional[str] = None):
-    # "Toutes" is the tips chip's "no filter" label ("Tous" is the recipes
-    # one) — both are accepted so a client can't silently get zero results by
-    # sending the wrong one.
-    q = {}
-    if category and category not in ("Tous", "Toutes"):
-        q["category"] = category
-    cursor = db.tips.find(q, {"_id": 0})
-    return await cursor.to_list(500)
-
-@api_router.get("/tips/favorites")
-async def my_tip_favorites(user: dict = Depends(get_current_user)):
-    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(500)
-    ids = [f["tip_id"] for f in favs]
-    return await db.tips.find({"id": {"$in": ids}}, {"_id": 0}).to_list(500)
-
-@api_router.get("/tips/favorite-ids")
-async def my_tip_favorite_ids(user: dict = Depends(get_current_user)):
-    """The bare id set, for marking ⭐ on a whole list without one request per card."""
-    favs = await db.tip_favorites.find({"user_id": user["user_id"]}, {"_id": 0, "tip_id": 1}).to_list(500)
-    return [f["tip_id"] for f in favs]
-
-@api_router.post("/tips/{tip_id}/favorite")
-async def toggle_tip_favorite(tip_id: str, user: dict = Depends(get_current_user)):
-    existing = await db.tip_favorites.find_one({"user_id": user["user_id"], "tip_id": tip_id})
-    if existing:
-        await db.tip_favorites.delete_one({"user_id": user["user_id"], "tip_id": tip_id})
-        return {"favorited": False}
-    await db.tip_favorites.insert_one({"user_id": user["user_id"], "tip_id": tip_id, "created_at": datetime.now(timezone.utc)})
-    return {"favorited": True}
 
 # ---------- Categories ----------
 @api_router.get("/categories")
@@ -4254,6 +3613,10 @@ async def startup():
     await _seed_demo_bots()
 
 app.include_router(api_router)
+app.include_router(production_router)
+app.include_router(staff_router)
+app.include_router(cost_router)
+app.include_router(tips_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

@@ -1,6 +1,7 @@
 """Bakers app backend API tests"""
 import os
 import io
+import uuid
 import pytest
 import requests
 from PIL import Image
@@ -11,6 +12,14 @@ API = f"{BASE_URL}/api"
 TEST_EMAIL = "test.baker@bakers.app"
 TEST_PASS = "TestBaker2026!"
 TEST_NAME = "Chef Test"
+
+# TestChat appelle le vrai service Anthropic (payant, réseau réel) — ignoré
+# (skip) sans clé réelle configurée, jamais un appel simulé ici. Même
+# principe que requires_test_ban_word dans test_recipe_moderation.py.
+requires_anthropic_api_key = pytest.mark.skipif(
+    not os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+    reason="nécessite ANTHROPIC_API_KEY pour interroger l'assistant IA réel",
+)
 
 
 @pytest.fixture(scope="module")
@@ -107,6 +116,42 @@ class TestAuth:
         assert r.status_code == 401
 
 
+# --- Auth: token revocation (POST /auth/logout-all) ---
+# Utilise toujours son propre compte jetable, jamais le fixture `token`
+# partagé par tout le reste du module : incrémenter token_version sur le
+# compte TEST_EMAIL invaliderait le jeton mis en cache par ce fixture
+# module-scope pour chaque autre test qui s'exécute après.
+class TestAuthRevocation:
+    def _register(self):
+        email = f"revoke.test.{uuid.uuid4().hex[:10]}@bakers.app"
+        password = "RevokeTest2026!"
+        r = requests.post(f"{API}/auth/register", json={"email": email, "password": password, "name": "Revoke Test"}, timeout=30)
+        assert r.status_code == 200, r.text
+        return email, password, r.json()["token"]
+
+    def test_logout_all_invalidates_old_token(self):
+        email, password, token = self._register()
+        assert requests.get(f"{API}/auth/me", headers=auth_headers(token), timeout=30).status_code == 200
+
+        r = requests.post(f"{API}/auth/logout-all", headers=auth_headers(token), timeout=30)
+        assert r.status_code == 200
+
+        assert requests.get(f"{API}/auth/me", headers=auth_headers(token), timeout=30).status_code == 401
+
+    def test_fresh_login_after_logout_all_works(self):
+        email, password, token = self._register()
+        requests.post(f"{API}/auth/logout-all", headers=auth_headers(token), timeout=30)
+
+        r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=30)
+        assert r.status_code == 200
+        new_token = r.json()["token"]
+        assert requests.get(f"{API}/auth/me", headers=auth_headers(new_token), timeout=30).status_code == 200
+
+    def test_logout_all_requires_auth(self):
+        r = requests.post(f"{API}/auth/logout-all", timeout=30)
+        assert r.status_code == 401
+
+
 # --- Recipes CRUD ---
 class TestRecipes:
     def test_create_and_mine(self, token):
@@ -148,6 +193,7 @@ class TestRecipes:
 
 
 # --- Chat ---
+@requires_anthropic_api_key
 class TestChat:
     def test_chat_ai(self, token):
         r = requests.post(f"{API}/chat", json={"message": "Bonjour, hydratation 70% c'est bien?"}, headers=auth_headers(token), timeout=60)

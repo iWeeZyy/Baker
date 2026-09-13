@@ -228,7 +228,7 @@ export default function ShareRecipe() {
           <Field label="Nombre de pièces obtenues">
             <TextInput testID="input-yield" value={yieldPieces} onChangeText={setYieldPieces} placeholder="Ex : 3 baguettes" placeholderTextColor={colors.muted} style={styles.input} keyboardType="numeric" />
             <Text style={styles.fieldHint}>
-              Facultatif. Renseigné, il permet de planifier en pièces (« 40 baguettes ») plutôt qu'en fournées.
+              Facultatif. Renseigné, il permet de planifier en pièces (« 40 baguettes ») plutôt qu&apos;en fournées.
             </Text>
           </Field>
 

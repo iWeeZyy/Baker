@@ -9,6 +9,7 @@ indépendants du fournisseur et tournent toujours.
 """
 import io
 import os
+import uuid
 
 import pytest
 import requests
@@ -17,11 +18,21 @@ from PIL import Image
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 API = f"{BASE_URL}/api"
 
-TEST_EMAIL = "test.avatar.a@bakers.app"
+# Suffixed with a per-process random token rather than fixed: pytest-xdist's
+# --dist loadscope schedules different CLASSES of this same module onto
+# different worker processes, which can run concurrently. A fixed email
+# meant every worker's `token`/`token_b` fixture logged into (or raced to
+# register) the exact same account, so two classes running in parallel could
+# clobber each other's `picture` mid-test — a real, previously-observed race
+# (see the removed xdist-race skip this replaces), not an application bug.
+# Each worker importing this module gets its own suffix, so two concurrent
+# workers now always operate on genuinely different accounts.
+_SUFFIX = uuid.uuid4().hex[:8]
+TEST_EMAIL = f"test.avatar.a.{_SUFFIX}@bakers.app"
 TEST_PASS = "TestAvatarA2026!"
 TEST_NAME = "Chef Avatar A"
 
-TEST_EMAIL_B = "test.avatar.b@bakers.app"
+TEST_EMAIL_B = f"test.avatar.b.{_SUFFIX}@bakers.app"
 TEST_PASS_B = "TestAvatarB2026!"
 TEST_NAME_B = "Chef Avatar B"
 
@@ -63,7 +74,7 @@ def _solid_jpeg(color, size=(300, 300)):
     return buf
 
 
-def GREY(): return _solid_jpeg((150, 150, 150))
+def GREY(size=(300, 300)): return _solid_jpeg((150, 150, 150), size=size)
 def RED(): return _solid_jpeg((255, 0, 0))
 def ORANGE(): return _solid_jpeg((255, 150, 0))
 

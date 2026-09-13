@@ -1,0 +1,98 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' --quiet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGO_URL: mongodb://localhost:27017
+      DB_NAME: bakers_ci
+      JWT_SECRET: ci-test-secret-not-for-production
+      CORS_ORIGINS: "*"
+      ANTHROPIC_API_KEY: ""
+      # Test/dev only (see backend/.env.example) — makes the suite exercise the
+      # real BLOCKED/REVIEW/graduated-moderation paths instead of self-skipping,
+      # without any real banned word or Sightengine credential ever living here.
+      MODERATION_PROVIDER: stub
+      TEXT_MODERATION_TEST_BAN_WORDS: flibberdoodle-ci-only
+      TEXT_MODERATION_TEST_BAN_WORD_FOR_TESTS: flibberdoodle-ci-only
+      # Test/dev only — there is no billing provider (see plans.py), so Pro is
+      # granted purely by email allowlist. Setting it here lets
+      # test_ads.py::TestPlanEndpoint::test_pro_user_has_ads_off and
+      # test_productions_api.py::TestProPlan actually exercise the Pro path in
+      # CI instead of asserting against a permanently-free test account (the
+      # former) or self-skipping (the latter).
+      PRO_EMAILS: test.pro@bakers.app
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start server
+        run: |
+          nohup uvicorn server:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/families > /dev/null; then
+              echo "server is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server never became ready, uvicorn log follows:"
+          cat uvicorn.log
+          exit 1
+
+      - name: Run tests
+        run: pytest
+
+      - name: Server log (always, for debugging)
+        if: always()
+        run: cat uvicorn.log || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      EXPO_PUBLIC_BACKEND_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build web bundle (sanity check only — Render does the real deploy build)
+        run: npx expo export --platform web --output-dir dist

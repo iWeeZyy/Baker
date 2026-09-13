@@ -6,7 +6,7 @@ import os
 import pytest
 import requests
 
-BASE = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/")
+BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 EMAIL = "test.baker@bakers.app"
 PASSWORD = "TestBaker2026!"
 

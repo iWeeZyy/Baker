@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/src/auth';
+import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemePreference } from '@/src/ThemeContext';
 
@@ -34,9 +35,29 @@ export default function Settings() {
   const { colors, preference, setPreference } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, logoutAllDevices } = useAuth();
   const [busyKey, setBusyKey] = useState<NotifKey | null>(null);
   const [busyPrivacy, setBusyPrivacy] = useState(false);
+  const [busyLogoutAll, setBusyLogoutAll] = useState(false);
+
+  const handleLogoutAllDevices = async () => {
+    const confirmed = await confirmAsync(
+      'Se déconnecter de tous les appareils ?',
+      'Tous les appareils actuellement connectés à votre compte, y compris celui-ci, devront se reconnecter.',
+      'Déconnecter tout', true,
+    );
+    if (!confirmed) return;
+    setBusyLogoutAll(true);
+    try {
+      await logoutAllDevices();
+      // Plus rien à faire ensuite : logoutAllDevices() met `user` à null, ce
+      // qui déclenche la redirection vers /auth déjà gérée par
+      // (tabs)/_layout.tsx — même mécanisme qu'un logout() normal.
+    } catch (e) {
+      console.warn(e);
+      setBusyLogoutAll(false);
+    }
+  };
 
   const toggleNotif = async (key: NotifKey) => {
     if (busyKey) return;
@@ -147,6 +168,27 @@ export default function Settings() {
               </Pressable>
             );
           })}
+        </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>SÉCURITÉ</Text>
+        <View style={styles.card}>
+          <Pressable
+            testID="logout-all-devices"
+            onPress={handleLogoutAllDevices}
+            disabled={busyLogoutAll}
+            style={styles.row}
+            accessibilityRole="button"
+            accessibilityLabel="Se déconnecter de tous les appareils"
+          >
+            <View style={styles.rowIcon}>
+              <Feather name="shield-off" size={17} color={colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.error }]}>Se déconnecter de tous les appareils</Text>
+              <Text style={styles.rowBody}>Invalide immédiatement toute session ouverte ailleurs — utile si un appareil a été perdu ou volé.</Text>
+            </View>
+            {busyLogoutAll && <ActivityIndicator size="small" color={colors.error} />}
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
