@@ -61,7 +61,15 @@ def production_quota(plan: str) -> Optional[int]:
 # Ads are decided server-side for two reasons: a client bug can never show one
 # to a Pro user, and the frequency can be retuned without an App Store release.
 def ads_allowed(plan: str) -> bool:
-    """Only Free users may ever be shown an ad."""
+    """Only Free users may ever be shown an ad.
+
+    Deliberately phrased as "not Free" being ad-free, never as an enumerated
+    allow-list of paid tiers. `PLAN_LIMITS` only has FREE/PRO today, but a
+    future Pro+ or Équipe tier becomes ad-free automatically the moment
+    `resolve_plan()` returns anything other than FREE for it — no change
+    needed here. Rewriting this as `plan in (PRO, PRO_PLUS, TEAM)` would
+    silently start showing ads to any future tier someone forgets to list.
+    """
     return plan == FREE
 
 

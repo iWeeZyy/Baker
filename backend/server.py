@@ -40,6 +40,7 @@ from routers.production import router as production_router
 from routers.staff import router as staff_router
 from routers.cost import router as cost_router
 from routers.tips import router as tips_router
+from routers.ads import router as ads_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -3516,6 +3517,8 @@ async def startup():
     await db.tips.create_index("title", unique=True)
     await db.tips.create_index("category")
     await db.tip_favorites.create_index([("user_id", 1), ("tip_id", 1)], unique=True)
+    await db.ad_events.create_index("created_at")
+    await db.ad_events.create_index("event_type")
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
@@ -3617,6 +3620,7 @@ app.include_router(production_router)
 app.include_router(staff_router)
 app.include_router(cost_router)
 app.include_router(tips_router)
+app.include_router(ads_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

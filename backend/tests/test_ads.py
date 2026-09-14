@@ -170,3 +170,59 @@ class TestPlanEndpoint:
     def test_ad_settings_need_authentication(self):
         """No token, no plan — and therefore no ad configuration to leak."""
         assert requests.get(f"{API}/me/plan", timeout=30).status_code in (401, 403)
+
+
+class TestAdEvents:
+    """POST /ads/event — a minimal log, not an analytics platform.
+
+    The endpoint never gates on the caller's plan (a Pro account should
+    never call it in practice, since the client never renders an ad to
+    generate an event from — see AdSlot/canShowAds), so a client bug would
+    show up in the logged `plan` field rather than being silently dropped.
+    """
+
+    def test_requires_auth(self):
+        r = requests.post(
+            f"{API}/ads/event", json={"event_type": "impression", "placement": "home"}, timeout=30,
+        )
+        assert r.status_code in (401, 403)
+
+    def test_logs_a_valid_event(self):
+        token = _register()
+        r = requests.post(
+            f"{API}/ads/event",
+            json={"event_type": "impression", "placement": "home"},
+            headers={"Authorization": f"Bearer {token}"}, timeout=30,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "logged"
+
+    def test_rejects_unknown_event_type(self):
+        token = _register()
+        r = requests.post(
+            f"{API}/ads/event",
+            json={"event_type": "not-a-real-event", "placement": "home"},
+            headers={"Authorization": f"Bearer {token}"}, timeout=30,
+        )
+        assert r.status_code == 422
+
+    def test_rejects_unknown_placement(self):
+        token = _register()
+        r = requests.post(
+            f"{API}/ads/event",
+            json={"event_type": "impression", "placement": "not-a-real-placement"},
+            headers={"Authorization": f"Bearer {token}"}, timeout=30,
+        )
+        assert r.status_code == 422
+
+    @pytest.mark.parametrize("event_type", [
+        "impression", "click", "interstitial_shown", "rewarded_completed", "rewarded_skipped",
+    ])
+    def test_accepts_every_documented_event_type(self, event_type):
+        token = _register()
+        r = requests.post(
+            f"{API}/ads/event",
+            json={"event_type": event_type, "placement": "interstitial"},
+            headers={"Authorization": f"Bearer {token}"}, timeout=30,
+        )
+        assert r.status_code == 200, r.text
