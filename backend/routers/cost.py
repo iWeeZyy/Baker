@@ -14,8 +14,19 @@ from pydantic import BaseModel, Field
 import costing
 import production
 from core import db, get_current_user
+from gating import require
 
 router = APIRouter(prefix="/api")
+
+# Deux verrous seulement, et uniquement sur des écritures : créer ou modifier
+# une matière première (`cost_materials`), enregistrer un calcul de
+# rentabilité (`cost_profitability`).
+#
+# Ni les GET ni les DELETE n'en portent, délibérément. Les lectures, parce
+# qu'un compte qui redescend d'offre doit continuer de consulter ses propres
+# données. Les suppressions, parce qu'effacer est précisément ce qui fait
+# repasser sous un plafond : le bloquer enfermerait l'utilisateur au-dessus
+# de sa limite, sans issue.
 
 
 class RawMaterialInput(BaseModel):
@@ -82,7 +93,7 @@ async def list_raw_materials(user: dict = Depends(get_current_user)):
     return await db.raw_materials.find({"user_id": user["user_id"]}, {"_id": 0}).sort("name", 1).to_list(1000)
 
 @router.post("/raw-materials")
-async def upsert_raw_material(inp: RawMaterialInput, user: dict = Depends(get_current_user)):
+async def upsert_raw_material(inp: RawMaterialInput, user: dict = Depends(require(feature="cost_materials"))):
     """Create a raw material, or update it in place if the name already exists.
 
     This is the "modifier facilement le prix" path: re-entering "Farine T65"
@@ -100,7 +111,7 @@ async def upsert_raw_material(inp: RawMaterialInput, user: dict = Depends(get_cu
     return doc
 
 @router.put("/raw-materials/{material_id}")
-async def update_raw_material(material_id: str, inp: RawMaterialInput, user: dict = Depends(get_current_user)):
+async def update_raw_material(material_id: str, inp: RawMaterialInput, user: dict = Depends(require(feature="cost_materials"))):
     existing = await db.raw_materials.find_one({"id": material_id, "user_id": user["user_id"]}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Matière première introuvable")
@@ -147,7 +158,7 @@ async def recipe_cost_badge(recipe_id: str, user: dict = Depends(get_current_use
     }
 
 @router.post("/cost/history")
-async def save_cost_calculation(inp: CostHistoryInput, user: dict = Depends(get_current_user)):
+async def save_cost_calculation(inp: CostHistoryInput, user: dict = Depends(require(feature="cost_profitability"))):
     """Save a calculation as a frozen snapshot.
 
     Results are computed once, here, and stored as-is: a later change to a

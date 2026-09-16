@@ -25,6 +25,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 from core import db, client, get_current_user, sign_jwt, verify_jwt
+from gating import record_ai_usage, require
 import leaderboard
 import imaging
 import moderation
@@ -748,7 +749,7 @@ async def _moderate_and_flag(result: "text_moderation.TextModerationResult", con
         })
 
 @api_router.post("/recipes")
-async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current_user)):
+async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(require(quota="recipes_total"))):
     fields = inp.dict()
     # A client that sends no family — or an unknown one — still gets a browsable
     # recipe: the category's catch-all rather than nothing at all.
@@ -871,7 +872,10 @@ def _scan_ingredient_lines(ingredients: list) -> List[str]:
     return lines
 
 @api_router.post("/recipes/scan/analyze")
-async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+async def analyze_scanned_recipe(
+    files: List[UploadFile] = File(...),
+    user: dict = Depends(require(feature="recipe_scan", quota="scans_per_month")),
+):
     """Extrait les informations d'une ou plusieurs photos de fiche recette
     via Claude Vision — le même client que /chat, seul service IA du
     projet, appelé différemment (tool-use) pour garantir une sortie
@@ -920,6 +924,10 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (scan): {e}")
         raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    # Journalisé après coup : un appel qui a échoué n'a rien coûté à
+    # l'utilisateur et ne doit pas entamer son quota.
+    await record_ai_usage(user["user_id"], "scan")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -1004,7 +1012,7 @@ class InstagramCaptionInput(BaseModel):
     caption: str
 
 @api_router.post("/recipes/instagram-import/analyze")
-async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Depends(get_current_user)):
+async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Depends(require(feature="recipe_scan"))):
     """Extrait une recette d'une légende Instagram collée par l'utilisateur —
     même client Anthropic et même mécanisme tool-use que /recipes/scan/
     analyze, sans aucune image (texte seul, comme /adapt/interpret)."""
@@ -1028,6 +1036,8 @@ async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Dep
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (instagram-import): {e}")
         raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "instagram_import")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -1118,7 +1128,7 @@ class RecipeAdaptTextInput(BaseModel):
     text: str
 
 @api_router.post("/recipes/{recipe_id}/adapt/interpret")
-async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput, user: dict = Depends(get_current_user)):
+async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput, user: dict = Depends(require(feature="recipe_adapt"))):
     """Traduit une demande en langage naturel en paramètres structurés —
     jamais en quantités calculées. Le client fusionne ces paramètres dans
     la même requête que les contrôles manuels, puis appelle /adapt/preview
@@ -1140,6 +1150,8 @@ async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput,
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (adapt/interpret): {e}")
         raise HTTPException(502, "L'interprétation est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "adapt")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -3387,7 +3399,7 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 @api_router.post("/chat")
-async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
+async def chat(inp: ChatMessageInput, user: dict = Depends(require(feature="ai_assistant", quota="ai_messages_per_month"))):
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
     session_id = inp.session_id or f"{user['user_id']}_default"
@@ -3416,6 +3428,8 @@ async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error: {e}")
         raise HTTPException(502, "L'assistant IA est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "chat")
 
     resp_text = "".join(b.text for b in response.content if b.type == "text")
 
@@ -3519,6 +3533,9 @@ async def startup():
     await db.tip_favorites.create_index([("user_id", 1), ("tip_id", 1)], unique=True)
     await db.ad_events.create_index("created_at")
     await db.ad_events.create_index("event_type")
+    # Journal d'usage IA : sert les quotas mensuels (gating.usage), toujours
+    # interrogé par (user_id, kind, created_at).
+    await db.ai_usage.create_index([("user_id", 1), ("kind", 1), ("created_at", 1)])
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])

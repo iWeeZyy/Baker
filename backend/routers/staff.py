@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 import staff
 from core import db, get_current_user
+from gating import check
 
 router = APIRouter(prefix="/api")
 
@@ -100,6 +101,11 @@ async def list_schedules(user: dict = Depends(get_current_user)):
 async def create_schedule(inp: ScheduleInput, user: dict = Depends(get_current_user)):
     week_start = _validate_week_start(inp.week_start)
     employees = _build_schedule_employees(inp)
+    # `check` plutôt que la dépendance `require` : le plafond porte sur
+    # l'effectif de la grille envoyée, donc la quantité consommée n'est
+    # connue qu'une fois la charge utile validée.
+    await check(user, feature="staff_schedule",
+                quota="schedule_employees", amount=len(employees))
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
@@ -131,6 +137,8 @@ async def update_schedule(schedule_id: str, inp: ScheduleInput, user: dict = Dep
         "employees": _build_schedule_employees(inp),
         "updated_at": datetime.now(timezone.utc),
     }
+    await check(user, feature="staff_schedule",
+                quota="schedule_employees", amount=len(update["employees"]))
     await db.schedules.update_one({"id": schedule_id, "user_id": user["user_id"]}, {"$set": update})
     return _schedule_detail({**existing, **update})
 
