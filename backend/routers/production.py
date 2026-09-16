@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 import entitlements
 import production
 from core import db, get_current_user
+from gating import require
 from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
 
 router = APIRouter(prefix="/api")
@@ -154,22 +155,6 @@ async def _plan_state(user: dict) -> dict:
         "plans": entitlements.plan_catalogue(),
     }
 
-async def _enforce_production_quota(user: dict) -> None:
-    """Server-side gate. The client is never trusted with this decision."""
-    state = await _plan_state(user)
-    quota = state["productions_limit"]
-    if quota is None or state["productions_used"] < quota:
-        return
-    # A structured payload, not a bare error: it lets the app present Baker Pro
-    # instead of a dead end.
-    raise HTTPException(403, {
-        "error": "plan_limit_reached",
-        "limit": quota,
-        "used": state["productions_used"],
-        "period": "month",
-        "message": f"Vous avez utilisé vos {quota} productions gratuites de ce mois-ci.",
-    })
-
 def _production_detail(doc: dict) -> dict:
     doc.pop("_id", None)
     computed = production.summarize(doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"))
@@ -213,8 +198,10 @@ async def list_productions(
     return [_production_summary(d) for d in docs]
 
 @router.post("/productions")
-async def create_production(inp: ProductionInput, user: dict = Depends(get_current_user)):
-    await _enforce_production_quota(user)
+async def create_production(
+    inp: ProductionInput,
+    user: dict = Depends(require(quota="productions_per_month")),
+):
     date = _validate_date(inp.date)
     target_time = _validate_time(inp.target_time)
     lines, steps = await _build_lines_and_steps(inp)
