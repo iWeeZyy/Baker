@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { api } from './api';
+import { useEntitlements } from './entitlements';
 
 /** Les quatre offres, dans l'ordre. Miroir d'`entitlements.TIER_ORDER`. */
 export type PlanTier = 'free' | 'pro' | 'pro_plus' | 'team';
@@ -65,22 +64,17 @@ export function isPlanLimitError(e: any): boolean {
 /**
  * The user's plan and quota. Display only — the limit itself is enforced
  * server-side, so this never decides whether an action is allowed.
+ *
+ * A thin re-export of `useEntitlements()` (src/entitlements.ts): the actual
+ * `/me/plan` request is shared across the whole app through
+ * `EntitlementsProvider`, mounted once in `app/_layout.tsx`, rather than
+ * refetched by every screen that calls this hook. `reload` keeps its
+ * original name here for the two existing call sites
+ * (`app/(tabs)/planning.tsx`, `app/production/new.tsx`) that still ask for
+ * it under that name; new code should prefer `useEntitlements()` directly,
+ * which also exposes `can()`/`minPlanFor()`/`quota()`.
  */
 export function usePlan() {
-  const [plan, setPlan] = useState<PlanState | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const reload = useCallback(async () => {
-    try {
-      setPlan(await api('/me/plan'));
-    } catch {
-      setPlan(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  return { plan, loading, reload };
+  const { plan, loading, refresh } = useEntitlements();
+  return { plan, loading, reload: refresh };
 }

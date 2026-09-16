@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/auth";
 import { AdsProvider } from "@/src/ads";
+import { EntitlementsProvider } from "@/src/entitlements";
 import { TimerProvider } from "@/src/TimerContext";
 import { ThemeProvider, useTheme } from "@/src/ThemeContext";
 import TimerBar from "@/src/TimerBar";
@@ -23,15 +24,21 @@ function AppShell() {
   const { colors, mode } = useTheme();
   return (
     <AuthProvider>
-      {/* Inside AuthProvider: the ad layer reads the signed-in user's plan. */}
-      <AdsProvider>
-        <TimerProvider>
-          <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
-          <TimerBar />
-          <UnlockToast />
-        </TimerProvider>
-      </AdsProvider>
+      {/* Inside AuthProvider: both read the signed-in user's plan. Independent
+          of each other — AdsProvider makes its own /me/plan call rather than
+          reading EntitlementsProvider's, an accepted small duplication (see
+          CLAUDE.md, "Offres et droits") rather than touching the shipped ads
+          chantier to shave one request. */}
+      <EntitlementsProvider>
+        <AdsProvider>
+          <TimerProvider>
+            <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
+            <TimerBar />
+            <UnlockToast />
+          </TimerProvider>
+        </AdsProvider>
+      </EntitlementsProvider>
     </AuthProvider>
   );
 }
