@@ -9,8 +9,10 @@ modules qui importaient déjà `plans.FREE`/`plans.PRO` n'aient rien à changer.
 Brancher un vrai fournisseur de facturation ne touchera que `resolve_plan`.
 """
 import os
+from datetime import datetime
 from typing import Optional
 
+import subscription_state
 from entitlements import (  # noqa: F401  (ré-exports : plans.FREE, plans.PRO…)
     FREE,
     PRO,
@@ -65,11 +67,27 @@ def _plan_overrides() -> dict:
     return out
 
 
-def resolve_plan(user: dict) -> str:
+def resolve_plan(user: dict, subscription: Optional[dict] = None,
+                 now: Optional[datetime] = None) -> str:
     """The plan actually in force for a user, never trusting client input.
 
-    `PRO_EMAILS` est consulté en premier et reste prioritaire : c'est la
-    liste historique, celle sur laquelle reposent la CI et les tests existants.
+    Quatre sources, dans cet ordre exact :
+
+    1. `PRO_EMAILS` — la liste historique. Elle reste **prioritaire sur
+       l'abonnement** : c'est elle qui fait tourner la CI et les tests
+       existants, et elle doit continuer de fonctionner même une fois la
+       facturation branchée, sans quoi vérifier un palier en recette
+       demanderait de fabriquer un faux abonnement.
+    2. `PLAN_OVERRIDES` — même rôle, pour les paliers que la première ne sait
+       pas exprimer.
+    3. L'abonnement, quand on en a un sous la main. Le paramètre est optionnel
+       : les appelants qui n'en ont pas gardent exactement le comportement
+       d'avant, donc rien de ce qui existe ne casse.
+    4. `user.plan`, qu'aucune route n'écrit — il ne peut venir que de la base,
+       jamais d'une requête ni d'un jeton.
+
+    Reste **pure** : `subscription` et `now` sont injectés, la lecture en base
+    vit dans `subscriptions.py`.
     """
     email = (user.get("email") or "").lower()
     if email in _pro_emails():
@@ -77,8 +95,12 @@ def resolve_plan(user: dict) -> str:
     override = _plan_overrides().get(email)
     if override:
         return override
-    # `plan` n'est écrit par aucune route : il ne peut venir que de la base,
-    # jamais d'une requête ni d'un jeton. Un palier inconnu retombe sur Free.
+    if subscription is not None:
+        accorde = subscription_state.plan_of(subscription, now)
+        if accorde != FREE:
+            return accorde
+        # Un abonnement expiré ne « masque » pas un palier posé en base à la
+        # main : on retombe sur la source suivante plutôt que sur Free d'office.
     return normalize(user.get("plan"))
 
 

@@ -34,8 +34,9 @@ from typing import Optional
 from fastapi import Depends, HTTPException
 
 import entitlements
+import subscriptions
 from core import db, get_current_user
-from plans import entitlements_enforced, resolve_plan
+from plans import entitlements_enforced
 
 # Ce qui était déjà appliqué avant ce chantier, et le reste quoi qu'il arrive.
 # Voir la propriété 1 du module : l'interrupteur n'a pas le droit de desserrer
@@ -110,7 +111,7 @@ async def check(user: dict, *, feature: Optional[str] = None,
     (une grille de personnel enregistre N employés en une requête).
     """
     enforced = entitlements_enforced()
-    plan = resolve_plan(user)
+    plan = await subscriptions.plan_for(user)
 
     # Les fonctionnalités réservées sont toutes nouvelles : tant que
     # l'abonnement n'est pas achetable, elles sont déclarées sans être

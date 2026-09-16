@@ -42,6 +42,7 @@ from routers.staff import router as staff_router
 from routers.cost import router as cost_router
 from routers.tips import router as tips_router
 from routers.ads import router as ads_router
+from routers.subscription import router as subscription_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -3536,6 +3537,9 @@ async def startup():
     # Journal d'usage IA : sert les quotas mensuels (gating.usage), toujours
     # interrogé par (user_id, kind, created_at).
     await db.ai_usage.create_index([("user_id", 1), ("kind", 1), ("created_at", 1)])
+    # Un abonnement par utilisateur : l'unicité est ce qui empêche deux
+    # documents concurrents d'accorder deux paliers différents au même compte.
+    await db.subscriptions.create_index("user_id", unique=True)
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
@@ -3638,6 +3642,7 @@ app.include_router(staff_router)
 app.include_router(cost_router)
 app.include_router(tips_router)
 app.include_router(ads_router)
+app.include_router(subscription_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

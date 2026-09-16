@@ -2,6 +2,14 @@
 
 Each class registers its own account so one test's schedules never appear in
 another's listing. The server must be running (see CLAUDE.md).
+
+Creating/updating a schedule became Pro-gated (`staff_schedule`, see
+gating.py/routers/staff.py); any account that has to *create* a schedule here
+uses the `PRO_EMAIL` override (`PRO_EMAILS`, see plans.py and ci.yml) so this
+file keeps exercising the feature itself regardless of
+`ENTITLEMENTS_ENFORCED` — the refusal path belongs to `test_gating_api.py`.
+An account that only ever reads or is denied access to someone else's
+schedule (never creates one) stays a plain throwaway Free account.
 """
 import os
 import uuid
@@ -16,18 +24,32 @@ SUNDAY = "2026-08-23"       # a real Sunday
 NEXT_SUNDAY = "2026-08-30"
 MONDAY = "2026-08-24"
 
+PRO_EMAIL = os.environ.get('TEST_PRO_EMAIL', 'test.pro@bakers.app')
+# The Pro account is a fixed, shared address: whichever test file registers it
+# first owns it. This password must therefore match test_productions_api.py/
+# test_ads.py, or the file that runs second gets a 401 on login.
+PRO_PASSWORD = 'TestProd2026!'
+
 
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def register():
-    email = f"staff.{uuid.uuid4().hex[:10]}@bakers.app"
+def register(email=None):
+    email = email or f"staff.{uuid.uuid4().hex[:10]}@bakers.app"
+    password = PRO_PASSWORD if email == PRO_EMAIL else "TestStaff2026!"
     r = requests.post(
         f"{API}/auth/register",
-        json={"email": email, "password": "TestStaff2026!", "name": "Gérant"},
+        json={"email": email, "password": password, "name": "Gérant"},
         timeout=30,
     )
+    if r.status_code == 400:  # already exists (the fixed Pro address)
+        r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=30)
+        if r.status_code == 401:
+            # Exists with a different password: reused dev DB, not a
+            # regression — same convention as test_entitlements_api.py's
+            # `_token()`. In CI the DB is fresh, so this never triggers.
+            pytest.skip(f"{email} existe déjà avec un autre mot de passe (base non vierge)")
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
@@ -46,7 +68,7 @@ def employee(name, *days, overtime=0):
 
 @pytest.fixture(scope="class")
 def token():
-    return register()
+    return register(PRO_EMAIL)
 
 
 class TestScheduleCrud:
@@ -185,8 +207,8 @@ class TestValidation:
 
 class TestPermissions:
     def test_another_users_schedule_is_not_found(self):
-        mine = register()
-        theirs = register()
+        mine = register(PRO_EMAIL)  # must create a schedule
+        theirs = register()  # only ever denied access, never creates one
         created = requests.post(f"{API}/schedules", json={
             "week_start": SUNDAY, "employees": [employee("SECRET", day("8:00", "9:00"))],
         }, headers=auth_headers(mine), timeout=30).json()
@@ -235,7 +257,7 @@ class TestDuplicate:
         assert r.status_code == 422
 
     def test_duplicating_someone_elses_schedule_is_not_found(self):
-        mine, theirs = register(), register()
+        mine, theirs = register(PRO_EMAIL), register()
         source = requests.post(f"{API}/schedules", json={"week_start": SUNDAY, "employees": []},
                                headers=auth_headers(mine), timeout=30).json()
         r = requests.post(f"{API}/schedules/{source['id']}/duplicate",

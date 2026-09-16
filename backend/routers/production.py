@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 import entitlements
 import production
+import subscriptions
 from core import db, get_current_user
 from gating import require
 from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
@@ -124,7 +125,8 @@ async def _plan_state(user: dict) -> dict:
     et leur forme. Les clés `enforced`/`features`/`quotas`/`plans` s'ajoutent
     à côté pour les quatre offres.
     """
-    plan = resolve_plan(user)
+    sub = await subscriptions.get_subscription(user["user_id"])
+    plan = resolve_plan(user, sub)
     quota = production_quota(plan)
     used = await _productions_used_this_month(user["user_id"])
     enforced = entitlements_enforced()
@@ -153,6 +155,9 @@ async def _plan_state(user: dict) -> dict:
         # à partir du serveur : changer un prix ou ajouter un palier ne
         # demande alors aucune livraison sur les stores.
         "plans": entitlements.plan_catalogue(),
+        # Où en est l'abonnement lui-même — distinct de « à quoi ai-je droit ».
+        # Neutre tant que rien n'est achetable, jamais une date inventée.
+        "subscription": subscriptions.public_state(sub),
     }
 
 def _production_detail(doc: dict) -> dict:

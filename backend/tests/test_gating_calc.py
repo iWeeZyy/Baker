@@ -60,8 +60,13 @@ def switch(monkeypatch):
 
 @pytest.fixture
 def as_plan(monkeypatch):
+    """Impose le palier sans abonnement réel : `check()` lit
+    `subscriptions.plan_for(user)`, phase 5 l'ayant remplacé à l'ancien
+    `resolve_plan(user)` direct pour prendre en compte un abonnement."""
     def _set(plan: str):
-        monkeypatch.setattr(gating, "resolve_plan", lambda _user: plan)
+        async def _fake_plan_for(_user, *_a, **_k):
+            return plan
+        monkeypatch.setattr(gating.subscriptions, "plan_for", _fake_plan_for)
     return _set
 
 
