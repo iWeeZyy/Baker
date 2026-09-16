@@ -1,32 +1,39 @@
-"""Free / Pro plan definitions.
+"""Ce qui dépend de l'environnement : palier en vigueur, publicité.
 
-Single source of truth for what each plan allows. Kept apart from server.py so
-the limits can be reasoned about (and tested) on their own, and so plugging a
-real billing provider in later only touches `resolve_plan`.
+La table des droits elle-même vit dans `entitlements.py`, pur et sans
+`os.environ` — ici on ne garde que ce qui lit la configuration du serveur
+(liste d'e-mails, interrupteurs) et ce qui en découle. Les quatre offres
+(`FREE`/`PRO`/`PRO_PLUS`/`TEAM`) sont ré-exportées ci-dessous pour que les
+modules qui importaient déjà `plans.FREE`/`plans.PRO` n'aient rien à changer.
+
+Brancher un vrai fournisseur de facturation ne touchera que `resolve_plan`.
 """
 import os
 from typing import Optional
 
-FREE = "free"
-PRO = "pro"
+from entitlements import (  # noqa: F401  (ré-exports : plans.FREE, plans.PRO…)
+    FREE,
+    PRO,
+    PRO_PLUS,
+    TEAM,
+    TIER_ORDER,
+    normalize,
+    quota,
+)
 
-# `None` means unlimited. Feature flags are declared here even when the feature
-# is not built yet, so shipping one later is a flag flip rather than a redesign.
+# Forme héritée, conservée telle quelle parce qu'une application déjà livrée
+# lit ces clés dans `/me/plan`. Les quatre drapeaux ne sont appliqués nulle
+# part (aucune de ces fonctionnalités n'est construite) ; le seul chiffre qui
+# compte vraiment, `productions_per_month`, est tiré d'`entitlements` pour
+# qu'il n'existe qu'à un seul endroit.
+_LEGACY_FLAGS = ("multi_day", "recurring", "sharing", "full_history")
+
 PLAN_LIMITS = {
-    FREE: {
-        "productions_per_month": 3,
-        "multi_day": False,
-        "recurring": False,
-        "sharing": False,
-        "full_history": False,
-    },
-    PRO: {
-        "productions_per_month": None,
-        "multi_day": True,
-        "recurring": True,
-        "sharing": True,
-        "full_history": True,
-    },
+    tier: {
+        "productions_per_month": quota(tier, "productions_per_month"),
+        **{flag: tier != FREE for flag in _LEGACY_FLAGS},
+    }
+    for tier in TIER_ORDER
 }
 
 
@@ -41,15 +48,53 @@ def _pro_emails() -> set:
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
+def _plan_overrides() -> dict:
+    """`PLAN_OVERRIDES="a@b.fr:team,c@d.fr:pro_plus"` — e-mail → palier.
+
+    Même rôle que `PRO_EMAILS`, étendu aux paliers que celui-ci ne sait pas
+    exprimer. Côté serveur, donc infalsifiable par un client, et destiné à
+    disparaître derrière un vrai abonnement. Un palier inconnu est ignoré
+    plutôt que d'accorder quoi que ce soit.
+    """
+    out = {}
+    for entry in os.environ.get("PLAN_OVERRIDES", "").split(","):
+        email, _, tier = entry.partition(":")
+        email, tier = email.strip().lower(), tier.strip().lower()
+        if email and tier in TIER_ORDER:
+            out[email] = tier
+    return out
+
+
 def resolve_plan(user: dict) -> str:
-    """The plan actually in force for a user, never trusting client input."""
-    if (user.get("email") or "").lower() in _pro_emails():
+    """The plan actually in force for a user, never trusting client input.
+
+    `PRO_EMAILS` est consulté en premier et reste prioritaire : c'est la
+    liste historique, celle sur laquelle reposent la CI et les tests existants.
+    """
+    email = (user.get("email") or "").lower()
+    if email in _pro_emails():
         return PRO
-    return PRO if user.get("plan") == PRO else FREE
+    override = _plan_overrides().get(email)
+    if override:
+        return override
+    # `plan` n'est écrit par aucune route : il ne peut venir que de la base,
+    # jamais d'une requête ni d'un jeton. Un palier inconnu retombe sur Free.
+    return normalize(user.get("plan"))
+
+
+def entitlements_enforced() -> bool:
+    """Les droits sont-ils réellement appliqués, ou seulement déclarés ?
+
+    Défaut **off**, même esprit que `ADS_ENABLED` : tant que l'abonnement
+    n'est pas achetable, refuser une fonctionnalité reviendrait à la retirer
+    à tout le monde sans aucun moyen de la débloquer. Éteint, le serveur
+    calcule et annonce les droits mais ne bloque rien.
+    """
+    return _env_flag("ENTITLEMENTS_ENFORCED")
 
 
 def limits_for(plan: str) -> dict:
-    return PLAN_LIMITS.get(plan, PLAN_LIMITS[FREE])
+    return PLAN_LIMITS.get(normalize(plan), PLAN_LIMITS[FREE])
 
 
 def production_quota(plan: str) -> Optional[int]:

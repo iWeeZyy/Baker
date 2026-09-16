@@ -37,6 +37,11 @@ jobs:
       # CI instead of asserting against a permanently-free test account (the
       # former) or self-skipping (the latter).
       PRO_EMAILS: test.pro@bakers.app
+      # Test/dev only, même rôle que PRO_EMAILS ci-dessus mais pour les paliers
+      # que celui-ci ne sait pas exprimer. Sans ça, test_entitlements_api.py
+      # s'ignorerait faute de compte Pro+/Équipe et les droits des deux paliers
+      # supérieurs ne seraient jamais exercés de bout en bout en CI.
+      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team
     defaults:
       run:
         working-directory: backend

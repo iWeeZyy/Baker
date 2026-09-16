@@ -13,9 +13,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import entitlements
 import production
 from core import db, get_current_user
-from plans import ads_config, limits_for, production_quota, resolve_plan
+from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
 
 router = APIRouter(prefix="/api")
 
@@ -115,9 +116,17 @@ async def _productions_used_this_month(user_id: str) -> int:
     return await db.productions.count_documents({"user_id": user_id, "created_at": {"$gte": start}})
 
 async def _plan_state(user: dict) -> dict:
+    """La charge utile de `/me/plan`.
+
+    Elle **s'étend, ne rétrécit jamais** : une application déjà livrée lit
+    `plan`, `limits`, `productions_*` et `ads`, donc ces clés gardent leur nom
+    et leur forme. Les clés `enforced`/`features`/`quotas`/`plans` s'ajoutent
+    à côté pour les quatre offres.
+    """
     plan = resolve_plan(user)
     quota = production_quota(plan)
     used = await _productions_used_this_month(user["user_id"])
+    enforced = entitlements_enforced()
     return {
         "plan": plan,
         "limits": limits_for(plan),
@@ -127,6 +136,22 @@ async def _plan_state(user: dict) -> dict:
         # Whether this user may be shown ads at all. Decided here rather than in
         # the app so a Pro account can never be served one by a client bug.
         "ads": ads_config(plan),
+        # Les droits sont-ils réellement appliqués ? L'application n'a pas à le
+        # savoir — `locked` ci-dessous replie déjà la réponse — mais l'écran
+        # d'abonnement l'affiche pour ne rien promettre de faux.
+        "enforced": enforced,
+        # Par fonctionnalité : `allowed` = la vérité de l'offre (argumentaire),
+        # `locked` = ce que l'application doit respecter. Le seul champ sur
+        # lequel un écran a le droit de brancher est `locked`.
+        "features": entitlements.features_for(plan, enforced),
+        # Plafonds seuls pour l'instant : `used`/`remaining` demandent de
+        # compter en base, ce que gating.py apportera avec les compteurs.
+        # `productions_*` ci-dessus reste le seul compteur déjà réel.
+        "quotas": entitlements.quotas_for(plan),
+        # Le catalogue des offres, pour que l'écran d'abonnement se construise
+        # à partir du serveur : changer un prix ou ajouter un palier ne
+        # demande alors aucune livraison sur les stores.
+        "plans": entitlements.plan_catalogue(),
     }
 
 async def _enforce_production_quota(user: dict) -> None:
