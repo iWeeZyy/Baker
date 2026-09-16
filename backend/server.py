@@ -3540,6 +3540,20 @@ async def startup():
     # Un abonnement par utilisateur : l'unicité est ce qui empêche deux
     # documents concurrents d'accorder deux paliers différents au même compte.
     await db.subscriptions.create_index("user_id", unique=True)
+    # Organisations (offre Équipe, phase 7a) — voir org_scope.py/organisations.py.
+    await db.organisations.create_index("id", unique=True)
+    # Pas d'unicité sur owner_user_id : rien n'interdit à un compte de
+    # posséder plusieurs organisations, aucune règle métier ne le demande.
+    await db.organisations.create_index("owner_user_id")
+    # Une ligne par (organisation, personne) : réinviter quelqu'un qui a
+    # quitté ré-active sa ligne existante plutôt que d'en créer une seconde.
+    await db.org_members.create_index([("org_id", 1), ("user_id", 1)], unique=True)
+    # Mes organisations actives (get_org_context) ; le roster d'une
+    # organisation et le comptage du quota org_members.
+    await db.org_members.create_index([("user_id", 1), ("status", 1)])
+    await db.org_members.create_index([("org_id", 1), ("status", 1)])
+    await db.org_invites.create_index([("to_user_id", 1), ("status", 1)])
+    await db.org_invites.create_index([("org_id", 1), ("status", 1)])
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
