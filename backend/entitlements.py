@@ -76,8 +76,12 @@ def normalize(tier: Optional[str]) -> str:
 MIN_TIER: Dict[str, str] = {
     # Recettes
     "recipes_unlimited": PRO,
-    "recipe_scan": PRO,
-    "recipe_adapt": PRO,
+    # Scan et adaptation sont désormais ouverts à Free : c'est leur quota
+    # d'essai (scans_total/adapts_total, voir QUOTAS) qui les borne, pas un
+    # verrou de palier. Rester monotone : Pro/Pro+/Équipe restent au moins
+    # aussi permissifs (quota illimité).
+    "recipe_scan": FREE,
+    "recipe_adapt": FREE,
     "recipe_history": PRO,
     "sub_recipes": PRO,
     # Assistant
@@ -89,8 +93,13 @@ MIN_TIER: Dict[str, str] = {
     "cost_profitability": PRO_PLUS,  # analyse, simulation de prix de vente
     # Production
     "production_advanced": PRO_PLUS,
-    "staff_schedule": PRO,
+    # Ouvert à Free depuis le chantier des quotas d'essai — borné par le
+    # quota stock schedules_total (3 grilles conservées), pas verrouillé.
+    "staff_schedule": FREE,
     "fournil_mode": PRO_PLUS,
+    # Collections — quota stock (collections_total), jamais verrouillé par
+    # palier : ouvert à tous, Free simplement plus borné.
+    "collections": FREE,
     # Organisation
     "org_team": TEAM,
     "org_tasks": TEAM,
@@ -113,12 +122,32 @@ def has_feature(tier: str, key: str) -> bool:
 # qui sépare les offres.
 QUOTAS: Dict[str, Dict[str, Optional[int]]] = {
     FREE: {
-        "recipes_total": 10,
+        # Illimité : plus aucun plafond sur le nombre de recettes créées.
+        "recipes_total": None,
         "productions_per_month": 3,
-        "ai_messages_per_month": 15,
-        "scans_per_month": 0,
-        "schedule_employees": 0,
+        "ai_messages_per_month": 10,
+        # Même valeur que scans_total (ci-dessous), délibérément redondant :
+        # un plafond à vie de 3 rend de toute façon un plafond mensuel de 3
+        # sans effet propre (jamais atteint avant l'autre), mais `None` ici
+        # casserait la monotonie de CETTE clé prise isolément en passant à
+        # 30 pour Pro (`TestMonotonie` le vérifie colonne par colonne, sans
+        # connaître le lien entre les deux quotas) — 3 garde la séquence
+        # 3 → 30 → illimité → illimité strictement croissante.
+        "scans_per_month": 3,
+        # Plafond d'effectif par grille envoyée — 8, pas 0, sinon le
+        # déverrouillage de staff_schedule resterait sans effet pratique
+        # (toute grille non vide aurait continué d'être refusée). Le nombre
+        # de grilles elles-mêmes est borné séparément par schedules_total.
+        "schedule_employees": 8,
         "org_members": 0,
+        # --- Quotas d'essai gratuits (nouveaux) ---
+        # Usage : consommé à vie, jamais remboursé par une suppression.
+        "scans_total": 3,
+        "adapts_total": 5,
+        # Stock : compte les documents actuellement existants — en
+        # supprimer un libère une place.
+        "collections_total": 3,
+        "schedules_total": 3,
     },
     PRO: {
         "recipes_total": None,
@@ -127,6 +156,10 @@ QUOTAS: Dict[str, Dict[str, Optional[int]]] = {
         "scans_per_month": 30,
         "schedule_employees": 15,
         "org_members": 0,
+        "scans_total": None,
+        "adapts_total": None,
+        "collections_total": None,
+        "schedules_total": None,
     },
     PRO_PLUS: {
         "recipes_total": None,
@@ -135,6 +168,10 @@ QUOTAS: Dict[str, Dict[str, Optional[int]]] = {
         "scans_per_month": None,
         "schedule_employees": 15,
         "org_members": 0,
+        "scans_total": None,
+        "adapts_total": None,
+        "collections_total": None,
+        "schedules_total": None,
     },
     TEAM: {
         "recipes_total": None,
@@ -143,12 +180,26 @@ QUOTAS: Dict[str, Dict[str, Optional[int]]] = {
         "scans_per_month": None,
         "schedule_employees": 15,
         "org_members": 15,
+        "scans_total": None,
+        "adapts_total": None,
+        "collections_total": None,
+        "schedules_total": None,
     },
 }
 
 # Sur quelle fenêtre un quota se compte. Alimente le champ `period` de la
 # réponse 403, qui était écrit en dur à "month" tant que le seul quota
 # existant était mensuel.
+#
+# "total"  : comptage EN DIRECT des documents existants — supprimer un
+#            document libère une place (recipes_total, schedules_total,
+#            collections_total, schedule_employees, org_members).
+# "month"  : comptage filtré sur le mois calendaire glissant en cours —
+#            remis à zéro le 1er du mois (productions_per_month,
+#            ai_messages_per_month, scans_per_month).
+# "usage"  : comptage cumulatif À VIE, à partir d'un journal d'événements
+#            (db.ai_usage) — jamais remis à zéro, jamais remboursé par la
+#            suppression du contenu produit (scans_total, adapts_total).
 QUOTA_PERIOD: Dict[str, str] = {
     "recipes_total": "total",
     "productions_per_month": "month",
@@ -156,6 +207,10 @@ QUOTA_PERIOD: Dict[str, str] = {
     "scans_per_month": "month",
     "schedule_employees": "total",
     "org_members": "total",
+    "scans_total": "usage",
+    "adapts_total": "usage",
+    "collections_total": "total",
+    "schedules_total": "total",
 }
 
 QUOTA_KEYS = tuple(QUOTA_PERIOD)

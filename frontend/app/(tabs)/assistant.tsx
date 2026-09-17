@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useEntitlements } from '@/src/entitlements';
+import { LimitReachedNotice } from '@/src/PlanChip';
+import { QuotaBanner } from '@/src/QuotaBanner';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -18,6 +22,14 @@ const SUGGESTIONS = [
 export default function Assistant() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
+  const { quota } = useEntitlements();
+  // ai_messages_per_month : quota mensuel (10 pour Free, mécanique
+  // inchangée depuis avant ce chantier — seul le chiffre a changé). Le
+  // seul écran de toute l'app où l'assistant se voit vraiment utiliser
+  // n'affichait encore aucun compteur.
+  const messagesQuota = quota('ai_messages_per_month');
+  const limitReached = messagesQuota?.limit != null && (messagesQuota.remaining ?? 1) <= 0;
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,6 +76,11 @@ export default function Assistant() {
       <View style={styles.header}>
         <Text style={styles.brandLabel}>ASSISTANT IA</Text>
         <Text style={styles.title}>Le Maître Boulanger</Text>
+        <QuotaBanner
+          quotaKey="ai_messages_per_month"
+          style={{ marginTop: 10 }}
+          label={({ used, limit }) => `${used}/${limit} messages utilisés ce mois-ci — renouvelé chaque mois`}
+        />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={80}>
@@ -102,29 +119,38 @@ export default function Assistant() {
           )}
         </ScrollView>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            testID="chat-input"
-            value={input}
-            onChangeText={setInput}
-            placeholder="Votre question…"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            multiline
-            editable={!loading}
-            onSubmitEditing={() => send()}
+        {limitReached ? (
+          <LimitReachedNotice
+            minPlan="pro"
+            label={`Vous avez utilisé vos ${messagesQuota!.limit} messages gratuits ce mois-ci`}
+            onPress={() => router.push('/pro' as any)}
+            style={{ marginHorizontal: 24, marginBottom: 16 }}
           />
-          <Pressable
-            testID="chat-send"
-            onPress={() => send()}
-            disabled={!input.trim() || loading}
-            style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.4 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Envoyer"
-          >
-            <Feather name="arrow-up" size={20} color={colors.onBrandPrimary} />
-          </Pressable>
-        </View>
+        ) : (
+          <View style={styles.inputRow}>
+            <TextInput
+              testID="chat-input"
+              value={input}
+              onChangeText={setInput}
+              placeholder="Votre question…"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              multiline
+              editable={!loading}
+              onSubmitEditing={() => send()}
+            />
+            <Pressable
+              testID="chat-send"
+              onPress={() => send()}
+              disabled={!input.trim() || loading}
+              style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer"
+            >
+              <Feather name="arrow-up" size={20} color={colors.onBrandPrimary} />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

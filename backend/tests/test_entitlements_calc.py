@@ -71,10 +71,21 @@ class TestMonotonie:
 
 class TestFonctionnalites:
     @pytest.mark.parametrize("key", [
-        "recipes_unlimited", "recipe_scan", "recipe_adapt", "cost_basic", "staff_schedule",
+        "recipes_unlimited", "cost_basic",
     ])
     def test_free_n_a_pas_les_fonctionnalites_pro(self, key):
         assert ent.has_feature(FREE, key) is False
+        assert ent.has_feature(PRO, key) is True
+
+    @pytest.mark.parametrize("key", [
+        # Ouverts à Free depuis le chantier des quotas d'essai : la
+        # fonctionnalité elle-même n'est plus verrouillée, c'est son quota
+        # (scans_total/adapts_total/schedules_total/collections_total) qui
+        # borne l'essai gratuit.
+        "recipe_scan", "recipe_adapt", "staff_schedule", "collections",
+    ])
+    def test_free_a_les_fonctionnalites_a_quota_d_essai(self, key):
+        assert ent.has_feature(FREE, key) is True
         assert ent.has_feature(PRO, key) is True
 
     @pytest.mark.parametrize("key", [
@@ -104,14 +115,28 @@ class TestFonctionnalites:
 
 class TestQuotas:
     def test_chiffres_demandes_par_lucas(self):
-        assert ent.quota(FREE, "recipes_total") == 10
+        assert ent.quota(FREE, "recipes_total") is None
         assert ent.quota(FREE, "productions_per_month") == 3
+        assert ent.quota(FREE, "ai_messages_per_month") == 10
+        assert ent.quota(FREE, "scans_total") == 3
+        assert ent.quota(FREE, "adapts_total") == 5
+        assert ent.quota(FREE, "collections_total") == 3
+        assert ent.quota(FREE, "schedules_total") == 3
         assert ent.quota(TEAM, "org_members") == 15
 
     def test_paliers_payants_sans_limite_de_recettes(self):
         for tier in (PRO, PRO_PLUS, TEAM):
             assert ent.quota(tier, "recipes_total") is None
             assert ent.quota(tier, "productions_per_month") is None
+
+    def test_paliers_payants_sans_limite_d_essai(self):
+        """Une fois payant, plus de plafond à vie sur le scan/l'adaptation/
+        les collections/les plannings — le palier gratuit est seul borné."""
+        for tier in (PRO, PRO_PLUS, TEAM):
+            assert ent.quota(tier, "scans_total") is None
+            assert ent.quota(tier, "adapts_total") is None
+            assert ent.quota(tier, "collections_total") is None
+            assert ent.quota(tier, "schedules_total") is None
 
     def test_seule_l_offre_equipe_a_des_membres(self):
         for tier in (FREE, PRO, PRO_PLUS):
@@ -123,19 +148,24 @@ class TestQuotas:
                 assert key in ent.QUOTAS[tier], f"{key} manque à {tier}"
 
     def test_within_quota(self):
-        assert ent.within_quota(FREE, "recipes_total", 9) is True
-        assert ent.within_quota(FREE, "recipes_total", 10) is False
-        assert ent.within_quota(FREE, "recipes_total", 42) is False
+        assert ent.within_quota(FREE, "collections_total", 2) is True
+        assert ent.within_quota(FREE, "collections_total", 3) is False
+        assert ent.within_quota(FREE, "collections_total", 42) is False
 
     def test_illimite_laisse_toujours_passer(self):
-        assert ent.within_quota(PRO, "recipes_total", 10_000) is True
+        assert ent.within_quota(PRO, "collections_total", 10_000) is True
+        assert ent.within_quota(FREE, "recipes_total", 10_000) is True
 
     def test_quota_a_zero_bloque_des_le_premier(self):
-        assert ent.within_quota(FREE, "scans_per_month", 0) is False
+        assert ent.within_quota(FREE, "org_members", 0) is False
 
     def test_periodes(self):
         assert ent.quota_period("productions_per_month") == "month"
         assert ent.quota_period("recipes_total") == "total"
+        assert ent.quota_period("scans_total") == "usage"
+        assert ent.quota_period("adapts_total") == "usage"
+        assert ent.quota_period("collections_total") == "total"
+        assert ent.quota_period("schedules_total") == "total"
 
     def test_quota_inconnu_leve(self):
         with pytest.raises(KeyError):
@@ -177,8 +207,12 @@ class TestChargeUtile:
     def test_quotas_for_expose_plafond_et_periode(self):
         quotas = ent.quotas_for(FREE)
         assert set(quotas) == set(ent.QUOTA_KEYS)
-        assert quotas["recipes_total"] == {"limit": 10, "period": "total"}
+        assert quotas["recipes_total"] == {"limit": None, "period": "total"}
         assert quotas["productions_per_month"]["limit"] == 3
+        assert quotas["scans_total"] == {"limit": 3, "period": "usage"}
+        assert quotas["adapts_total"] == {"limit": 5, "period": "usage"}
+        assert quotas["collections_total"] == {"limit": 3, "period": "total"}
+        assert quotas["schedules_total"] == {"limit": 3, "period": "total"}
 
     def test_palier_inconnu_traite_comme_free(self):
         assert ent.quotas_for("platine") == ent.quotas_for(FREE)

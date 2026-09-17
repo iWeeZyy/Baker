@@ -107,9 +107,14 @@ async def create_schedule(
     employees = _build_schedule_employees(inp)
     # `check` plutôt que la dépendance `require` : le plafond porte sur
     # l'effectif de la grille envoyée, donc la quantité consommée n'est
-    # connue qu'une fois la charge utile validée.
+    # connue qu'une fois la charge utile validée. `schedules_total` (une
+    # grille de plus, stock — supprimer une grille libère une place) ne se
+    # vérifie qu'à la création, jamais à la modification d'une grille déjà
+    # possédée (voir update_schedule ci-dessous, qui ne revérifie que
+    # schedule_employees).
     await check(user, feature="staff_schedule",
-                quota="schedule_employees", amount=len(employees), org=org)
+                quotas=[("schedules_total", 1), ("schedule_employees", len(employees))],
+                org=org)
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),

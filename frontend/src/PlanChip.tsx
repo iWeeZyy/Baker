@@ -65,6 +65,33 @@ export function LockedFeatureNotice({
   );
 }
 
+/**
+ * Le pendant de `LockedFeatureNotice` pour un cas différent : la
+ * fonctionnalité EST accessible à ce palier, l'essai gratuit est
+ * simplement épuisé (`plan_limit_reached`, pas `plan_feature_locked`).
+ * Même langage visuel (icône, chip, chevron) que `LockedFeatureNotice` —
+ * seule l'icône change (une alerte plutôt qu'un cadenas, puisque rien
+ * n'est verrouillé) — pour que les deux se lisent comme une seule famille
+ * plutôt que deux composants sans rapport. `label` est obligatoire ici,
+ * contrairement à `LockedFeatureNotice` : le texte doit dire CE quota
+ * précis ("vos 3 scans gratuits"), un mot générique comme "Verrouillé"
+ * n'aurait aucun sens pour une fonctionnalité qu'on a le droit d'utiliser.
+ */
+export function LimitReachedNotice({
+  minPlan, label, onPress, style,
+}: { minPlan: PlanTier; label: string; onPress: () => void; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Pressable testID="limit-reached-notice" onPress={onPress} style={[styles.notice, style]}>
+      <Feather name="alert-circle" size={15} color={colors.onSurfaceSecondary} />
+      <Text style={styles.noticeText}>{label}</Text>
+      <PlanChip tier={minPlan} />
+      <Feather name="chevron-right" size={16} color={colors.muted} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   chipText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },

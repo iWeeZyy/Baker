@@ -26,10 +26,26 @@ Trois propriétés tiennent tout le reste :
    toujours `{"error": "plan_limit_reached", "limit", "used", "period",
    "message"}` — forme déjà lue par `isPlanLimitError` et par la redirection
    vers l'écran d'abonnement. La forme `plan_feature_locked` la rejoint pour
-   les fonctionnalités réservées, et le frontend traite les deux pareil.
+   les fonctionnalités réservées, et le frontend traite les deux pareil. Un
+   champ `"quota"` (la clé précise) s'y ajoute depuis le chantier des
+   quotas d'essai Free, pour les routes qui vérifient plusieurs quotas à la
+   fois (voir `quotas=` sur `check()`/`require()`) — un client qui ignore ce
+   champ continue de fonctionner à l'identique.
+
+**Concurrence, assumé** : `check()` puis l'insertion qui suit forment deux
+étapes séparées (lire le compteur, puis écrire) — deux requêtes simultanées
+peuvent en théorie toutes les deux lire un compteur encore sous la limite
+et toutes les deux passer. Cette fenêtre existe déjà, sans correctif,
+depuis les tout premiers quotas de ce module (`recipes_total`,
+`productions_per_month`) ; les nouveaux quotas d'essai Free héritent
+délibérément de la même caractéristique plutôt que d'introduire un
+mécanisme de verrouillage atomique parallèle, à l'échelle de cette
+application (usage réel, pas un système à fort trafic). La mitigation
+pratique reste côté client : désactiver le bouton d'action pendant la
+requête en vol, déjà le patron partout dans l'app.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from fastapi import Depends, HTTPException
 
@@ -101,6 +117,35 @@ async def usage(user_id: str, key: str, *, org_id: Optional[str] = None) -> int:
         # l'effectif, donc l'appelant passe `amount=len(employees)` et il n'y
         # a rien à compter en base.
         return 0
+    if key == "scans_total":
+        # Usage à vie, jamais filtré par date : contrairement à
+        # scans_per_month (le quota mensuel payant, inchangé), un scan
+        # gratuit consommé reste consommé même si la recette qui en est
+        # issue est supprimée ensuite — journal d'événements, pas un compte
+        # de documents. Compte aussi bien `kind="scan"` (photo) que
+        # `kind="instagram_import"` (légende collée) : les deux routes
+        # partagent la fonctionnalité `recipe_scan` et doivent partager le
+        # même plafond d'essai, sans quoi l'import Instagram contournerait
+        # librement le quota du scan photo.
+        return await db.ai_usage.count_documents(
+            {"user_id": user_id, "kind": {"$in": ["scan", "instagram_import"]}})
+    if key == "adapts_total":
+        # Même logique que scans_total. `record_ai_usage(user_id, "adapt")`
+        # est déjà appelé après chaque adaptation IA réussie (server.py) —
+        # ce quota est la première chose à en tenir compte.
+        return await db.ai_usage.count_documents({"user_id": user_id, "kind": "adapt"})
+    if key == "collections_total":
+        # Stock, jamais org-scopé : les collections n'ont aucune intégration
+        # organisation dans ce code, contrairement aux productions/grilles.
+        return await db.collections.count_documents({"user_id": user_id})
+    if key == "schedules_total":
+        # Stock : nombre de grilles actuellement conservées (supprimer une
+        # grille libère une place) — même mécanique que recipes_total, sur
+        # une collection différente. Org-scopé comme schedule_employees et
+        # productions_per_month : des collègues partageant un planning
+        # épuisent le même quota.
+        filtre = {"org_id": org_id} if org_id else {"user_id": user_id}
+        return await db.schedules.count_documents(filtre)
     raise KeyError(f"quota sans compteur : {key}")
 
 
@@ -111,6 +156,10 @@ _QUOTA_LIBELLES = {
     "scans_per_month": "scans de recette",
     "schedule_employees": "employés",
     "org_members": "membres d'équipe",
+    "scans_total": "scans de recette gratuits",
+    "adapts_total": "adaptations gratuites",
+    "collections_total": "collections",
+    "schedules_total": "plannings personnel",
 }
 
 
@@ -126,11 +175,24 @@ def _quota_message(key: str, limit: int, period: str) -> str:
 
 async def check(user: dict, *, feature: Optional[str] = None,
                 quota: Optional[str] = None, amount: int = 1,
+                quotas: Optional[List[Tuple[str, int]]] = None,
                 org: Optional[dict] = None) -> None:
     """Lève si le palier ne permet pas l'action. Ne renvoie rien sinon.
 
     `amount` sert aux écritures qui consomment plus d'une unité d'un coup
     (une grille de personnel enregistre N employés en une requête).
+
+    `quotas`, optionnel : une liste de `(clé, quantité)` quand une route doit
+    satisfaire PLUSIEURS quotas indépendants à la fois, avec des quantités
+    différentes — le cas du scan (un quota d'essai à vie `scans_total` ET le
+    quota mensuel payant `scans_per_month`, préexistant, inchangé, tous deux
+    amount=1) ou d'une grille de personnel (`schedules_total`, amount=1 —
+    une grille de plus — ET `schedule_employees`, amount=len(employees)).
+    `quota`/`amount` reste le raccourci pour le cas à un seul quota (la
+    majorité des routes) ; les deux formes se combinent si besoin. Chaque
+    quota de la liste est vérifié indépendamment — le premier qui échoue
+    lève pour SA clé précise (voir le champ `"quota"` de l'erreur), les
+    autres ne sont jamais atteints.
 
     `org`, optionnel (le contexte rendu par `organisations.get_org_context`) :
     quand fourni et non vide, le palier appliqué est celui du **propriétaire**
@@ -158,35 +220,40 @@ async def check(user: dict, *, feature: Optional[str] = None,
                        f"{entitlements.PLAN_LABELS[required]}.",
         })
 
-    if not quota:
-        return
-    if not (enforced or quota in ALWAYS_ENFORCED_QUOTAS):
-        return
+    a_verifier: List[Tuple[str, int]] = list(quotas or [])
+    if quota:
+        a_verifier = [(quota, amount)] + a_verifier
 
-    limit = entitlements.quota(plan, quota)
-    if limit is None:
-        return
-    used = await usage(user["user_id"], quota, org_id=(org or {}).get("org_id"))
-    if used + amount <= limit:
-        return
-    period = entitlements.quota_period(quota)
-    raise HTTPException(403, {
-        "error": "plan_limit_reached",
-        "limit": limit,
-        "used": used,
-        "period": period,
-        "message": _quota_message(quota, limit, period),
-    })
+    for cle, qte in a_verifier:
+        if not (enforced or cle in ALWAYS_ENFORCED_QUOTAS):
+            continue
+        limit = entitlements.quota(plan, cle)
+        if limit is None:
+            continue
+        used = await usage(user["user_id"], cle, org_id=(org or {}).get("org_id"))
+        if used + qte <= limit:
+            continue
+        period = entitlements.quota_period(cle)
+        raise HTTPException(403, {
+            "error": "plan_limit_reached",
+            "quota": cle,
+            "limit": limit,
+            "used": used,
+            "period": period,
+            "message": _quota_message(cle, limit, period),
+        })
 
 
 def require(*, feature: Optional[str] = None, quota: Optional[str] = None,
-            amount: int = 1, org_aware: bool = False):
+            amount: int = 1, quotas: Optional[List[Tuple[str, int]]] = None,
+            org_aware: bool = False):
     """Dépendance FastAPI : remplace `Depends(get_current_user)` en place.
 
         async def create_recipe(inp, user: dict = Depends(require(quota="recipes_total"))):
 
     Elle renvoie le même document utilisateur, pour que la signature et le
-    corps de la route restent inchangés.
+    corps de la route restent inchangés. `quotas` (liste de `(clé, quantité)`)
+    se combine avec `quota`/`amount` — voir `check()`.
 
     `org_aware=True` résout aussi le contexte d'organisation de l'appelant
     (`organisations.get_org_context`) et le passe à `check()` — à utiliser
@@ -197,7 +264,7 @@ def require(*, feature: Optional[str] = None, quota: Optional[str] = None,
     """
     if not org_aware:
         async def dependency(user: dict = Depends(get_current_user)) -> dict:
-            await check(user, feature=feature, quota=quota, amount=amount)
+            await check(user, feature=feature, quota=quota, amount=amount, quotas=quotas)
             return user
         return dependency
 
@@ -205,7 +272,7 @@ def require(*, feature: Optional[str] = None, quota: Optional[str] = None,
 
     async def dependency(user: dict = Depends(get_current_user),
                          org: dict = Depends(get_org_context)) -> dict:
-        await check(user, feature=feature, quota=quota, amount=amount, org=org)
+        await check(user, feature=feature, quota=quota, amount=amount, quotas=quotas, org=org)
         return user
     return dependency
 

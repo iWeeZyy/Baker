@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
 import { useEntitlements } from '@/src/entitlements';
-import { LockedFeatureNotice } from '@/src/PlanChip';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
@@ -51,12 +51,16 @@ export default function ScheduleScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
-  const { can } = useEntitlements();
-  // Seuls POST/PUT /schedules sont verrouillés côté serveur — un emploi du
-  // temps déjà enregistré reste consultable, exportable et imprimable même
-  // pour un compte redescendu d'offre ; seul le fait d'enregistrer une
-  // nouvelle modification l'est.
-  const saveLocked = !can('staff_schedule');
+  const { quota } = useEntitlements();
+  // Le planning personnel n'est plus verrouillé par palier (chantier des
+  // quotas d'essai) : `staff_schedule` est désormais accessible à Free,
+  // borné par `schedules_total` — un quota stock (3 grilles CONSERVÉES,
+  // supprimer en libère une), vérifié côté serveur uniquement à la
+  // CRÉATION (jamais à la modification, voir gating.py) : un planning déjà
+  // enregistré reste éditable/exportable/imprimable même une fois le
+  // plafond atteint.
+  const schedulesQuota = quota('schedules_total');
+  const limitReached = isNew && schedulesQuota?.limit != null && (schedulesQuota.remaining ?? 1) <= 0;
 
   const [weekStart, setWeekStart] = useState(sundayOf());
   const [notes, setNotes] = useState('');
@@ -446,11 +450,11 @@ export default function ScheduleScreen() {
           {error && <Text style={styles.error} testID="schedule-error">{error}</Text>}
           {flash && <Text style={styles.flash} testID="schedule-flash">{flash}</Text>}
 
-          {saveLocked ? (
-            <LockedFeatureNotice
+          {limitReached ? (
+            <LimitReachedNotice
               minPlan="pro"
-              label="Créer/modifier un planning est réservé à l'offre Pro"
-              onPress={() => router.push('/pro?feature=staff_schedule' as any)}
+              label={`Vous avez utilisé vos ${schedulesQuota!.limit} plannings gratuits`}
+              onPress={() => router.push('/pro' as any)}
               style={{ marginTop: 22 }}
             />
           ) : (

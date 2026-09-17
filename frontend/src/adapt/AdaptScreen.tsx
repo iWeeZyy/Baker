@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '@/src/api';
 import { useEntitlements } from '@/src/entitlements';
-import { LockedFeatureNotice } from '@/src/PlanChip';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import {
   type AdaptationRequest, type AdaptationResult, type FermentationSuggestion,
   emptyAdaptationRequest, isAdaptationRequestEmpty,
@@ -29,14 +29,17 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
-  const { can } = useEntitlements();
   // Seul /adapt/interpret (la case "Demander une adaptation" en langage
-  // naturel) est verrouillé côté serveur — les contrôles manuels
-  // (quantité, hydratation, pourcentages, substitution, fermentation)
-  // passent par /adapt/preview, gratuit pour tout le monde. Ne pas
-  // verrouiller l'écran entier reviendrait à retirer une fonctionnalité
-  // que personne n'a jamais payée pour avoir.
-  const adaptLocked = !can('recipe_adapt');
+  // naturel) est borné côté serveur — les contrôles manuels (quantité,
+  // hydratation, pourcentages, substitution, fermentation) passent par
+  // /adapt/preview, gratuit pour tout le monde. Ne pas verrouiller l'écran
+  // entier reviendrait à retirer une fonctionnalité que personne n'a
+  // jamais payée pour avoir. `recipe_adapt` n'est plus verrouillé par
+  // palier (chantier des quotas d'essai) : accessible à Free, borné par
+  // `adapts_total` (5 adaptations gratuites à vie, jamais remboursées).
+  const { quota } = useEntitlements();
+  const adaptsQuota = quota('adapts_total');
+  const adaptLimitReached = adaptsQuota?.limit != null && (adaptsQuota.remaining ?? 1) <= 0;
 
   const [loading, setLoading] = useState(true);
   const [recipe, setRecipe] = useState<any>(null);
@@ -471,11 +474,11 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
             </Section>
 
             <Section icon="🤖" title="Demander une adaptation">
-              {adaptLocked ? (
-                <LockedFeatureNotice
+              {adaptLimitReached ? (
+                <LimitReachedNotice
                   minPlan="pro"
-                  label="L'adaptation en langage naturel est réservée à l'offre Pro"
-                  onPress={() => router.push('/pro?feature=recipe_adapt' as any)}
+                  label={`Vous avez utilisé vos ${adaptsQuota!.limit} adaptations gratuites`}
+                  onPress={() => router.push('/pro' as any)}
                 />
               ) : (
                 <>

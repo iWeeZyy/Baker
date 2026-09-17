@@ -877,7 +877,13 @@ def _scan_ingredient_lines(ingredients: list) -> List[str]:
 @api_router.post("/recipes/scan/analyze")
 async def analyze_scanned_recipe(
     files: List[UploadFile] = File(...),
-    user: dict = Depends(require(feature="recipe_scan", quota="scans_per_month")),
+    # Deux quotas indépendants, tous deux amount=1 : scans_total (l'essai
+    # gratuit Free, 3 à vie, jamais remboursé) et scans_per_month (le quota
+    # mensuel payant préexistant, 30/mois pour Pro, illimité au-delà) —
+    # scans_total vaut None dès Pro (pas de plafond à vie une fois payant),
+    # scans_per_month vaut None pour Free (débloqué, borné par scans_total
+    # à la place) : un seul des deux borne réellement, selon le palier.
+    user: dict = Depends(require(feature="recipe_scan", quotas=[("scans_total", 1), ("scans_per_month", 1)])),
 ):
     """Extrait les informations d'une ou plusieurs photos de fiche recette
     via Claude Vision — le même client que /chat, seul service IA du
@@ -1015,7 +1021,15 @@ class InstagramCaptionInput(BaseModel):
     caption: str
 
 @api_router.post("/recipes/instagram-import/analyze")
-async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Depends(require(feature="recipe_scan"))):
+async def analyze_instagram_caption(
+    inp: InstagramCaptionInput,
+    # Même feature ET même quota d'essai que /recipes/scan/analyze : deux
+    # façons d'obtenir une extraction assistée par IA, un seul droit et un
+    # seul compteur qui les couvre (scans_total compte les deux `kind`,
+    # voir gating.usage()) — sinon l'import Instagram contournerait
+    # librement le plafond gratuit du scan.
+    user: dict = Depends(require(feature="recipe_scan", quota="scans_total")),
+):
     """Extrait une recette d'une légende Instagram collée par l'utilisateur —
     même client Anthropic et même mécanisme tool-use que /recipes/scan/
     analyze, sans aucune image (texte seul, comme /adapt/interpret)."""
@@ -1131,7 +1145,13 @@ class RecipeAdaptTextInput(BaseModel):
     text: str
 
 @api_router.post("/recipes/{recipe_id}/adapt/interpret")
-async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput, user: dict = Depends(require(feature="recipe_adapt"))):
+async def interpret_recipe_adaptation(
+    recipe_id: str, inp: RecipeAdaptTextInput,
+    # adapts_total : essai gratuit Free (5 à vie, jamais remboursé) ;
+    # None dès Pro, comme aujourd'hui (aucun autre mécanisme de comptage
+    # n'existait avant ce quota — illimité une fois débloqué).
+    user: dict = Depends(require(feature="recipe_adapt", quota="adapts_total")),
+):
     """Traduit une demande en langage naturel en paramètres structurés —
     jamais en quantités calculées. Le client fusionne ces paramètres dans
     la même requête que les contrôles manuels, puis appelle /adapt/preview
@@ -1741,7 +1761,13 @@ async def get_collection(collection_id: str, user: dict = Depends(get_current_us
     return {**c, "recipe_count": count}
 
 @api_router.post("/collections")
-async def create_collection(inp: CollectionInput, user: dict = Depends(get_current_user)):
+async def create_collection(
+    inp: CollectionInput,
+    # collections_total : stock (3 pour Free, illimité dès Pro) — supprimer
+    # une collection libère une place. Aucune garde n'existait avant ce
+    # chantier sur cette route.
+    user: dict = Depends(require(quota="collections_total")),
+):
     _validate_collection_input(inp)
     doc = {
         "id": str(uuid.uuid4()), "user_id": user["user_id"],

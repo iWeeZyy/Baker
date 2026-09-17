@@ -49,6 +49,7 @@ const FEATURE_LABELS: Record<string, string> = {
   pro_orders: 'Commandes professionnelles',
   org_dashboard: 'Tableau de bord',
   org_multi_shop: 'Multi-boutiques',
+  collections: 'Collections',
 };
 
 const QUOTA_LABELS: Record<string, (n: number) => string> = {
@@ -58,13 +59,32 @@ const QUOTA_LABELS: Record<string, (n: number) => string> = {
   scans_per_month: (n) => `${n} scan${n > 1 ? 's' : ''} / mois`,
   schedule_employees: (n) => `${n} employé${n > 1 ? 's' : ''} au planning`,
   org_members: (n) => `${n} membre${n > 1 ? 's' : ''} d'équipe`,
+  scans_total: (n) => `${n} scan${n > 1 ? 's' : ''} de recette`,
+  adapts_total: (n) => `${n} adaptation${n > 1 ? 's' : ''} de recette`,
+  collections_total: (n) => `${n} collection${n > 1 ? 's' : ''}`,
+  schedules_total: (n) => `${n} planning${n > 1 ? 's' : ''} personnel${n > 1 ? 's' : ''}`,
 };
 
+/**
+ * `scans_per_month` (le quota mensuel payant) et `scans_total` (l'essai
+ * gratuit à vie) coexistent dans `entitlements.QUOTAS` pour que la colonne
+ * `scans_per_month` elle-même reste monotone (Free=3 → Pro=30 → illimité,
+ * voir entitlements.py) — mais pour Free les deux valent 3 : afficher les
+ * deux ferait apparaître deux plafonds de scan qui se chevauchent sur la
+ * même carte. Masqué seulement quand `scans_total` est lui-même fini pour
+ * cette offre (Free) ; pour Pro (`scans_total` illimité), `scans_per_month`
+ * reste affiché normalement — c'est la seule vraie contrainte de son offre.
+ */
+function isQuotaShown(key: string, quotas: Record<string, number | null>): boolean {
+  if (key === 'scans_per_month' && quotas.scans_total != null) return false;
+  return true;
+}
+
 const TAGLINES: Record<PlanTier, string> = {
-  free: "L'essentiel : la bibliothèque de recettes, un planning simple, l'assistant IA.",
-  pro: 'Sans limite de recettes ni de productions, avec le scan et le calculateur de coût.',
-  pro_plus: 'La production avancée : besoins matières automatiques, rentabilité, IA sur vos données.',
-  team: "L'atelier au complet : comptes employés, tâches, commandes et tableau de bord.",
+  free: 'Pour découvrir Levanea : recettes illimitées, planning simple, assistant IA, et un aperçu gratuit du scan, de l\'adaptation et du planning personnel.',
+  pro: 'Pour une utilisation professionnelle : productions et plannings illimités, scan et adaptation sans limite, calculateur de coût.',
+  pro_plus: 'Pour une utilisation intensive : besoins matières automatiques, rentabilité, IA sur vos données.',
+  team: "Pour les équipes : comptes employés, tâches, commandes et tableau de bord.",
 };
 
 export default function Pro() {
@@ -121,7 +141,8 @@ export default function Pro() {
             const incremental = previous
               ? entry.features.filter(f => !previous.features.includes(f))
               : entry.features;
-            const finiteQuotas = Object.entries(entry.quotas).filter(([, v]) => v != null && v > 0) as [string, number][];
+            const finiteQuotas = Object.entries(entry.quotas)
+              .filter(([k, v]) => v != null && v > 0 && isQuotaShown(k, entry.quotas)) as [string, number][];
             const isCurrent = entry.plan === currentTier;
             const isRecommended = entry.plan === 'pro_plus';
             const isHighlighted = entry.plan === highlightTier;

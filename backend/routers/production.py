@@ -19,6 +19,7 @@ import production
 import subscriptions
 from core import db, get_current_user
 from gating import require
+from gating import usage as gating_usage
 from org_scope import can_delete, scope, stamp
 from organisations import get_org_context
 from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
@@ -128,6 +129,33 @@ async def _productions_used_this_month(user: dict, org: Optional[dict] = None) -
     start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     return await db.productions.count_documents({**scope(user, org), "created_at": {"$gte": start}})
 
+async def _quotas_with_usage(user: dict, org: Optional[dict], plan: str) -> dict:
+    """Comme `entitlements.quotas_for(plan)`, mais complète `used`/`remaining`
+    pour chaque quota à plafond FINI du palier de l'appelant, en comptant
+    réellement en base (`gating.usage`). Un plafond `None` (illimité à ce
+    palier) reste `{"limit": None, "period": ...}` seul, sans requête
+    supplémentaire — la quasi-totalité des quotas d'un compte Pro+/Équipe,
+    ce qui garde ce chemin chaud bon marché pour la majorité des comptes
+    payants plutôt que de compter systématiquement les 10 quotas pour tout
+    le monde.
+
+    Compté pour l'acteur (`user["user_id"]`), pas pour le propriétaire de
+    facturation — même choix que `gating.check()` : le palier appliqué est
+    celui de l'organisation, mais chaque quota non org-scopé (recettes,
+    scans, adaptations, collections...) reste personnel à qui agit.
+    """
+    org_id = (org or {}).get("org_id")
+    out = {}
+    for key in entitlements.QUOTA_KEYS:
+        limit = entitlements.quota(plan, key)
+        period = entitlements.quota_period(key)
+        if limit is None:
+            out[key] = {"limit": None, "period": period}
+            continue
+        used = await gating_usage(user["user_id"], key, org_id=org_id)
+        out[key] = {"limit": limit, "period": period, "used": used, "remaining": max(0, limit - used)}
+    return out
+
 async def _plan_state(user: dict, org: Optional[dict] = None) -> dict:
     """La charge utile de `/me/plan`.
 
@@ -165,10 +193,11 @@ async def _plan_state(user: dict, org: Optional[dict] = None) -> dict:
         # `locked` = ce que l'application doit respecter. Le seul champ sur
         # lequel un écran a le droit de brancher est `locked`.
         "features": entitlements.features_for(plan, enforced),
-        # Plafonds seuls pour l'instant : `used`/`remaining` demandent de
-        # compter en base, ce que gating.py apportera avec les compteurs.
-        # `productions_*` ci-dessus reste le seul compteur déjà réel.
-        "quotas": entitlements.quotas_for(plan),
+        # `used`/`remaining` réels pour tout quota à plafond fini du palier
+        # de l'appelant (voir `_quotas_with_usage`) — `productions_*`
+        # ci-dessus reste en plus, inchangé, pour ne rien casser côté
+        # frontend déjà livré.
+        "quotas": await _quotas_with_usage(user, org, plan),
         # Le catalogue des offres, pour que l'écran d'abonnement se construise
         # à partir du serveur : changer un prix ou ajouter un palier ne
         # demande alors aucune livraison sur les stores.

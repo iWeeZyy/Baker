@@ -62,7 +62,16 @@ jobs:
       #   que pytest-xdist --dist loadscope, qui peut répartir deux classes sur deux workers
       #   différents, ne fasse jamais courir deux classes sur le même compte
       #   (qui changerait active_org_id sous les pieds l'une de l'autre).
-      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team,test.feed.e@bakers.app:pro,test.scan@bakers.app:pro,test.instagram_import@bakers.app:pro,test.adapt.a@bakers.app:pro,test.org.creation@bakers.app:team,test.org.invites@bakers.app:team,test.org.roles@bakers.app:team,test.org.retrait@bakers.app:team,test.org.bascule@bakers.app:team,test.org.quota@bakers.app:team,test.org.sharing@bakers.app:team,test.org.tasks@bakers.app:team,test.org.dashboard.acces@bakers.app:team,test.org.dashboard.contenu@bakers.app:team,test.org.orders.acces@bakers.app:team,test.org.orders.crud@bakers.app:team,test.org.orders.fusion@bakers.app:team
+      # - test.collections.{a,b}@bakers.app : test_collections.py crée bien plus
+      #   de trois collections sur la durée du fichier (le nouveau plafond
+      #   d'essai Free, collections_total=3, chantier des quotas) — Pro pour
+      #   que ce fichier continue de tester les Collections elles-mêmes plutôt
+      #   que d'échouer sur le quota, déjà couvert par test_gating_api.py.
+      # - test.gamification.collections@bakers.app : idem pour
+      #   test_gamification_api.py::TestCollectionXp::test_lifetime_cap_stops_after_ten_collections,
+      #   qui crée 15 collections pour vérifier le plafond XP interne (10) —
+      #   sans Pro, le quota Free (3) bloquerait bien avant d'y arriver.
+      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team,test.feed.e@bakers.app:pro,test.scan@bakers.app:pro,test.instagram_import@bakers.app:pro,test.adapt.a@bakers.app:pro,test.collections.a@bakers.app:pro,test.collections.b@bakers.app:pro,test.gamification.collections@bakers.app:pro,test.org.creation@bakers.app:team,test.org.invites@bakers.app:team,test.org.roles@bakers.app:team,test.org.retrait@bakers.app:team,test.org.bascule@bakers.app:team,test.org.quota@bakers.app:team,test.org.sharing@bakers.app:team,test.org.tasks@bakers.app:team,test.org.dashboard.acces@bakers.app:team,test.org.dashboard.contenu@bakers.app:team,test.org.orders.acces@bakers.app:team,test.org.orders.crud@bakers.app:team,test.org.orders.fusion@bakers.app:team
       # Test/dev only — the same value configures both the uvicorn process
       # started below and pytest itself (shared job env, see
       # test_subscriptions_api.py's header), so the tests can sign a real

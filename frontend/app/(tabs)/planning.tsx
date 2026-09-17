@@ -8,6 +8,7 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { usePlan } from '@/src/plan';
+import { QuotaBanner } from '@/src/QuotaBanner';
 import { formatHours, weekTitle, type ScheduleRow } from '@/src/schedule/model';
 import { SwipeableRow } from '@/src/SwipeableRow';
 import { theme, type ThemeColors } from '@/src/theme';
@@ -48,7 +49,7 @@ export default function Planning() {
   const styles = useMemo(() => makeStyles(colors, themeMode), [colors, themeMode]);
   const router = useRouter();
   const { user } = useAuth();
-  const { plan, reload: reloadPlan } = usePlan();
+  const { reload: reloadPlan } = usePlan();
   const [mode, setMode] = useState<Mode>('production');
   const [productions, setProductions] = useState<ProductionRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
@@ -207,20 +208,25 @@ export default function Planning() {
           onChange={setMode}
         />
 
-        {mode === 'production' && plan && plan.productions_limit != null && (
-          <Pressable
+        {mode === 'production' && (
+          <QuotaBanner
             testID="quota-banner"
-            onPress={() => router.push('/pro' as any)}
-            style={styles.quotaBanner}
-          >
-            <Feather name="info" size={14} color={colors.onSurfaceSecondary} />
-            <Text style={styles.quotaText}>
-              {plan.productions_remaining} production{(plan.productions_remaining ?? 0) > 1 ? 's' : ''} gratuite
-              {(plan.productions_remaining ?? 0) > 1 ? 's' : ''} restante
-              {(plan.productions_remaining ?? 0) > 1 ? 's' : ''} ce mois-ci
-            </Text>
-            <Text style={styles.quotaLink}>Baker Pro</Text>
-          </Pressable>
+            quotaKey="productions_per_month"
+            style={{ marginHorizontal: 24, marginTop: 8 }}
+            label={({ remaining }) =>
+              `${remaining} production${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''} ` +
+              `restante${remaining > 1 ? 's' : ''} ce mois-ci`
+            }
+          />
+        )}
+
+        {mode === 'staff' && (
+          <QuotaBanner
+            testID="quota-banner-staff"
+            quotaKey="schedules_total"
+            style={{ marginHorizontal: 24, marginTop: 8 }}
+            label={({ used, limit }) => `${used}/${limit} plannings personnel utilisés`}
+          />
         )}
 
         {loading ? (
@@ -318,13 +324,6 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 32, color: colors.onSurface, marginTop: 4 },
-  quotaBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 24, marginTop: 8,
-    paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surfaceSecondary, borderRadius: theme.radius.lg,
-    ...cardElevation(mode, colors),
-  },
-  quotaText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary },
-  quotaLink: { fontSize: 12, color: colors.brand, fontWeight: '700' },
   section: { paddingHorizontal: 24, marginTop: 24 },
   sectionTitle: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface, marginBottom: 12 },
   card: {

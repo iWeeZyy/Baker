@@ -15,6 +15,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api, API_BASE } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { useEntitlements } from '@/src/entitlements';
+import { isPlanLimitError } from '@/src/plan';
+import { LimitReachedNotice } from '@/src/PlanChip';
+import { QuotaBanner } from '@/src/QuotaBanner';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
@@ -72,6 +76,13 @@ export default function CollectionsScreen() {
   const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
   const { refreshUser } = useAuth();
+  const { quota } = useEntitlements();
+  // Collections_total : quota stock (3 pour Free, illimité dès Pro) —
+  // supprimer une collection libère une place. Vérifié ici avant même
+  // d'ouvrir le formulaire de création, pour avertir plutôt que de
+  // bloquer après coup.
+  const collectionsQuota = quota('collections_total');
+  const limitReached = collectionsQuota?.limit != null && (collectionsQuota.remaining ?? 1) <= 0;
   const [items, setItems] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -80,6 +91,7 @@ export default function CollectionsScreen() {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     return api('/collections')
@@ -101,6 +113,7 @@ export default function CollectionsScreen() {
     const name = newName.trim();
     if (!name) return;
     setSaving(true);
+    setCreateError(null);
     try {
       const created = await api('/collections', { method: 'POST', body: JSON.stringify({ name, description: newDescription.trim() }) });
       setCreating(false);
@@ -109,7 +122,13 @@ export default function CollectionsScreen() {
       load();
       showGamificationToast(created.gamification);
       refreshUser();
-    } catch {} finally {
+    } catch (e: any) {
+      // Le plafond a été vérifié avant l'ouverture du formulaire, mais une
+      // course reste possible (un autre appareil, un onglet déjà ouvert) :
+      // jamais laisser l'échec passer inaperçu, contrairement au `catch {}`
+      // d'avant ce chantier.
+      setCreateError(isPlanLimitError(e) ? e.message : (e.message || 'Création impossible'));
+    } finally {
       setSaving(false);
     }
   };
@@ -125,6 +144,12 @@ export default function CollectionsScreen() {
           <Feather name="plus" size={22} color={colors.onSurface} />
         </Pressable>
       </View>
+
+      <QuotaBanner
+        quotaKey="collections_total"
+        style={{ marginHorizontal: 16, marginTop: 12 }}
+        label={({ used, limit }) => `${used}/${limit} collections utilisées`}
+      />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -174,34 +199,45 @@ export default function CollectionsScreen() {
         <Pressable style={styles.backdrop} onPress={() => setCreating(false)}>
           <Pressable style={styles.formSheet} onPress={() => {}}>
             <Text style={styles.formTitle}>Nouvelle collection</Text>
-            <TextInput
-              testID="collection-form-name"
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="Nom (ex. Pains au levain)"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              maxLength={80}
-              autoFocus
-            />
-            <TextInput
-              testID="collection-form-description"
-              value={newDescription}
-              onChangeText={setNewDescription}
-              placeholder="Description (optionnelle)"
-              placeholderTextColor={colors.muted}
-              style={[styles.input, { height: 80 }]}
-              maxLength={300}
-              multiline
-            />
-            <Pressable
-              testID="collection-form-submit"
-              onPress={createCollection}
-              disabled={saving || !newName.trim()}
-              style={[styles.submitBtn, (saving || !newName.trim()) && { opacity: 0.5 }]}
-            >
-              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.submitText}>Créer</Text>}
-            </Pressable>
+            {limitReached ? (
+              <LimitReachedNotice
+                minPlan="pro"
+                label={`Vous avez utilisé vos ${collectionsQuota!.limit} collections gratuites`}
+                onPress={() => { setCreating(false); router.push('/pro' as any); }}
+              />
+            ) : (
+              <>
+                <TextInput
+                  testID="collection-form-name"
+                  value={newName}
+                  onChangeText={setNewName}
+                  placeholder="Nom (ex. Pains au levain)"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  maxLength={80}
+                  autoFocus
+                />
+                <TextInput
+                  testID="collection-form-description"
+                  value={newDescription}
+                  onChangeText={setNewDescription}
+                  placeholder="Description (optionnelle)"
+                  placeholderTextColor={colors.muted}
+                  style={[styles.input, { height: 80 }]}
+                  maxLength={300}
+                  multiline
+                />
+                {createError && <Text style={styles.formError} testID="collection-form-error">{createError}</Text>}
+                <Pressable
+                  testID="collection-form-submit"
+                  onPress={createCollection}
+                  disabled={saving || !newName.trim()}
+                  style={[styles.submitBtn, (saving || !newName.trim()) && { opacity: 0.5 }]}
+                >
+                  {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.submitText}>Créer</Text>}
+                </Pressable>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -236,6 +272,7 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: colors.onSurface,
     backgroundColor: colors.surfaceSecondary, textAlignVertical: 'top',
   },
+  formError: { fontSize: 13, color: colors.error },
   submitBtn: { backgroundColor: colors.brand, borderRadius: theme.radius.md, paddingVertical: 12, alignItems: 'center' },
   submitText: { color: colors.onBrandPrimary, fontWeight: '600', fontSize: 15 },
 });

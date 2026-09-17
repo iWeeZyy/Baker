@@ -65,16 +65,29 @@ def _recipe_payload(titre):
 class TestPersonneNePerdRien:
     """Interrupteur éteint : tout ce qui marchait marche encore."""
 
-    def test_creer_une_onzieme_recette_reste_possible(self):
-        """Le plafond Free est de 10 recettes. Tant qu'il n'est pas appliqué,
-        un utilisateur doit pouvoir dépasser sans rien voir changer."""
+    def test_creer_plus_de_dix_recettes_reste_possible(self):
+        """Le plafond Free sur les recettes a été retiré (chantier des
+        quotas d'essai — les recettes sont désormais illimitées, quel que
+        soit le palier) : au-delà de dix reste toujours possible, avec ou
+        sans interrupteur."""
         token = _token()
-        if _plan(token)["enforced"]:
-            pytest.skip("ENTITLEMENTS_ENFORCED est allumé sur ce serveur")
         for i in range(11):
             r = requests.post(f"{API}/recipes", json=_recipe_payload(f"Pain d'essai {uuid.uuid4().hex[:6]}"),
                               headers=_h(token), timeout=30)
             assert r.status_code == 200, f"recette {i + 1} refusée : {r.text}"
+
+    def test_creer_une_quatrieme_collection_reste_possible(self):
+        """Le plafond Free est de 3 collections. Tant qu'il n'est pas
+        appliqué, un utilisateur doit pouvoir dépasser sans rien voir
+        changer — le nouvel exemple représentatif de ce test depuis que
+        les recettes n'ont plus de plafond du tout (voir ci-dessus)."""
+        token = _token()
+        if _plan(token)["enforced"]:
+            pytest.skip("ENTITLEMENTS_ENFORCED est allumé sur ce serveur")
+        for i in range(4):
+            r = requests.post(f"{API}/collections", json={"name": f"TEST essai {uuid.uuid4().hex[:6]}"},
+                              headers=_h(token), timeout=30)
+            assert r.status_code == 200, f"collection {i + 1} refusée : {r.text}"
 
     def test_les_matieres_premieres_restent_ouvertes(self):
         """Elles deviendront Pro+, mais elles sont gratuites aujourd'hui."""
@@ -101,19 +114,34 @@ class TestPersonneNePerdRien:
 class TestQuandLesDroitsSAppliquent:
     """Interrupteur allumé : les refus prennent la forme attendue."""
 
-    def test_la_onzieme_recette_est_refusee(self):
+    def test_la_onzieme_recette_n_est_plus_refusee(self):
+        """Décision confirmée avec Lucas (chantier des quotas d'essai) :
+        les recettes sont désormais illimitées pour Free, interrupteur
+        allumé ou pas."""
         token = _token()
         if not _plan(token)["enforced"]:
             pytest.skip("ENTITLEMENTS_ENFORCED est éteint sur ce serveur")
         for _ in range(10):
             requests.post(f"{API}/recipes", json=_recipe_payload(f"Pain {uuid.uuid4().hex[:6]}"),
                           headers=_h(token), timeout=30)
-        r = requests.post(f"{API}/recipes", json=_recipe_payload("Pain de trop"),
+        r = requests.post(f"{API}/recipes", json=_recipe_payload("Pain suivant"),
+                          headers=_h(token), timeout=30)
+        assert r.status_code == 200, r.text
+
+    def test_la_quatrieme_collection_est_refusee(self):
+        token = _token()
+        if not _plan(token)["enforced"]:
+            pytest.skip("ENTITLEMENTS_ENFORCED est éteint sur ce serveur")
+        for _ in range(3):
+            requests.post(f"{API}/collections", json={"name": f"TEST plafond {uuid.uuid4().hex[:6]}"},
+                          headers=_h(token), timeout=30)
+        r = requests.post(f"{API}/collections", json={"name": "TEST de trop"},
                           headers=_h(token), timeout=30)
         assert r.status_code == 403
         detail = r.json()["detail"]
         assert detail["error"] == "plan_limit_reached"
-        assert detail["limit"] == 10
+        assert detail["quota"] == "collections_total"
+        assert detail["limit"] == 3
 
     def test_les_matieres_premieres_sont_reservees(self):
         token = _token()
@@ -183,3 +211,85 @@ class TestQuotaDejaApplique:
         assert body["productions_limit"] == 3
         assert body["productions_used"] == 0
         assert body["productions_remaining"] == 3
+
+
+class TestQuotasEssaiGratuit:
+    """Les quatre quotas d'essai Free ajoutés par ce chantier, tels que
+    `/me/plan` les rapporte pour un compte tout neuf — les compteurs
+    `used`/`remaining` sont désormais peuplés génériquement pour tout quota
+    à plafond fini du palier de l'appelant (`_quotas_with_usage`), pas
+    seulement pour les productions.
+
+    Les quotas qui exigent un appel Anthropic réussi pour s'incrémenter
+    (`scans_total`, `adapts_total`, `ai_messages_per_month`) ne peuvent pas
+    être consommés de bout en bout ici : ce bac à sable n'a pas de
+    `ANTHROPIC_API_KEY`, donc `/recipes/scan/analyze` et `/chat` renvoient
+    503 avant tout appel IA — `record_ai_usage` n'est alors jamais atteint.
+    Le mécanisme de comptage/blocage lui-même est couvert exhaustivement,
+    avec un faux compteur, par `test_gating_calc.py::TestNouveauxQuotasEssaiGratuit`
+    et `TestMultiQuota`. Ici, on vérifie ce qui est vérifiable sans clé
+    réelle : les plafonds exposés à zéro consommation, et — pour
+    `schedules_total`, qui ne dépend d'aucune IA — le blocage réel de bout
+    en bout.
+    """
+
+    def test_les_plafonds_free_sont_exposes_a_zero_consommation(self):
+        body = _plan(_token())
+        quotas = body["quotas"]
+        assert quotas["scans_total"] == {"limit": 3, "period": "usage", "used": 0, "remaining": 3}
+        assert quotas["adapts_total"] == {"limit": 5, "period": "usage", "used": 0, "remaining": 5}
+        assert quotas["collections_total"] == {"limit": 3, "period": "total", "used": 0, "remaining": 3}
+        assert quotas["schedules_total"] == {"limit": 3, "period": "total", "used": 0, "remaining": 3}
+        assert quotas["ai_messages_per_month"]["limit"] == 10
+        assert quotas["recipes_total"] == {"limit": None, "period": "total"}  # illimité : pas de used/remaining
+
+    def test_la_quatrieme_grille_personnel_est_refusee(self):
+        """`schedules_total` (stock, 3 pour Free) ne dépend d'aucun appel
+        IA — vérifiable de bout en bout, contrairement au scan/à l'IA."""
+        token = _token()
+        if not _plan(token)["enforced"]:
+            pytest.skip("ENTITLEMENTS_ENFORCED est éteint sur ce serveur")
+        for i in range(3):
+            r = requests.post(f"{API}/schedules", json={
+                "week_start": "2026-01-04",
+                "employees": [{"name": f"Employé {i}", "days": [{} for _ in range(7)]}],
+            }, headers=_h(token), timeout=30)
+            assert r.status_code == 200, f"grille {i + 1} refusée : {r.text}"
+        r = requests.post(f"{API}/schedules", json={
+            "week_start": "2026-01-11",
+            "employees": [{"name": "Employé de trop", "days": [{} for _ in range(7)]}],
+        }, headers=_h(token), timeout=30)
+        assert r.status_code == 403
+        detail = r.json()["detail"]
+        assert detail["error"] == "plan_limit_reached"
+        assert detail["quota"] == "schedules_total"
+        assert detail["limit"] == 3
+
+    def test_supprimer_une_grille_libere_une_place(self):
+        """Stock : supprimer une grille rouvre la place, contrairement à un
+        quota d'usage (scans_total/adapts_total) qui ne rembourse jamais."""
+        token = _token()
+        if not _plan(token)["enforced"]:
+            pytest.skip("ENTITLEMENTS_ENFORCED est éteint sur ce serveur")
+        ids = []
+        for i, week in enumerate(["2026-02-01", "2026-02-08", "2026-02-15"]):
+            r = requests.post(f"{API}/schedules", json={
+                "week_start": week,
+                "employees": [{"name": f"Employé {i}", "days": [{} for _ in range(7)]}],
+            }, headers=_h(token), timeout=30)
+            assert r.status_code == 200, r.text
+            ids.append(r.json()["id"])
+        # La 4e est refusée tant que les 3 places sont prises.
+        r = requests.post(f"{API}/schedules", json={
+            "week_start": "2026-02-22",
+            "employees": [{"name": "Employé refusé", "days": [{} for _ in range(7)]}],
+        }, headers=_h(token), timeout=30)
+        assert r.status_code == 403
+        # Une suppression libère la place.
+        r = requests.delete(f"{API}/schedules/{ids[0]}", headers=_h(token), timeout=30)
+        assert r.status_code == 200, r.text
+        r = requests.post(f"{API}/schedules", json={
+            "week_start": "2026-02-22",
+            "employees": [{"name": "Employé recree", "days": [{} for _ in range(7)]}],
+        }, headers=_h(token), timeout=30)
+        assert r.status_code == 200, r.text

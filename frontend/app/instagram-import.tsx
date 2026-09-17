@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { useEntitlements } from '@/src/entitlements';
-import { LockedFeatureNotice } from '@/src/PlanChip';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
@@ -41,10 +41,13 @@ export default function InstagramImport() {
 
   const router = useRouter();
   const { refreshUser } = useAuth();
-  const { can } = useEntitlements();
-  // Même feature que le scan de recette (recipe_scan) : deux façons
-  // d'obtenir une extraction assistée par IA, un seul droit qui les couvre.
-  const locked = !can('recipe_scan');
+  // Même feature ET même quota que le scan de recette (recipe_scan /
+  // scans_total) : deux façons d'obtenir une extraction assistée par IA,
+  // un seul droit et un seul compteur d'essai qui les couvre (voir
+  // gating.usage(), qui compte les deux `kind` ensemble côté serveur).
+  const { quota } = useEntitlements();
+  const scansQuota = quota('scans_total');
+  const limitReached = scansQuota?.limit != null && (scansQuota.remaining ?? 1) <= 0;
   const [phase, setPhase] = useState<'paste' | 'analyzing' | 'verify'>('paste');
   const [caption, setCaption] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -392,7 +395,7 @@ export default function InstagramImport() {
   }
 
   // ---------- Paste phase ----------
-  if (locked) {
+  if (limitReached) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.headerRow}>
@@ -402,10 +405,10 @@ export default function InstagramImport() {
           <Text style={styles.title}>Importer depuis Instagram</Text>
         </View>
         <View style={{ paddingHorizontal: 24 }}>
-          <LockedFeatureNotice
+          <LimitReachedNotice
             minPlan="pro"
-            label="L'import Instagram est réservé à l'offre Pro"
-            onPress={() => router.push('/pro?feature=recipe_scan' as any)}
+            label={`Vous avez utilisé vos ${scansQuota!.limit} scans gratuits`}
+            onPress={() => router.push('/pro' as any)}
           />
         </View>
       </SafeAreaView>
