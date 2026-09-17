@@ -43,6 +43,11 @@ export type ProductionDetail = {
   missing_durations: string[];
   scheduled: boolean;
   total_pieces: number | null;
+  // Commandes pro actives dues ce même jour, déjà fondues dans
+  // `ingredients` ci-dessus (voir backend/routers/production.py::_production_detail,
+  // phase 7b) — jamais une seconde liste, juste ce compte pour que l'écran
+  // puisse dire que l'agrégat inclut des commandes sans les détailler.
+  orders_count: number;
 };
 
 /**

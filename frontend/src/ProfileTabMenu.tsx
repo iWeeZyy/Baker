@@ -24,7 +24,7 @@ const TAB_BAR_HEIGHT = 88;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
-  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges' | '/organisation' | '/dashboard';
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges' | '/organisation' | '/dashboard' | '/pro-orders';
   // Préfixes de pathname qui comptent comme "dans cette section" — source
   // unique pour l'état actif du bouton d'onglet ET de la ligne de menu
   // correspondante (avant, deux calculs divergents existaient : le bouton
@@ -116,6 +116,10 @@ export function ProfileTabButton() {
     // pastille ici : contrairement à Amis/Messagerie, rien n'y est jamais
     // "non lu" — le tableau de bord se consulte, il ne se notifie pas.
     { key: 'dashboard', label: 'Tableau de bord', icon: 'bar-chart-2', route: '/dashboard', matchPrefixes: ['/dashboard'] },
+    // "shopping-bag" : pas encore utilisée ailleurs dans l'app, cohérente
+    // avec une commande client. Pas de pastille : une commande en attente
+    // ne se "notifie" pas différemment d'une production à faire.
+    { key: 'pro-orders', label: 'Commandes pro', icon: 'shopping-bag', route: '/pro-orders', matchPrefixes: ['/pro-orders'] },
   ];
 
   const select = (item: MenuItem) => {

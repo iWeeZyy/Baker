@@ -44,6 +44,7 @@ from routers.tips import router as tips_router
 from routers.ads import router as ads_router
 from routers.subscription import router as subscription_router
 from routers.organisations import router as organisations_router
+from routers.orders import router as orders_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -3555,6 +3556,12 @@ async def startup():
     await db.org_members.create_index([("org_id", 1), ("status", 1)])
     await db.org_invites.create_index([("to_user_id", 1), ("status", 1)])
     await db.org_invites.create_index([("org_id", 1), ("status", 1)])
+    await db.pro_orders.create_index("id", unique=True)
+    # Liste et agrégat par date, scope() résolvant vers org_id en pratique
+    # (les commandes pro exigent une organisation active) ; user_id gardé
+    # pour la même défense en profondeur que scope() lui-même.
+    await db.pro_orders.create_index([("org_id", 1), ("pickup_date", 1)])
+    await db.pro_orders.create_index([("user_id", 1), ("pickup_date", 1)])
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
@@ -3659,6 +3666,7 @@ app.include_router(tips_router)
 app.include_router(ads_router)
 app.include_router(subscription_router)
 app.include_router(organisations_router)
+app.include_router(orders_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

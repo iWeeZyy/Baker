@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import entitlements
+import orders
 import production
 import subscriptions
 from core import db, get_current_user
@@ -177,10 +178,26 @@ async def _plan_state(user: dict, org: Optional[dict] = None) -> dict:
         "subscription": subscriptions.public_state(sub),
     }
 
-def _production_detail(doc: dict) -> dict:
+async def _production_detail(doc: dict, user: dict, org: Optional[dict] = None) -> dict:
+    """Fusionne les commandes pro actives dues le même jour dans l'agrégat
+    de matières — jamais copiées dans les `lines` de la production
+    elle-même (voir orders.py, phase 7b) : une commande annulée ou d'un
+    autre jour ne contribue jamais, et rien n'est jamais compté deux fois
+    puisque `db.pro_orders` et `db.productions` restent deux collections
+    entièrement séparées, fusionnées seulement ici, à la lecture.
+    """
     doc.pop("_id", None)
-    computed = production.summarize(doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"))
-    return {**doc, **computed}
+    order_docs = await db.pro_orders.find(
+        {**scope(user, org), "pickup_date": doc.get("date")}, {"_id": 0}).to_list(500)
+    active_orders = [o for o in order_docs if orders.is_active(o.get("status") or "pending")]
+    extra_lines = []
+    for o in active_orders:
+        extra_lines.extend(orders.scaled_lines_for_order(o.get("items")))
+    computed = production.summarize(
+        doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"),
+        extra_ingredient_lines=extra_lines,
+    )
+    return {**doc, **computed, "orders_count": len(active_orders)}
 
 def _production_summary(doc: dict) -> dict:
     steps = doc.get("steps") or []
@@ -242,7 +259,7 @@ async def create_production(
         "updated_at": now,
     }
     await db.productions.insert_one(doc)
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)
 
 @router.get("/productions/{production_id}")
 async def get_production(
@@ -253,7 +270,7 @@ async def get_production(
     doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Production introuvable")
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)
 
 @router.put("/productions/{production_id}")
 async def update_production(
@@ -276,7 +293,7 @@ async def update_production(
         "updated_at": datetime.now(timezone.utc),
     }
     await db.productions.update_one({"id": production_id, **scope(user, org)}, {"$set": update})
-    return _production_detail({**existing, **update})
+    return await _production_detail({**existing, **update}, user, org)
 
 @router.delete("/productions/{production_id}")
 async def delete_production(
@@ -333,4 +350,4 @@ async def update_production_step(
         {"id": production_id, **scope(user, org)},
         {"$set": {"steps": doc["steps"], "updated_at": datetime.now(timezone.utc)}},
     )
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)

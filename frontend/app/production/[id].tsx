@@ -242,6 +242,11 @@ export default function ProductionDetail() {
             ) : (
               <>
                 <Text style={styles.sectionLabel}>TOTAUX</Text>
+                {data.orders_count > 0 && (
+                  <Text style={styles.hint}>
+                    Inclut {data.orders_count} commande{data.orders_count > 1 ? 's' : ''} pro due{data.orders_count > 1 ? 's' : ''} ce jour.
+                  </Text>
+                )}
                 {data.ingredients.items.map(item => (
                   <View key={`${item.name}-${item.unit}`} style={styles.ingRow} testID={`ing-${item.name}`}>
                     <Text style={styles.ingName}>{item.name}</Text>
