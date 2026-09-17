@@ -24,7 +24,7 @@ const TAB_BAR_HEIGHT = 88;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
-  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges' | '/organisation';
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges' | '/organisation' | '/dashboard';
   // Préfixes de pathname qui comptent comme "dans cette section" — source
   // unique pour l'état actif du bouton d'onglet ET de la ligne de menu
   // correspondante (avant, deux calculs divergents existaient : le bouton
@@ -112,6 +112,10 @@ export function ProfileTabButton() {
     // "briefcase" : pas encore utilisée ailleurs dans l'app, cohérente avec
     // une organisation professionnelle plutôt qu'une icône déjà prise.
     { key: 'organisation', label: 'Organisation', icon: 'briefcase', route: '/organisation', matchPrefixes: ['/organisation'] },
+    // "bar-chart-2" : pas encore utilisée ailleurs dans l'app. Pas de
+    // pastille ici : contrairement à Amis/Messagerie, rien n'y est jamais
+    // "non lu" — le tableau de bord se consulte, il ne se notifie pas.
+    { key: 'dashboard', label: 'Tableau de bord', icon: 'bar-chart-2', route: '/dashboard', matchPrefixes: ['/dashboard'] },
   ];
 
   const select = (item: MenuItem) => {

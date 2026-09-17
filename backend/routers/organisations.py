@@ -10,8 +10,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+import dashboard
 import organisations
-from core import get_current_user
+from core import db, get_current_user
 from gating import require
 
 router = APIRouter(prefix="/api/organisations")
@@ -98,3 +99,12 @@ async def remove_member(
     org: dict = Depends(organisations.get_org_context),
 ):
     return await organisations.remove_member(user, org, member_user_id)
+
+
+@router.get("/dashboard")
+async def get_dashboard(
+    period: str = "week",
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(organisations.get_org_context),
+):
+    return await dashboard.build(db, user, org, period)

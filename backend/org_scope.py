@@ -73,6 +73,14 @@ def can_delete(user: dict, org: Optional[dict], doc: dict) -> bool:
     return (org or {}).get("role") in ("owner", "manager")
 
 
+def can_view_dashboard(role: Optional[str]) -> bool:
+    """Qui peut voir le tableau de bord manager d'une organisation (phase
+    7d). Propriétaire et encadrement seulement — un simple employé voit son
+    propre travail ailleurs dans l'app, jamais la vue d'ensemble de
+    l'affaire (chiffre d'affaires, marges, activité de ses collègues)."""
+    return role in ("owner", "manager")
+
+
 def can_invite(actor_role: Optional[str], target_role: str) -> bool:
     """Qui peut inviter qui. Le propriétaire invite à n'importe quel rôle
     subalterne ; un manager ne peut inviter qu'au rôle employé — jamais à

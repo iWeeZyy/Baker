@@ -54,14 +54,15 @@ jobs:
       #   recette, l'import Instagram et l'interprétation d'adaptation
       #   (recipe_scan/recipe_adapt), gérés dans test_scan_api.py,
       #   test_instagram_import_api.py et test_recipe_adapt_api.py.
-      # - test.org.{creation,invites,roles,retrait,bascule,quota,sharing,tasks}@bakers.app :
-      #   test_organisations_api.py + test_org_sharing_api.py + test_task_assignment_api.py,
-      #   un compte Équipe DÉDIÉ par classe (créer une organisation exige elle aussi le
-      #   palier Équipe) — dédié plutôt que partagé pour que pytest-xdist
+      # - test.org.{creation,invites,roles,retrait,bascule,quota,sharing,tasks,
+      #   dashboard.acces,dashboard.contenu}@bakers.app :
+      #   test_organisations_api.py + test_org_sharing_api.py + test_task_assignment_api.py +
+      #   test_dashboard_api.py, un compte Équipe DÉDIÉ par classe (créer une organisation
+      #   exige elle aussi le palier Équipe) — dédié plutôt que partagé pour que pytest-xdist
       #   --dist loadscope, qui peut répartir deux classes sur deux workers
       #   différents, ne fasse jamais courir deux classes sur le même compte
       #   (qui changerait active_org_id sous les pieds l'une de l'autre).
-      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team,test.feed.e@bakers.app:pro,test.scan@bakers.app:pro,test.instagram_import@bakers.app:pro,test.adapt.a@bakers.app:pro,test.org.creation@bakers.app:team,test.org.invites@bakers.app:team,test.org.roles@bakers.app:team,test.org.retrait@bakers.app:team,test.org.bascule@bakers.app:team,test.org.quota@bakers.app:team,test.org.sharing@bakers.app:team,test.org.tasks@bakers.app:team
+      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team,test.feed.e@bakers.app:pro,test.scan@bakers.app:pro,test.instagram_import@bakers.app:pro,test.adapt.a@bakers.app:pro,test.org.creation@bakers.app:team,test.org.invites@bakers.app:team,test.org.roles@bakers.app:team,test.org.retrait@bakers.app:team,test.org.bascule@bakers.app:team,test.org.quota@bakers.app:team,test.org.sharing@bakers.app:team,test.org.tasks@bakers.app:team,test.org.dashboard.acces@bakers.app:team,test.org.dashboard.contenu@bakers.app:team
       # Test/dev only — the same value configures both the uvicorn process
       # started below and pytest itself (shared job env, see
       # test_subscriptions_api.py's header), so the tests can sign a real
