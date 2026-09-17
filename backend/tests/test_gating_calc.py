@@ -38,6 +38,7 @@ class _FakeDb:
         self.productions = _FakeCollection(counts.get("productions", 0))
         self.ai_usage = _FakeCollection(counts.get("ai_usage", 0))
         self.org_members = _FakeCollection(counts.get("org_members", 0))
+        self.org_invites = _FakeCollection(counts.get("org_invites", 0))
 
 
 @pytest.fixture
@@ -229,3 +230,80 @@ class TestComptage:
     async def test_la_grille_de_personnel_ne_compte_rien_en_base(self, db):
         db()
         assert await gating.usage("u1", "schedule_employees") == 0
+
+
+class TestOrganisation:
+    """Phase 7a : le quota `productions_per_month` compté par organisation
+    plutôt que par compte, et le palier résolu depuis le propriétaire de
+    l'organisation active plutôt que depuis l'acteur — deux comportements
+    activés uniquement quand `check()`/`usage()` reçoivent un `org`/`org_id`,
+    jamais par défaut."""
+
+    @pytest.mark.asyncio
+    async def test_productions_sans_organisation_compte_par_utilisateur(self, monkeypatch):
+        vu = {}
+
+        class _Spy:
+            async def count_documents(self, filtre, *_a, **_k):
+                vu.update(filtre)
+                return 0
+
+        class _Db:
+            productions = _Spy()
+
+        monkeypatch.setattr(gating, "db", _Db())
+        await gating.usage("u1", "productions_per_month")
+        assert vu["user_id"] == "u1"
+        assert "org_id" not in vu
+
+    @pytest.mark.asyncio
+    async def test_productions_avec_organisation_compte_par_org_id_pas_par_utilisateur(self, monkeypatch):
+        vu = {}
+
+        class _Spy:
+            async def count_documents(self, filtre, *_a, **_k):
+                vu.update(filtre)
+                return 0
+
+        class _Db:
+            productions = _Spy()
+
+        monkeypatch.setattr(gating, "db", _Db())
+        await gating.usage("u1", "productions_per_month", org_id="org1")
+        assert vu["org_id"] == "org1"
+        assert "user_id" not in vu
+
+    @pytest.mark.asyncio
+    async def test_org_members_sans_org_id_rend_zero(self, db):
+        db(org_members=99, org_invites=99)  # ne doit même pas être consulté
+        assert await gating.usage("u1", "org_members", org_id=None) == 0
+
+    @pytest.mark.asyncio
+    async def test_org_members_compte_actifs_plus_en_attente(self, db):
+        db(org_members=3, org_invites=2)
+        assert await gating.usage("u1", "org_members", org_id="org1") == 5
+
+    @pytest.mark.asyncio
+    async def test_check_resout_le_palier_du_proprietaire_pas_de_l_acteur(self, switch, monkeypatch, db):
+        """Un employé Gratuit doit profiter du palier Équipe de son
+        organisation — jamais du sien."""
+        switch(True)
+        db()
+        vu = {}
+
+        async def _fake_plan_for(user, *_a, **_k):
+            vu["billed"] = user.get("user_id")
+            return TEAM if user.get("user_id") == "owner1" else FREE
+        monkeypatch.setattr(gating.subscriptions, "plan_for", _fake_plan_for)
+
+        employe = {"user_id": "employe1"}
+        org = {"org_id": "org1", "role": "employee", "billing_user": {"user_id": "owner1"}}
+        await gating.check(employe, feature="org_team", org=org)  # ne lève pas
+        assert vu["billed"] == "owner1"
+
+    @pytest.mark.asyncio
+    async def test_sans_org_le_palier_reste_celui_de_l_acteur(self, switch, as_plan, db):
+        switch(True); as_plan(FREE); db()
+        with pytest.raises(HTTPException) as exc:
+            await gating.check(USER, feature="org_team")
+        assert exc.value.detail["error"] == "plan_feature_locked"

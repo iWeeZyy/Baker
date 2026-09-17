@@ -43,6 +43,7 @@ from routers.cost import router as cost_router
 from routers.tips import router as tips_router
 from routers.ads import router as ads_router
 from routers.subscription import router as subscription_router
+from routers.organisations import router as organisations_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -3657,6 +3658,7 @@ app.include_router(cost_router)
 app.include_router(tips_router)
 app.include_router(ads_router)
 app.include_router(subscription_router)
+app.include_router(organisations_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

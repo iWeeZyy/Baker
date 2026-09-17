@@ -49,13 +49,18 @@ def _month_start(now: Optional[datetime] = None) -> datetime:
     return datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
 
-async def usage(user_id: str, key: str) -> int:
-    """Consommation actuelle de l'utilisateur pour ce quota.
+async def usage(user_id: str, key: str, *, org_id: Optional[str] = None) -> int:
+    """Consommation actuelle pour ce quota.
 
     Compté au moment de la requête à partir des collections du domaine —
     même choix que partout ailleurs dans cette base (classement, compteurs
     de likes) : aucun compteur dénormalisé à maintenir, aucune tâche de
     fond, et un chiffre qui ne peut pas dériver de la réalité.
+
+    `org_id`, optionnel : quand fourni, `productions_per_month` se compte
+    par organisation plutôt que par compte — des collègues qui partagent le
+    même planning épuisent le même quota, pas chacun le leur. Absent (le cas
+    par défaut, tous les autres appelants), rien ne change.
     """
     if key == "recipes_total":
         # `author_id` + `is_user_submitted` : le prédicat déjà utilisé par
@@ -64,8 +69,9 @@ async def usage(user_id: str, key: str) -> int:
         return await db.recipes.count_documents(
             {"author_id": user_id, "is_user_submitted": True})
     if key == "productions_per_month":
+        filtre = {"org_id": org_id} if org_id else {"user_id": user_id}
         return await db.productions.count_documents(
-            {"user_id": user_id, "created_at": {"$gte": _month_start()}})
+            {**filtre, "created_at": {"$gte": _month_start()}})
     if key == "ai_messages_per_month":
         return await db.ai_usage.count_documents(
             {"user_id": user_id, "kind": "chat", "created_at": {"$gte": _month_start()}})
@@ -73,8 +79,23 @@ async def usage(user_id: str, key: str) -> int:
         return await db.ai_usage.count_documents(
             {"user_id": user_id, "kind": "scan", "created_at": {"$gte": _month_start()}})
     if key == "org_members":
-        return await db.org_members.count_documents(
-            {"user_id": user_id, "status": "active"})
+        # Sans organisation, rien à limiter : ce quota n'a de sens que dans
+        # le flux d'invitation, qui fournit toujours un org_id.
+        if not org_id:
+            return 0
+        # Le plafond du cahier des charges est « 15 employés », pas « 15
+        # personnes propriétaire compris » — le propriétaire (qui possède
+        # toujours sa propre ligne dans org_members, voir organisations.py)
+        # est donc exclu du compte, sans quoi créer l'organisation
+        # consommerait déjà une place sur les 15 avant la première
+        # invitation.
+        actifs = await db.org_members.count_documents(
+            {"org_id": org_id, "status": "active", "role": {"$ne": "owner"}})
+        # + invitations en attente, pour qu'envoyer plusieurs invitations
+        # d'un coup ne puisse jamais, une fois toutes acceptées, dépasser
+        # le plafond.
+        en_attente = await db.org_invites.count_documents({"org_id": org_id, "status": "pending"})
+        return actifs + en_attente
     if key == "schedule_employees":
         # Borne par document, pas cumulative : la grille envoyée porte tout
         # l'effectif, donc l'appelant passe `amount=len(employees)` et il n'y
@@ -104,14 +125,23 @@ def _quota_message(key: str, limit: int, period: str) -> str:
 
 
 async def check(user: dict, *, feature: Optional[str] = None,
-                quota: Optional[str] = None, amount: int = 1) -> None:
+                quota: Optional[str] = None, amount: int = 1,
+                org: Optional[dict] = None) -> None:
     """Lève si le palier ne permet pas l'action. Ne renvoie rien sinon.
 
     `amount` sert aux écritures qui consomment plus d'une unité d'un coup
     (une grille de personnel enregistre N employés en une requête).
+
+    `org`, optionnel (le contexte rendu par `organisations.get_org_context`) :
+    quand fourni et non vide, le palier appliqué est celui du **propriétaire**
+    de l'organisation active (`org["billing_user"]`), pas celui de
+    l'appelant — un employé Gratuit doit profiter du palier Équipe de son
+    employeur, jamais du sien. Le compteur d'usage, lui, reste scopé par
+    organisation via `org["org_id"]` (voir `usage()`).
     """
     enforced = entitlements_enforced()
-    plan = await subscriptions.plan_for(user)
+    billing_user = (org or {}).get("billing_user") or user
+    plan = await subscriptions.plan_for(billing_user)
 
     # Les fonctionnalités réservées sont toutes nouvelles : tant que
     # l'abonnement n'est pas achetable, elles sont déclarées sans être
@@ -136,7 +166,7 @@ async def check(user: dict, *, feature: Optional[str] = None,
     limit = entitlements.quota(plan, quota)
     if limit is None:
         return
-    used = await usage(user["user_id"], quota)
+    used = await usage(user["user_id"], quota, org_id=(org or {}).get("org_id"))
     if used + amount <= limit:
         return
     period = entitlements.quota_period(quota)
@@ -150,16 +180,32 @@ async def check(user: dict, *, feature: Optional[str] = None,
 
 
 def require(*, feature: Optional[str] = None, quota: Optional[str] = None,
-            amount: int = 1):
+            amount: int = 1, org_aware: bool = False):
     """Dépendance FastAPI : remplace `Depends(get_current_user)` en place.
 
         async def create_recipe(inp, user: dict = Depends(require(quota="recipes_total"))):
 
     Elle renvoie le même document utilisateur, pour que la signature et le
     corps de la route restent inchangés.
+
+    `org_aware=True` résout aussi le contexte d'organisation de l'appelant
+    (`organisations.get_org_context`) et le passe à `check()` — à utiliser
+    sur les routes dont le palier/quota doit tenir compte d'une organisation
+    partagée (voir `routers/production.py::create_production`). Import
+    tardif, à l'intérieur de la fonction : `organisations.py` importe
+    `gating.check`, un import en tête de ce module créerait un cycle.
     """
-    async def dependency(user: dict = Depends(get_current_user)) -> dict:
-        await check(user, feature=feature, quota=quota, amount=amount)
+    if not org_aware:
+        async def dependency(user: dict = Depends(get_current_user)) -> dict:
+            await check(user, feature=feature, quota=quota, amount=amount)
+            return user
+        return dependency
+
+    from organisations import get_org_context
+
+    async def dependency(user: dict = Depends(get_current_user),
+                         org: dict = Depends(get_org_context)) -> dict:
+        await check(user, feature=feature, quota=quota, amount=amount, org=org)
         return user
     return dependency
 
