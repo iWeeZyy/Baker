@@ -18,6 +18,8 @@ import production
 import subscriptions
 from core import db, get_current_user
 from gating import require
+from org_scope import can_delete, scope, stamp
+from organisations import get_org_context
 from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
 
 router = APIRouter(prefix="/api")
@@ -112,23 +114,30 @@ def _carry_over_step_state(old_doc: dict, new_lines: list, new_steps: list) -> N
             step["duration_minutes"] = old["duration_minutes"]
             step["duration_source"] = "manual"
 
-async def _productions_used_this_month(user_id: str) -> int:
+async def _productions_used_this_month(user: dict, org: Optional[dict] = None) -> int:
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-    return await db.productions.count_documents({"user_id": user_id, "created_at": {"$gte": start}})
+    return await db.productions.count_documents({**scope(user, org), "created_at": {"$gte": start}})
 
-async def _plan_state(user: dict) -> dict:
+async def _plan_state(user: dict, org: Optional[dict] = None) -> dict:
     """La charge utile de `/me/plan`.
 
     Elle **s'étend, ne rétrécit jamais** : une application déjà livrée lit
     `plan`, `limits`, `productions_*` et `ads`, donc ces clés gardent leur nom
     et leur forme. Les clés `enforced`/`features`/`quotas`/`plans` s'ajoutent
     à côté pour les quatre offres.
+
+    Dans une organisation, `plan` reflète le palier du **propriétaire**
+    (`org["billing_user"]`) — un employé Gratuit voit et profite du palier
+    Équipe de son employeur, jamais du sien — et `productions_used` compte
+    la production partagée de l'organisation entière, pas seulement celle
+    de l'appelant.
     """
-    sub = await subscriptions.get_subscription(user["user_id"])
-    plan = resolve_plan(user, sub)
+    billing_user = (org or {}).get("billing_user") or user
+    sub = await subscriptions.get_subscription(billing_user["user_id"])
+    plan = resolve_plan(billing_user, sub)
     quota = production_quota(plan)
-    used = await _productions_used_this_month(user["user_id"])
+    used = await _productions_used_this_month(user, org)
     enforced = entitlements_enforced()
     return {
         "plan": plan,
@@ -182,16 +191,17 @@ def _production_summary(doc: dict) -> dict:
     }
 
 @router.get("/me/plan")
-async def my_plan(user: dict = Depends(get_current_user)):
-    return await _plan_state(user)
+async def my_plan(user: dict = Depends(get_current_user), org: dict = Depends(get_org_context)):
+    return await _plan_state(user, org)
 
 @router.get("/productions")
 async def list_productions(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     user: dict = Depends(get_current_user),
+    org: dict = Depends(get_org_context),
 ):
-    q = {"user_id": user["user_id"]}
+    q = {**scope(user, org)}
     if date_from or date_to:
         rng = {}
         if date_from:
@@ -205,7 +215,8 @@ async def list_productions(
 @router.post("/productions")
 async def create_production(
     inp: ProductionInput,
-    user: dict = Depends(require(quota="productions_per_month")),
+    user: dict = Depends(require(quota="productions_per_month", org_aware=True)),
+    org: dict = Depends(get_org_context),
 ):
     date = _validate_date(inp.date)
     target_time = _validate_time(inp.target_time)
@@ -213,7 +224,7 @@ async def create_production(
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
+        **stamp(user, org),
         "date": date,
         "target_time": target_time,
         "notes": (inp.notes or "").strip(),
@@ -226,16 +237,22 @@ async def create_production(
     return _production_detail(doc)
 
 @router.get("/productions/{production_id}")
-async def get_production(production_id: str, user: dict = Depends(get_current_user)):
-    # Scoped by user_id: someone else's id is indistinguishable from a missing one.
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+async def get_production(
+    production_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    # Scoped: someone else's id (or another organisation's) is indistinguishable
+    # from a missing one.
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Production introuvable")
     return _production_detail(doc)
 
 @router.put("/productions/{production_id}")
-async def update_production(production_id: str, inp: ProductionInput, user: dict = Depends(get_current_user)):
-    existing = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+async def update_production(
+    production_id: str, inp: ProductionInput,
+    user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    existing = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Production introuvable")
     date = _validate_date(inp.date)
@@ -250,14 +267,19 @@ async def update_production(production_id: str, inp: ProductionInput, user: dict
         "steps": steps,
         "updated_at": datetime.now(timezone.utc),
     }
-    await db.productions.update_one({"id": production_id, "user_id": user["user_id"]}, {"$set": update})
+    await db.productions.update_one({"id": production_id, **scope(user, org)}, {"$set": update})
     return _production_detail({**existing, **update})
 
 @router.delete("/productions/{production_id}")
-async def delete_production(production_id: str, user: dict = Depends(get_current_user)):
-    res = await db.productions.delete_one({"id": production_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
+async def delete_production(
+    production_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
+    if not doc:
         raise HTTPException(404, "Production introuvable")
+    if not can_delete(user, org, doc):
+        raise HTTPException(403, "Seuls l'auteur ou l'encadrement peuvent supprimer cette production.")
+    await db.productions.delete_one({"id": production_id, **scope(user, org)})
     return {"status": "deleted"}
 
 @router.patch("/productions/{production_id}/steps/{step_id}")
@@ -266,8 +288,9 @@ async def update_production_step(
     step_id: str,
     inp: StepPatchInput,
     user: dict = Depends(get_current_user),
+    org: dict = Depends(get_org_context),
 ):
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Production introuvable")
     step = next((s for s in doc.get("steps", []) if s.get("step_id") == step_id), None)
@@ -283,7 +306,7 @@ async def update_production_step(
         step["duration_minutes"] = inp.duration_minutes
         step["duration_source"] = "manual"
     await db.productions.update_one(
-        {"id": production_id, "user_id": user["user_id"]},
+        {"id": production_id, **scope(user, org)},
         {"$set": {"steps": doc["steps"], "updated_at": datetime.now(timezone.utc)}},
     )
     return _production_detail(doc)
