@@ -87,6 +87,15 @@ def _latest(token, ntype=None):
     return docs[0] if docs else None
 
 
+def _unread_count_of_type(token, ntype):
+    """Isole le type suivi : un badge caché (`night_owl`, voir badges.py) peut
+    légitimement ajouter une notification `badge_unlocked` sur le tout premier
+    événement XP d'un compte entre 0h et 5h UTC, sans rapport avec le suivi
+    testé ici — un total brut ferait dépendre ce test de l'heure d'exécution."""
+    docs = requests.get(f"{API}/notifications", headers=h(token), timeout=30).json()["notifications"]
+    return sum(1 for d in docs if d["type"] == ntype and not d["read"])
+
+
 class TestIndependentChecks:
     def test_list_requires_auth(self):
         r = requests.get(f"{API}/notifications", timeout=30)
@@ -122,12 +131,12 @@ class TestNotificationFlow:
         requests.post(f"{API}/notifications/read-all", headers=h(token_g), timeout=30)
 
     def test_02_follow_notifies_the_followee(self, token_f, token_g, user_f, user_g):
-        before = _unread_count(token_f)
+        before = _unread_count_of_type(token_f, "new_follower")
         r = requests.post(f"{API}/users/{user_f}/follow", headers=h(token_g), timeout=30)
         assert r.status_code == 200
         assert r.json()["following"] is True
 
-        assert _unread_count(token_f) == before + 1
+        assert _unread_count_of_type(token_f, "new_follower") == before + 1
         notif = _latest(token_f, "new_follower")
         assert notif is not None
         assert notif["actor_id"] == user_g
