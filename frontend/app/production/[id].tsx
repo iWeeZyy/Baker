@@ -17,6 +17,8 @@ import { syncWidgetData } from '@/src/widgetData';
 import { EmptyState } from '@/src/EmptyState';
 import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { useProductionSteps, type Step } from '@/src/useProductionSteps';
+import { useOrgMembers } from '@/src/useOrgMembers';
+import { AssigneeControl } from '@/src/AssigneeControl';
 
 type Tab = 'summary' | 'ingredients' | 'schedule';
 
@@ -74,6 +76,7 @@ export default function ProductionDetail() {
   const { can } = useEntitlements();
 
   const { data, loading, error, setError, busyStep, patchStep, orderedSteps, missing } = useProductionSteps(id);
+  const { members } = useOrgMembers();
   const [tab, setTab] = useState<Tab>('summary');
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
 
@@ -347,6 +350,17 @@ export default function ProductionDetail() {
                       </Pressable>
                     )}
 
+                    {members.length > 0 && (
+                      <View style={styles.assigneeRow}>
+                        <AssigneeControl
+                          assigneeUserId={step.assignee_user_id}
+                          members={members}
+                          busy={busyStep === step.step_id}
+                          onChange={userId => patchStep(step.step_id, { assignee_user_id: userId || '' })}
+                        />
+                      </View>
+                    )}
+
                     {needsDuration && (
                       <View style={styles.durationBox}>
                         <Text style={styles.durationHint}>
@@ -434,6 +448,7 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   stepDuration: { fontSize: 11, color: colors.muted },
   timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: theme.radius.pill },
   timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
+  assigneeRow: { marginTop: 10, marginLeft: 56 },
   durationBox: { marginTop: 12, marginLeft: 56 },
   durationHint: { fontSize: 11, color: colors.muted, lineHeight: 16 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

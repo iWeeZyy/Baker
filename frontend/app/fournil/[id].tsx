@@ -11,6 +11,8 @@ import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { LockedFeatureNotice } from '@/src/PlanChip';
 import { useProductionSteps, type Step } from '@/src/useProductionSteps';
+import { useOrgMembers } from '@/src/useOrgMembers';
+import { AssigneeControl } from '@/src/AssigneeControl';
 
 const NEXT_STATUS: Record<Step['status'], Step['status']> = {
   todo: 'doing',
@@ -54,6 +56,7 @@ export default function FournilMode() {
   const locked = !can('fournil_mode');
 
   const { data, loading, error, busyStep, patchStep, orderedSteps } = useProductionSteps(id);
+  const { members } = useOrgMembers();
 
   const startTimer = (step: Step) => {
     if (step.duration_minutes == null) return;
@@ -173,6 +176,18 @@ export default function FournilMode() {
                     </Text>
                   </Pressable>
                 )}
+
+                {members.length > 0 && (
+                  <View style={styles.assigneeRow}>
+                    <AssigneeControl
+                      assigneeUserId={step.assignee_user_id}
+                      members={members}
+                      busy={busyStep === step.step_id}
+                      onChange={userId => patchStep(step.step_id, { assignee_user_id: userId || '' })}
+                      size="large"
+                    />
+                  </View>
+                )}
               </View>
             ))
           )}
@@ -225,4 +240,5 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
     backgroundColor: colors.brandTertiary, paddingHorizontal: 18, paddingVertical: 14, borderRadius: theme.radius.pill,
   },
   timerChipText: { fontSize: theme.fontSize.lg, color: colors.onBrandTertiary, fontWeight: '600' },
+  assigneeRow: { marginTop: 16, marginLeft: 82 },
 });

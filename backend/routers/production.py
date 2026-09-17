@@ -43,6 +43,10 @@ class ProductionInput(BaseModel):
 class StepPatchInput(BaseModel):
     status: Optional[str] = None
     duration_minutes: Optional[int] = None
+    # None = champ non envoyé (comme status/duration_minutes ci-dessus) ;
+    # "" = désassigner ; un user_id = assigner. Même convention que
+    # `PUT /auth/me` pour bio/instagram_username : une chaîne vide efface.
+    assignee_user_id: Optional[str] = None
 
 
 def _validate_date(value: str) -> str:
@@ -113,6 +117,10 @@ def _carry_over_step_state(old_doc: dict, new_lines: list, new_steps: list) -> N
         if old.get("duration_source") == "manual" and old.get("duration_minutes") is not None:
             step["duration_minutes"] = old["duration_minutes"]
             step["duration_source"] = "manual"
+        # Who was assigned survives an edit the same way a tick does — a
+        # quantity change shouldn't silently unassign the person already
+        # working the step.
+        step["assignee_user_id"] = old.get("assignee_user_id")
 
 async def _productions_used_this_month(user: dict, org: Optional[dict] = None) -> int:
     now = datetime.now(timezone.utc)
@@ -305,6 +313,22 @@ async def update_production_step(
             raise HTTPException(422, "La durée ne peut pas être négative")
         step["duration_minutes"] = inp.duration_minutes
         step["duration_source"] = "manual"
+    if inp.assignee_user_id is not None:
+        target = inp.assignee_user_id.strip()
+        if not target:
+            # Désassigner ne consomme aucun droit — retirer n'est jamais
+            # verrouillé, même invariant que can_delete()/une suppression.
+            step["assignee_user_id"] = None
+        else:
+            if not org.get("org_id"):
+                raise HTTPException(422, "Attribuer une étape suppose une organisation active.")
+            from gating import check
+            await check(user, feature="org_tasks", org=org)
+            member = await db.org_members.find_one(
+                {"org_id": org["org_id"], "user_id": target, "status": "active"})
+            if not member:
+                raise HTTPException(422, "Cette personne n'est pas membre de l'organisation.")
+            step["assignee_user_id"] = target
     await db.productions.update_one(
         {"id": production_id, **scope(user, org)},
         {"$set": {"steps": doc["steps"], "updated_at": datetime.now(timezone.utc)}},

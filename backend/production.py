@@ -250,6 +250,7 @@ def build_steps(line_id: str, recipe_title: str, step_texts: List[str]) -> List[
             "status": "todo",
             "start_at": None,
             "end_at": None,
+            "assignee_user_id": None,
         })
     return steps
 

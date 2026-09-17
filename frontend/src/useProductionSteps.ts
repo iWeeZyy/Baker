@@ -26,6 +26,7 @@ export type Step = {
   status: 'todo' | 'doing' | 'done';
   start_at: string | null;
   end_at: string | null;
+  assignee_user_id: string | null;
 };
 
 export type ProductionDetail = {

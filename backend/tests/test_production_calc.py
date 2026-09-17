@@ -139,6 +139,14 @@ class TestBatches:
         assert total_pieces([{"mode": "batches", "quantity": 2, "yield_pieces": None, "batches": 2}]) is None
 
 
+class TestBuildSteps:
+    def test_a_fresh_step_carries_no_assignee(self):
+        # assignee_user_id is stamped None at creation — task assignment
+        # (phase 7c) is opt-in via a later PATCH, never guessed here.
+        steps = build_steps("L1", "Baguette", ["Pétrir 10 min."])
+        assert steps[0]["assignee_user_id"] is None
+
+
 class TestSchedule:
     def _steps(self):
         return build_steps("L1", "Baguette", [
