@@ -7,6 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { useEntitlements } from '@/src/entitlements';
+import { LockedFeatureNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
@@ -30,6 +32,8 @@ export default function ScanRecipe() {
 
   const router = useRouter();
   const { refreshUser } = useAuth();
+  const { can } = useEntitlements();
+  const locked = !can('recipe_scan');
   const [phase, setPhase] = useState<'capture' | 'analyzing' | 'verify'>('capture');
   const [pages, setPages] = useState<Page[]>([]);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -395,6 +399,26 @@ export default function ScanRecipe() {
   }
 
   // ---------- Capture phase ----------
+  if (locked) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.headerRow}>
+          <Pressable testID="scan-close" onPress={() => router.back()}>
+            <Feather name="x" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>Scanner une recette</Text>
+        </View>
+        <View style={{ paddingHorizontal: 24 }}>
+          <LockedFeatureNotice
+            minPlan="pro"
+            label="Le scan de recette est réservé à l'offre Pro"
+            onPress={() => router.push('/pro?feature=recipe_scan' as any)}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerRow}>

@@ -7,6 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { useEntitlements } from '@/src/entitlements';
+import { LockedFeatureNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
@@ -39,6 +41,10 @@ export default function InstagramImport() {
 
   const router = useRouter();
   const { refreshUser } = useAuth();
+  const { can } = useEntitlements();
+  // Même feature que le scan de recette (recipe_scan) : deux façons
+  // d'obtenir une extraction assistée par IA, un seul droit qui les couvre.
+  const locked = !can('recipe_scan');
   const [phase, setPhase] = useState<'paste' | 'analyzing' | 'verify'>('paste');
   const [caption, setCaption] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -386,6 +392,26 @@ export default function InstagramImport() {
   }
 
   // ---------- Paste phase ----------
+  if (locked) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.headerRow}>
+          <Pressable testID="instagram-close" onPress={() => router.back()}>
+            <Feather name="x" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>Importer depuis Instagram</Text>
+        </View>
+        <View style={{ paddingHorizontal: 24 }}>
+          <LockedFeatureNotice
+            minPlan="pro"
+            label="L'import Instagram est réservé à l'offre Pro"
+            onPress={() => router.push('/pro?feature=recipe_scan' as any)}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const canAnalyze = caption.trim().length >= MIN_CAPTION_LENGTH;
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
