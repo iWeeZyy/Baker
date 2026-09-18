@@ -81,9 +81,16 @@ export default function Onboarding() {
     setIndex(i);
   };
 
+  // Dérivé de `onScroll`, pas seulement `onMomentumScrollEnd` : sur le web,
+  // `react-native-web` n'émet pas toujours cet événement de fin d'inertie
+  // pour un ScrollView paginé (un swipe rapide peut ne jamais le déclencher),
+  // ce qui laissait les points de progression figés sur le premier bien que
+  // les diapositives défilaient normalement. `onScroll` se déclenche de
+  // façon fiable sur les trois plateformes ; la garde évite un re-render à
+  // chaque tick de défilement quand l'index affiché n'a pas changé.
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setIndex(i);
+    setIndex((prev) => (prev === i ? prev : i));
   };
 
   const goToLogin = async () => {
@@ -116,6 +123,7 @@ export default function Onboarding() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
+        onScroll={onScrollEnd}
         onMomentumScrollEnd={onScrollEnd}
         style={{ flex: 1 }}
       >
