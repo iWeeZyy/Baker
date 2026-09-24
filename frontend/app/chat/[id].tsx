@@ -40,9 +40,16 @@ const REPORT_REASONS: { key: string; label: string }[] = [
   { key: 'other', label: 'Autre' },
 ];
 
+// Juste l'heure pour un message du jour ; date + heure sinon, pour ne pas
+// laisser croire qu'un message d'il y a plusieurs jours vient d'arriver.
 function fmtTime(s: string) {
   const d = new Date(s.endsWith('Z') || s.includes('+') ? s : s + 'Z');
-  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return time;
+  const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  return `${date} · ${time}`;
 }
 
 function reportMessage(messageId: string) {
