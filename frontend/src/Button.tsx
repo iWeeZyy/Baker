@@ -17,6 +17,8 @@ type ButtonVariant = 'primary' | 'secondary' | 'text';
 export function Button({
   label,
   onPress,
+  onPressIn,
+  onPressOut,
   variant = 'primary',
   disabled,
   loading,
@@ -27,6 +29,11 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
+  // Passthrough optionnel — permet à un écran (ex. auth.tsx) de piloter sa
+  // propre animation de compression au toucher sans changer le comportement
+  // de tous les autres boutons de l'app, qui ne les passent jamais.
+  onPressIn?: () => void;
+  onPressOut?: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
   loading?: boolean;
@@ -44,6 +51,8 @@ export function Button({
     <Pressable
       testID={testID}
       onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.base,

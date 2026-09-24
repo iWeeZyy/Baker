@@ -24,7 +24,7 @@ const TAB_BAR_HEIGHT = 88;
 
 type MenuItem = {
   key: string; label: string; icon: keyof typeof Feather.glyphMap;
-  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges';
+  route: '/(tabs)/profile' | '/(tabs)/friends' | '/(tabs)/following' | '/classement' | '/messagerie' | '/collections' | '/badges' | '/organisation' | '/dashboard' | '/pro-orders';
   // Préfixes de pathname qui comptent comme "dans cette section" — source
   // unique pour l'état actif du bouton d'onglet ET de la ligne de menu
   // correspondante (avant, deux calculs divergents existaient : le bouton
@@ -109,6 +109,17 @@ export function ProfileTabButton() {
     // Deux préfixes : `/badges` (la liste) et `/badge` (le détail singulier
     // `/badge/{id}`, une route distincte, pas une sous-page de `/badges`).
     { key: 'badges', label: 'Mes badges', icon: 'star', route: '/badges', matchPrefixes: ['/badges', '/badge'] },
+    // "briefcase" : pas encore utilisée ailleurs dans l'app, cohérente avec
+    // une organisation professionnelle plutôt qu'une icône déjà prise.
+    { key: 'organisation', label: 'Organisation', icon: 'briefcase', route: '/organisation', matchPrefixes: ['/organisation'] },
+    // "bar-chart-2" : pas encore utilisée ailleurs dans l'app. Pas de
+    // pastille ici : contrairement à Amis/Messagerie, rien n'y est jamais
+    // "non lu" — le tableau de bord se consulte, il ne se notifie pas.
+    { key: 'dashboard', label: 'Tableau de bord', icon: 'bar-chart-2', route: '/dashboard', matchPrefixes: ['/dashboard'] },
+    // "shopping-bag" : pas encore utilisée ailleurs dans l'app, cohérente
+    // avec une commande client. Pas de pastille : une commande en attente
+    // ne se "notifie" pas différemment d'une production à faire.
+    { key: 'pro-orders', label: 'Commandes pro', icon: 'shopping-bag', route: '/pro-orders', matchPrefixes: ['/pro-orders'] },
   ];
 
   const select = (item: MenuItem) => {

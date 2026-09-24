@@ -7,6 +7,8 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE, getToken } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { useEntitlements } from '@/src/entitlements';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
@@ -30,6 +32,15 @@ export default function ScanRecipe() {
 
   const router = useRouter();
   const { refreshUser } = useAuth();
+  // Le scan de recette n'est plus verrouillé par palier (chantier des
+  // quotas d'essai) : `recipe_scan` est désormais accessible à Free, borné
+  // par `scans_total` — un quota d'essai à vie (3 gratuits, partagé avec
+  // l'import Instagram, jamais remboursé par la suppression d'une recette
+  // scannée). Vérifié ici avant même d'ouvrir l'appareil photo, pour ne
+  // jamais laisser quelqu'un photographier une fiche pour rien.
+  const { quota } = useEntitlements();
+  const scansQuota = quota('scans_total');
+  const limitReached = scansQuota?.limit != null && (scansQuota.remaining ?? 1) <= 0;
   const [phase, setPhase] = useState<'capture' | 'analyzing' | 'verify'>('capture');
   const [pages, setPages] = useState<Page[]>([]);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -395,6 +406,26 @@ export default function ScanRecipe() {
   }
 
   // ---------- Capture phase ----------
+  if (limitReached) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.headerRow}>
+          <Pressable testID="scan-close" onPress={() => router.back()}>
+            <Feather name="x" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>Scanner une recette</Text>
+        </View>
+        <View style={{ paddingHorizontal: 24 }}>
+          <LimitReachedNotice
+            minPlan="pro"
+            label={`Vous avez utilisé vos ${scansQuota!.limit} scans gratuits`}
+            onPress={() => router.push('/pro' as any)}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerRow}>

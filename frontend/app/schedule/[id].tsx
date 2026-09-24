@@ -8,6 +8,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { confirmAsync } from '@/src/confirm';
+import { useEntitlements } from '@/src/entitlements';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
@@ -49,6 +51,16 @@ export default function ScheduleScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = !id || id === 'new';
+  const { quota } = useEntitlements();
+  // Le planning personnel n'est plus verrouillé par palier (chantier des
+  // quotas d'essai) : `staff_schedule` est désormais accessible à Free,
+  // borné par `schedules_total` — un quota stock (3 grilles CONSERVÉES,
+  // supprimer en libère une), vérifié côté serveur uniquement à la
+  // CRÉATION (jamais à la modification, voir gating.py) : un planning déjà
+  // enregistré reste éditable/exportable/imprimable même une fois le
+  // plafond atteint.
+  const schedulesQuota = quota('schedules_total');
+  const limitReached = isNew && schedulesQuota?.limit != null && (schedulesQuota.remaining ?? 1) <= 0;
 
   const [weekStart, setWeekStart] = useState(sundayOf());
   const [notes, setNotes] = useState('');
@@ -438,15 +450,24 @@ export default function ScheduleScreen() {
           {error && <Text style={styles.error} testID="schedule-error">{error}</Text>}
           {flash && <Text style={styles.flash} testID="schedule-flash">{flash}</Text>}
 
-          <Button
-            testID="schedule-save"
-            onPress={save}
-            disabled={saving}
-            loading={saving}
-            icon="check"
-            label="Enregistrer"
-            style={{ marginTop: 22 }}
-          />
+          {limitReached ? (
+            <LimitReachedNotice
+              minPlan="pro"
+              label={`Vous avez utilisé vos ${schedulesQuota!.limit} plannings gratuits`}
+              onPress={() => router.push('/pro' as any)}
+              style={{ marginTop: 22 }}
+            />
+          ) : (
+            <Button
+              testID="schedule-save"
+              onPress={save}
+              disabled={saving}
+              loading={saving}
+              icon="check"
+              label="Enregistrer"
+              style={{ marginTop: 22 }}
+            />
+          )}
 
           {scheduleId && (
             <>

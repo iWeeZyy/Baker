@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field
 
 import staff
 from core import db, get_current_user
+from gating import check
+from org_scope import can_delete, scope, stamp
+from organisations import get_org_context
 
 router = APIRouter(prefix="/api")
 
@@ -92,18 +95,30 @@ def _schedule_summary(doc: dict) -> dict:
     }
 
 @router.get("/schedules")
-async def list_schedules(user: dict = Depends(get_current_user)):
-    docs = await db.schedules.find({"user_id": user["user_id"]}, {"_id": 0}).sort("week_start", -1).to_list(200)
+async def list_schedules(user: dict = Depends(get_current_user), org: dict = Depends(get_org_context)):
+    docs = await db.schedules.find({**scope(user, org)}, {"_id": 0}).sort("week_start", -1).to_list(200)
     return [_schedule_summary(d) for d in docs]
 
 @router.post("/schedules")
-async def create_schedule(inp: ScheduleInput, user: dict = Depends(get_current_user)):
+async def create_schedule(
+    inp: ScheduleInput, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
     week_start = _validate_week_start(inp.week_start)
     employees = _build_schedule_employees(inp)
+    # `check` plutôt que la dépendance `require` : le plafond porte sur
+    # l'effectif de la grille envoyée, donc la quantité consommée n'est
+    # connue qu'une fois la charge utile validée. `schedules_total` (une
+    # grille de plus, stock — supprimer une grille libère une place) ne se
+    # vérifie qu'à la création, jamais à la modification d'une grille déjà
+    # possédée (voir update_schedule ci-dessous, qui ne revérifie que
+    # schedule_employees).
+    await check(user, feature="staff_schedule",
+                quotas=[("schedules_total", 1), ("schedule_employees", len(employees))],
+                org=org)
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
+        **stamp(user, org),
         "week_start": week_start,
         "notes": (inp.notes or "").strip(),
         "employees": employees,
@@ -114,15 +129,20 @@ async def create_schedule(inp: ScheduleInput, user: dict = Depends(get_current_u
     return _schedule_detail(doc)
 
 @router.get("/schedules/{schedule_id}")
-async def get_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
-    doc = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+async def get_schedule(
+    schedule_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    doc = await db.schedules.find_one({"id": schedule_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Emploi du temps introuvable")
     return _schedule_detail(doc)
 
 @router.put("/schedules/{schedule_id}")
-async def update_schedule(schedule_id: str, inp: ScheduleInput, user: dict = Depends(get_current_user)):
-    existing = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+async def update_schedule(
+    schedule_id: str, inp: ScheduleInput,
+    user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    existing = await db.schedules.find_one({"id": schedule_id, **scope(user, org)}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Emploi du temps introuvable")
     update = {
@@ -131,20 +151,30 @@ async def update_schedule(schedule_id: str, inp: ScheduleInput, user: dict = Dep
         "employees": _build_schedule_employees(inp),
         "updated_at": datetime.now(timezone.utc),
     }
-    await db.schedules.update_one({"id": schedule_id, "user_id": user["user_id"]}, {"$set": update})
+    await check(user, feature="staff_schedule",
+                quota="schedule_employees", amount=len(update["employees"]), org=org)
+    await db.schedules.update_one({"id": schedule_id, **scope(user, org)}, {"$set": update})
     return _schedule_detail({**existing, **update})
 
 @router.delete("/schedules/{schedule_id}")
-async def delete_schedule(schedule_id: str, user: dict = Depends(get_current_user)):
-    res = await db.schedules.delete_one({"id": schedule_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
+async def delete_schedule(
+    schedule_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    doc = await db.schedules.find_one({"id": schedule_id, **scope(user, org)}, {"_id": 0})
+    if not doc:
         raise HTTPException(404, "Emploi du temps introuvable")
+    if not can_delete(user, org, doc):
+        raise HTTPException(403, "Seuls l'auteur ou l'encadrement peuvent supprimer cet emploi du temps.")
+    await db.schedules.delete_one({"id": schedule_id, **scope(user, org)})
     return {"status": "deleted"}
 
 @router.post("/schedules/{schedule_id}/duplicate")
-async def duplicate_schedule(schedule_id: str, inp: dict = None, user: dict = Depends(get_current_user)):
+async def duplicate_schedule(
+    schedule_id: str, inp: dict = None,
+    user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
     """Copy a week onto another one, keeping names, shifts and days off."""
-    source = await db.schedules.find_one({"id": schedule_id, "user_id": user["user_id"]}, {"_id": 0})
+    source = await db.schedules.find_one({"id": schedule_id, **scope(user, org)}, {"_id": 0})
     if not source:
         raise HTTPException(404, "Emploi du temps introuvable")
 
@@ -152,7 +182,7 @@ async def duplicate_schedule(schedule_id: str, inp: dict = None, user: dict = De
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
+        **stamp(user, org),
         "week_start": week_start,
         # The note belongs to its week ("Armand off jeudi"), so it is not copied.
         "notes": "",

@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { useEntitlements } from '@/src/entitlements';
+import { LockedFeatureNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
@@ -35,6 +37,12 @@ export default function MaterialForm() {
   const router = useRouter();
   const { id, prefillName } = useLocalSearchParams<{ id?: string; prefillName?: string }>();
   const isEdit = !!id;
+  const { can } = useEntitlements();
+  // `locked` replie déjà l'interrupteur côté serveur (voir CLAUDE.md,
+  // "Offres et droits") : tant que ENTITLEMENTS_ENFORCED est éteint (le cas
+  // aujourd'hui), can() reste `true` pour tout le monde et cet écran se
+  // comporte exactement comme avant ce chantier.
+  const locked = !can('cost_materials');
 
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -107,6 +115,27 @@ export default function MaterialForm() {
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>;
+
+  if (locked) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Pressable testID="material-form-back" onPress={() => router.back()} style={styles.iconBtn}>
+            <Feather name="arrow-left" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>{isEdit ? 'Modifier le prix' : 'Nouvelle matière première'}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.body}>
+          <LockedFeatureNotice
+            minPlan="pro_plus"
+            label="Les matières premières sont réservées à l'offre Pro+"
+            onPress={() => router.push('/pro?feature=cost_materials')}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

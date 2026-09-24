@@ -13,9 +13,16 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import entitlements
+import orders
 import production
+import subscriptions
 from core import db, get_current_user
-from plans import ads_config, limits_for, production_quota, resolve_plan
+from gating import require
+from gating import usage as gating_usage
+from org_scope import can_delete, scope, stamp
+from organisations import get_org_context
+from plans import ads_config, entitlements_enforced, limits_for, production_quota, resolve_plan
 
 router = APIRouter(prefix="/api")
 
@@ -38,6 +45,10 @@ class ProductionInput(BaseModel):
 class StepPatchInput(BaseModel):
     status: Optional[str] = None
     duration_minutes: Optional[int] = None
+    # None = champ non envoyé (comme status/duration_minutes ci-dessus) ;
+    # "" = désassigner ; un user_id = assigner. Même convention que
+    # `PUT /auth/me` pour bio/instagram_username : une chaîne vide efface.
+    assignee_user_id: Optional[str] = None
 
 
 def _validate_date(value: str) -> str:
@@ -108,16 +119,63 @@ def _carry_over_step_state(old_doc: dict, new_lines: list, new_steps: list) -> N
         if old.get("duration_source") == "manual" and old.get("duration_minutes") is not None:
             step["duration_minutes"] = old["duration_minutes"]
             step["duration_source"] = "manual"
+        # Who was assigned survives an edit the same way a tick does — a
+        # quantity change shouldn't silently unassign the person already
+        # working the step.
+        step["assignee_user_id"] = old.get("assignee_user_id")
 
-async def _productions_used_this_month(user_id: str) -> int:
+async def _productions_used_this_month(user: dict, org: Optional[dict] = None) -> int:
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-    return await db.productions.count_documents({"user_id": user_id, "created_at": {"$gte": start}})
+    return await db.productions.count_documents({**scope(user, org), "created_at": {"$gte": start}})
 
-async def _plan_state(user: dict) -> dict:
-    plan = resolve_plan(user)
+async def _quotas_with_usage(user: dict, org: Optional[dict], plan: str) -> dict:
+    """Comme `entitlements.quotas_for(plan)`, mais complète `used`/`remaining`
+    pour chaque quota à plafond FINI du palier de l'appelant, en comptant
+    réellement en base (`gating.usage`). Un plafond `None` (illimité à ce
+    palier) reste `{"limit": None, "period": ...}` seul, sans requête
+    supplémentaire — la quasi-totalité des quotas d'un compte Pro+/Équipe,
+    ce qui garde ce chemin chaud bon marché pour la majorité des comptes
+    payants plutôt que de compter systématiquement les 10 quotas pour tout
+    le monde.
+
+    Compté pour l'acteur (`user["user_id"]`), pas pour le propriétaire de
+    facturation — même choix que `gating.check()` : le palier appliqué est
+    celui de l'organisation, mais chaque quota non org-scopé (recettes,
+    scans, adaptations, collections...) reste personnel à qui agit.
+    """
+    org_id = (org or {}).get("org_id")
+    out = {}
+    for key in entitlements.QUOTA_KEYS:
+        limit = entitlements.quota(plan, key)
+        period = entitlements.quota_period(key)
+        if limit is None:
+            out[key] = {"limit": None, "period": period}
+            continue
+        used = await gating_usage(user["user_id"], key, org_id=org_id)
+        out[key] = {"limit": limit, "period": period, "used": used, "remaining": max(0, limit - used)}
+    return out
+
+async def _plan_state(user: dict, org: Optional[dict] = None) -> dict:
+    """La charge utile de `/me/plan`.
+
+    Elle **s'étend, ne rétrécit jamais** : une application déjà livrée lit
+    `plan`, `limits`, `productions_*` et `ads`, donc ces clés gardent leur nom
+    et leur forme. Les clés `enforced`/`features`/`quotas`/`plans` s'ajoutent
+    à côté pour les quatre offres.
+
+    Dans une organisation, `plan` reflète le palier du **propriétaire**
+    (`org["billing_user"]`) — un employé Gratuit voit et profite du palier
+    Équipe de son employeur, jamais du sien — et `productions_used` compte
+    la production partagée de l'organisation entière, pas seulement celle
+    de l'appelant.
+    """
+    billing_user = (org or {}).get("billing_user") or user
+    sub = await subscriptions.get_subscription(billing_user["user_id"])
+    plan = resolve_plan(billing_user, sub)
     quota = production_quota(plan)
-    used = await _productions_used_this_month(user["user_id"])
+    used = await _productions_used_this_month(user, org)
+    enforced = entitlements_enforced()
     return {
         "plan": plan,
         "limits": limits_for(plan),
@@ -127,28 +185,48 @@ async def _plan_state(user: dict) -> dict:
         # Whether this user may be shown ads at all. Decided here rather than in
         # the app so a Pro account can never be served one by a client bug.
         "ads": ads_config(plan),
+        # Les droits sont-ils réellement appliqués ? L'application n'a pas à le
+        # savoir — `locked` ci-dessous replie déjà la réponse — mais l'écran
+        # d'abonnement l'affiche pour ne rien promettre de faux.
+        "enforced": enforced,
+        # Par fonctionnalité : `allowed` = la vérité de l'offre (argumentaire),
+        # `locked` = ce que l'application doit respecter. Le seul champ sur
+        # lequel un écran a le droit de brancher est `locked`.
+        "features": entitlements.features_for(plan, enforced),
+        # `used`/`remaining` réels pour tout quota à plafond fini du palier
+        # de l'appelant (voir `_quotas_with_usage`) — `productions_*`
+        # ci-dessus reste en plus, inchangé, pour ne rien casser côté
+        # frontend déjà livré.
+        "quotas": await _quotas_with_usage(user, org, plan),
+        # Le catalogue des offres, pour que l'écran d'abonnement se construise
+        # à partir du serveur : changer un prix ou ajouter un palier ne
+        # demande alors aucune livraison sur les stores.
+        "plans": entitlements.plan_catalogue(),
+        # Où en est l'abonnement lui-même — distinct de « à quoi ai-je droit ».
+        # Neutre tant que rien n'est achetable, jamais une date inventée.
+        "subscription": subscriptions.public_state(sub),
     }
 
-async def _enforce_production_quota(user: dict) -> None:
-    """Server-side gate. The client is never trusted with this decision."""
-    state = await _plan_state(user)
-    quota = state["productions_limit"]
-    if quota is None or state["productions_used"] < quota:
-        return
-    # A structured payload, not a bare error: it lets the app present Baker Pro
-    # instead of a dead end.
-    raise HTTPException(403, {
-        "error": "plan_limit_reached",
-        "limit": quota,
-        "used": state["productions_used"],
-        "period": "month",
-        "message": f"Vous avez utilisé vos {quota} productions gratuites de ce mois-ci.",
-    })
-
-def _production_detail(doc: dict) -> dict:
+async def _production_detail(doc: dict, user: dict, org: Optional[dict] = None) -> dict:
+    """Fusionne les commandes pro actives dues le même jour dans l'agrégat
+    de matières — jamais copiées dans les `lines` de la production
+    elle-même (voir orders.py, phase 7b) : une commande annulée ou d'un
+    autre jour ne contribue jamais, et rien n'est jamais compté deux fois
+    puisque `db.pro_orders` et `db.productions` restent deux collections
+    entièrement séparées, fusionnées seulement ici, à la lecture.
+    """
     doc.pop("_id", None)
-    computed = production.summarize(doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"))
-    return {**doc, **computed}
+    order_docs = await db.pro_orders.find(
+        {**scope(user, org), "pickup_date": doc.get("date")}, {"_id": 0}).to_list(500)
+    active_orders = [o for o in order_docs if orders.is_active(o.get("status") or "pending")]
+    extra_lines = []
+    for o in active_orders:
+        extra_lines.extend(orders.scaled_lines_for_order(o.get("items")))
+    computed = production.summarize(
+        doc.get("lines"), doc.get("steps"), doc.get("date"), doc.get("target_time"),
+        extra_ingredient_lines=extra_lines,
+    )
+    return {**doc, **computed, "orders_count": len(active_orders)}
 
 def _production_summary(doc: dict) -> dict:
     steps = doc.get("steps") or []
@@ -167,16 +245,17 @@ def _production_summary(doc: dict) -> dict:
     }
 
 @router.get("/me/plan")
-async def my_plan(user: dict = Depends(get_current_user)):
-    return await _plan_state(user)
+async def my_plan(user: dict = Depends(get_current_user), org: dict = Depends(get_org_context)):
+    return await _plan_state(user, org)
 
 @router.get("/productions")
 async def list_productions(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     user: dict = Depends(get_current_user),
+    org: dict = Depends(get_org_context),
 ):
-    q = {"user_id": user["user_id"]}
+    q = {**scope(user, org)}
     if date_from or date_to:
         rng = {}
         if date_from:
@@ -188,15 +267,18 @@ async def list_productions(
     return [_production_summary(d) for d in docs]
 
 @router.post("/productions")
-async def create_production(inp: ProductionInput, user: dict = Depends(get_current_user)):
-    await _enforce_production_quota(user)
+async def create_production(
+    inp: ProductionInput,
+    user: dict = Depends(require(quota="productions_per_month", org_aware=True)),
+    org: dict = Depends(get_org_context),
+):
     date = _validate_date(inp.date)
     target_time = _validate_time(inp.target_time)
     lines, steps = await _build_lines_and_steps(inp)
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
-        "user_id": user["user_id"],
+        **stamp(user, org),
         "date": date,
         "target_time": target_time,
         "notes": (inp.notes or "").strip(),
@@ -206,19 +288,25 @@ async def create_production(inp: ProductionInput, user: dict = Depends(get_curre
         "updated_at": now,
     }
     await db.productions.insert_one(doc)
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)
 
 @router.get("/productions/{production_id}")
-async def get_production(production_id: str, user: dict = Depends(get_current_user)):
-    # Scoped by user_id: someone else's id is indistinguishable from a missing one.
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+async def get_production(
+    production_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    # Scoped: someone else's id (or another organisation's) is indistinguishable
+    # from a missing one.
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Production introuvable")
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)
 
 @router.put("/productions/{production_id}")
-async def update_production(production_id: str, inp: ProductionInput, user: dict = Depends(get_current_user)):
-    existing = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+async def update_production(
+    production_id: str, inp: ProductionInput,
+    user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    existing = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not existing:
         raise HTTPException(404, "Production introuvable")
     date = _validate_date(inp.date)
@@ -233,14 +321,19 @@ async def update_production(production_id: str, inp: ProductionInput, user: dict
         "steps": steps,
         "updated_at": datetime.now(timezone.utc),
     }
-    await db.productions.update_one({"id": production_id, "user_id": user["user_id"]}, {"$set": update})
-    return _production_detail({**existing, **update})
+    await db.productions.update_one({"id": production_id, **scope(user, org)}, {"$set": update})
+    return await _production_detail({**existing, **update}, user, org)
 
 @router.delete("/productions/{production_id}")
-async def delete_production(production_id: str, user: dict = Depends(get_current_user)):
-    res = await db.productions.delete_one({"id": production_id, "user_id": user["user_id"]})
-    if res.deleted_count == 0:
+async def delete_production(
+    production_id: str, user: dict = Depends(get_current_user), org: dict = Depends(get_org_context),
+):
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
+    if not doc:
         raise HTTPException(404, "Production introuvable")
+    if not can_delete(user, org, doc):
+        raise HTTPException(403, "Seuls l'auteur ou l'encadrement peuvent supprimer cette production.")
+    await db.productions.delete_one({"id": production_id, **scope(user, org)})
     return {"status": "deleted"}
 
 @router.patch("/productions/{production_id}/steps/{step_id}")
@@ -249,8 +342,9 @@ async def update_production_step(
     step_id: str,
     inp: StepPatchInput,
     user: dict = Depends(get_current_user),
+    org: dict = Depends(get_org_context),
 ):
-    doc = await db.productions.find_one({"id": production_id, "user_id": user["user_id"]}, {"_id": 0})
+    doc = await db.productions.find_one({"id": production_id, **scope(user, org)}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Production introuvable")
     step = next((s for s in doc.get("steps", []) if s.get("step_id") == step_id), None)
@@ -265,8 +359,24 @@ async def update_production_step(
             raise HTTPException(422, "La durée ne peut pas être négative")
         step["duration_minutes"] = inp.duration_minutes
         step["duration_source"] = "manual"
+    if inp.assignee_user_id is not None:
+        target = inp.assignee_user_id.strip()
+        if not target:
+            # Désassigner ne consomme aucun droit — retirer n'est jamais
+            # verrouillé, même invariant que can_delete()/une suppression.
+            step["assignee_user_id"] = None
+        else:
+            if not org.get("org_id"):
+                raise HTTPException(422, "Attribuer une étape suppose une organisation active.")
+            from gating import check
+            await check(user, feature="org_tasks", org=org)
+            member = await db.org_members.find_one(
+                {"org_id": org["org_id"], "user_id": target, "status": "active"})
+            if not member:
+                raise HTTPException(422, "Cette personne n'est pas membre de l'organisation.")
+            step["assignee_user_id"] = target
     await db.productions.update_one(
-        {"id": production_id, "user_id": user["user_id"]},
+        {"id": production_id, **scope(user, org)},
         {"$set": {"steps": doc["steps"], "updated_at": datetime.now(timezone.utc)}},
     )
-    return _production_detail(doc)
+    return await _production_detail(doc, user, org)

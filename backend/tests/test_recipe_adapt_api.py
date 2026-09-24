@@ -4,6 +4,12 @@ détail par test_recipe_adapt_calc.py (pur, sans serveur) — ces tests
 vérifient l'exposition HTTP : auth, permissions de lecture, 404, et que
 /interpret suit exactement le même sort que /chat dans cet environnement
 sans clé Anthropic réelle (503, jamais un plantage).
+
+/interpret est devenue Pro-gated ("recipe_adapt", gating.py) ; TEST_EMAIL
+doit donc être couvert par PLAN_OVERRIDES (voir ci.yml) pour que
+TestInterpretRoute teste la route elle-même, pas le verrou -- celui-ci
+reste le travail de test_gating_api.py. /preview n'est pas concernée : elle
+n'est pas gated.
 """
 import os
 

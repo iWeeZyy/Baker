@@ -1,32 +1,41 @@
-"""Free / Pro plan definitions.
+"""Ce qui dépend de l'environnement : palier en vigueur, publicité.
 
-Single source of truth for what each plan allows. Kept apart from server.py so
-the limits can be reasoned about (and tested) on their own, and so plugging a
-real billing provider in later only touches `resolve_plan`.
+La table des droits elle-même vit dans `entitlements.py`, pur et sans
+`os.environ` — ici on ne garde que ce qui lit la configuration du serveur
+(liste d'e-mails, interrupteurs) et ce qui en découle. Les quatre offres
+(`FREE`/`PRO`/`PRO_PLUS`/`TEAM`) sont ré-exportées ci-dessous pour que les
+modules qui importaient déjà `plans.FREE`/`plans.PRO` n'aient rien à changer.
+
+Brancher un vrai fournisseur de facturation ne touchera que `resolve_plan`.
 """
 import os
+from datetime import datetime
 from typing import Optional
 
-FREE = "free"
-PRO = "pro"
+import subscription_state
+from entitlements import (  # noqa: F401  (ré-exports : plans.FREE, plans.PRO…)
+    FREE,
+    PRO,
+    PRO_PLUS,
+    TEAM,
+    TIER_ORDER,
+    normalize,
+    quota,
+)
 
-# `None` means unlimited. Feature flags are declared here even when the feature
-# is not built yet, so shipping one later is a flag flip rather than a redesign.
+# Forme héritée, conservée telle quelle parce qu'une application déjà livrée
+# lit ces clés dans `/me/plan`. Les quatre drapeaux ne sont appliqués nulle
+# part (aucune de ces fonctionnalités n'est construite) ; le seul chiffre qui
+# compte vraiment, `productions_per_month`, est tiré d'`entitlements` pour
+# qu'il n'existe qu'à un seul endroit.
+_LEGACY_FLAGS = ("multi_day", "recurring", "sharing", "full_history")
+
 PLAN_LIMITS = {
-    FREE: {
-        "productions_per_month": 3,
-        "multi_day": False,
-        "recurring": False,
-        "sharing": False,
-        "full_history": False,
-    },
-    PRO: {
-        "productions_per_month": None,
-        "multi_day": True,
-        "recurring": True,
-        "sharing": True,
-        "full_history": True,
-    },
+    tier: {
+        "productions_per_month": quota(tier, "productions_per_month"),
+        **{flag: tier != FREE for flag in _LEGACY_FLAGS},
+    }
+    for tier in TIER_ORDER
 }
 
 
@@ -41,15 +50,73 @@ def _pro_emails() -> set:
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
-def resolve_plan(user: dict) -> str:
-    """The plan actually in force for a user, never trusting client input."""
-    if (user.get("email") or "").lower() in _pro_emails():
+def _plan_overrides() -> dict:
+    """`PLAN_OVERRIDES="a@b.fr:team,c@d.fr:pro_plus"` — e-mail → palier.
+
+    Même rôle que `PRO_EMAILS`, étendu aux paliers que celui-ci ne sait pas
+    exprimer. Côté serveur, donc infalsifiable par un client, et destiné à
+    disparaître derrière un vrai abonnement. Un palier inconnu est ignoré
+    plutôt que d'accorder quoi que ce soit.
+    """
+    out = {}
+    for entry in os.environ.get("PLAN_OVERRIDES", "").split(","):
+        email, _, tier = entry.partition(":")
+        email, tier = email.strip().lower(), tier.strip().lower()
+        if email and tier in TIER_ORDER:
+            out[email] = tier
+    return out
+
+
+def resolve_plan(user: dict, subscription: Optional[dict] = None,
+                 now: Optional[datetime] = None) -> str:
+    """The plan actually in force for a user, never trusting client input.
+
+    Quatre sources, dans cet ordre exact :
+
+    1. `PRO_EMAILS` — la liste historique. Elle reste **prioritaire sur
+       l'abonnement** : c'est elle qui fait tourner la CI et les tests
+       existants, et elle doit continuer de fonctionner même une fois la
+       facturation branchée, sans quoi vérifier un palier en recette
+       demanderait de fabriquer un faux abonnement.
+    2. `PLAN_OVERRIDES` — même rôle, pour les paliers que la première ne sait
+       pas exprimer.
+    3. L'abonnement, quand on en a un sous la main. Le paramètre est optionnel
+       : les appelants qui n'en ont pas gardent exactement le comportement
+       d'avant, donc rien de ce qui existe ne casse.
+    4. `user.plan`, qu'aucune route n'écrit — il ne peut venir que de la base,
+       jamais d'une requête ni d'un jeton.
+
+    Reste **pure** : `subscription` et `now` sont injectés, la lecture en base
+    vit dans `subscriptions.py`.
+    """
+    email = (user.get("email") or "").lower()
+    if email in _pro_emails():
         return PRO
-    return PRO if user.get("plan") == PRO else FREE
+    override = _plan_overrides().get(email)
+    if override:
+        return override
+    if subscription is not None:
+        accorde = subscription_state.plan_of(subscription, now)
+        if accorde != FREE:
+            return accorde
+        # Un abonnement expiré ne « masque » pas un palier posé en base à la
+        # main : on retombe sur la source suivante plutôt que sur Free d'office.
+    return normalize(user.get("plan"))
+
+
+def entitlements_enforced() -> bool:
+    """Les droits sont-ils réellement appliqués, ou seulement déclarés ?
+
+    Défaut **off**, même esprit que `ADS_ENABLED` : tant que l'abonnement
+    n'est pas achetable, refuser une fonctionnalité reviendrait à la retirer
+    à tout le monde sans aucun moyen de la débloquer. Éteint, le serveur
+    calcule et annonce les droits mais ne bloque rien.
+    """
+    return _env_flag("ENTITLEMENTS_ENFORCED")
 
 
 def limits_for(plan: str) -> dict:
-    return PLAN_LIMITS.get(plan, PLAN_LIMITS[FREE])
+    return PLAN_LIMITS.get(normalize(plan), PLAN_LIMITS[FREE])
 
 
 def production_quota(plan: str) -> Optional[int]:
@@ -61,7 +128,15 @@ def production_quota(plan: str) -> Optional[int]:
 # Ads are decided server-side for two reasons: a client bug can never show one
 # to a Pro user, and the frequency can be retuned without an App Store release.
 def ads_allowed(plan: str) -> bool:
-    """Only Free users may ever be shown an ad."""
+    """Only Free users may ever be shown an ad.
+
+    Deliberately phrased as "not Free" being ad-free, never as an enumerated
+    allow-list of paid tiers. `PLAN_LIMITS` only has FREE/PRO today, but a
+    future Pro+ or Équipe tier becomes ad-free automatically the moment
+    `resolve_plan()` returns anything other than FREE for it — no change
+    needed here. Rewriting this as `plan in (PRO, PRO_PLUS, TEAM)` would
+    silently start showing ads to any future tier someone forgets to list.
+    """
     return plan == FREE
 
 

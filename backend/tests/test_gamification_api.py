@@ -195,11 +195,28 @@ class TestCollectionXp:
         assert me["level_detail"]["xp"] == 5
 
     def test_lifetime_cap_stops_after_ten_collections(self):
-        token, _ = register()
+        # Un compte Free ne peut créer que 3 collections (collections_total,
+        # chantier des quotas d'essai) — bien en-deçà du plafond XP de 10
+        # que ce test veut exercer. Compte Pro dédié (PLAN_OVERRIDES, voir
+        # ci.yml) pour que 15 créations restent toutes possibles et que ce
+        # test continue de vérifier le plafond XP lui-même, pas le quota.
+        email = "test.gamification.collections@bakers.app"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "TestGamCollections2026!", "name": "Chef XP Collections"},
+                          timeout=30)
+        if r.status_code == 400:
+            r = requests.post(f"{API}/auth/login", json={"email": email, "password": "TestGamCollections2026!"}, timeout=30)
+        assert r.status_code == 200, r.text
+        token = r.json()["token"]
         for i in range(15):
-            requests.post(f"{API}/collections", headers=h(token), json={"name": f"Dossier {i}", "description": ""}, timeout=30)
+            requests.post(f"{API}/collections", headers=h(token),
+                          json={"name": f"Dossier {uuid.uuid4().hex[:6]} {i}", "description": ""}, timeout=30)
         me = requests.get(f"{API}/auth/me", headers=h(token), timeout=30).json()
-        assert me["level_detail"]["xp"] == 10 * 5  # plafonné à 10 collections
+        # Le plafond sature à 50 et n'en redescend jamais (aucune route ne
+        # retire d'XP) : l'égalité reste vraie même si ce compte fixe a
+        # déjà dépassé 10 collections lors d'un run précédent sur une base
+        # persistante.
+        assert me["level_detail"]["xp"] == 10 * 5
 
 
 class TestDeletedCreationKeepsXp:

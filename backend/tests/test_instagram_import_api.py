@@ -3,6 +3,11 @@ test_scan_api.py/test_recipe_adapt_api.py : cet environnement de test n'a
 pas de vraie clé ANTHROPIC_API_KEY, donc pas d'appel Anthropic réel — ces
 tests vérifient l'exposition HTTP (auth, validations) et que l'absence de
 clé produit un 503 propre, jamais un plantage.
+
+Cette route est devenue Pro-gated ("recipe_scan", gating.py) ; TEST_EMAIL
+doit donc être couvert par PLAN_OVERRIDES (voir ci.yml) pour que ce fichier
+teste la route elle-même, pas le verrou -- celui-ci reste le travail de
+test_gating_api.py.
 """
 import os
 

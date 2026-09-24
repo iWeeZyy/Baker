@@ -9,6 +9,11 @@ le développement via un client de test avec l'appel Anthropic simulé
 suite) plutôt que d'appeler le vrai service ici — même principe que
 MODERATION_PROVIDER=stub pour la modération d'image : ne jamais dépenser
 sur un appel IA réel dans la suite automatisée.
+
+Le scan est devenu Pro-gated ("recipe_scan", gating.py) ; TEST_EMAIL doit
+donc être couvert par PLAN_OVERRIDES (voir ci.yml) pour que ce fichier
+teste la route elle-même, pas le verrou -- celui-ci reste le travail de
+test_gating_api.py.
 """
 import io
 import os

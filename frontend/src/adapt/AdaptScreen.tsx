@@ -13,6 +13,8 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '@/src/api';
+import { useEntitlements } from '@/src/entitlements';
+import { LimitReachedNotice } from '@/src/PlanChip';
 import {
   type AdaptationRequest, type AdaptationResult, type FermentationSuggestion,
   emptyAdaptationRequest, isAdaptationRequestEmpty,
@@ -27,6 +29,17 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
   const { colors, mode } = useTheme();
   const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
+  // Seul /adapt/interpret (la case "Demander une adaptation" en langage
+  // naturel) est borné côté serveur — les contrôles manuels (quantité,
+  // hydratation, pourcentages, substitution, fermentation) passent par
+  // /adapt/preview, gratuit pour tout le monde. Ne pas verrouiller l'écran
+  // entier reviendrait à retirer une fonctionnalité que personne n'a
+  // jamais payée pour avoir. `recipe_adapt` n'est plus verrouillé par
+  // palier (chantier des quotas d'essai) : accessible à Free, borné par
+  // `adapts_total` (5 adaptations gratuites à vie, jamais remboursées).
+  const { quota } = useEntitlements();
+  const adaptsQuota = quota('adapts_total');
+  const adaptLimitReached = adaptsQuota?.limit != null && (adaptsQuota.remaining ?? 1) <= 0;
 
   const [loading, setLoading] = useState(true);
   const [recipe, setRecipe] = useState<any>(null);
@@ -461,19 +474,29 @@ export function AdaptScreen({ recipeId }: { recipeId: string }) {
             </Section>
 
             <Section icon="🤖" title="Demander une adaptation">
-              <TextInput
-                testID="adapt-ai-text"
-                value={aiText}
-                onChangeText={setAiText}
-                placeholder='ex. "120 baguettes de 250 g avec 15 % de seigle et une fermentation de 18 h au froid"'
-                placeholderTextColor={colors.muted}
-                style={[styles.input, { minHeight: 70 }]}
-                multiline
-              />
-              <Pressable testID="adapt-ai-submit" onPress={askAI} disabled={aiLoading || !aiText.trim()} style={[styles.smallBtn, (aiLoading || !aiText.trim()) && { opacity: 0.5 }]}>
-                {aiLoading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.smallBtnText}>Adapter</Text>}
-              </Pressable>
-              {aiError && <Text style={styles.errorText}>{aiError}</Text>}
+              {adaptLimitReached ? (
+                <LimitReachedNotice
+                  minPlan="pro"
+                  label={`Vous avez utilisé vos ${adaptsQuota!.limit} adaptations gratuites`}
+                  onPress={() => router.push('/pro' as any)}
+                />
+              ) : (
+                <>
+                  <TextInput
+                    testID="adapt-ai-text"
+                    value={aiText}
+                    onChangeText={setAiText}
+                    placeholder='ex. "120 baguettes de 250 g avec 15 % de seigle et une fermentation de 18 h au froid"'
+                    placeholderTextColor={colors.muted}
+                    style={[styles.input, { minHeight: 70 }]}
+                    multiline
+                  />
+                  <Pressable testID="adapt-ai-submit" onPress={askAI} disabled={aiLoading || !aiText.trim()} style={[styles.smallBtn, (aiLoading || !aiText.trim()) && { opacity: 0.5 }]}>
+                    {aiLoading ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.smallBtnText}>Adapter</Text>}
+                  </Pressable>
+                  {aiError && <Text style={styles.errorText}>{aiError}</Text>}
+                </>
+              )}
             </Section>
 
             {!isAdaptationRequestEmpty(request) && (

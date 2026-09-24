@@ -250,6 +250,7 @@ def build_steps(line_id: str, recipe_title: str, step_texts: List[str]) -> List[
             "status": "todo",
             "start_at": None,
             "end_at": None,
+            "assignee_user_id": None,
         })
     return steps
 
@@ -302,12 +303,26 @@ def compute_schedule(steps: List[dict], date: str, target_time: Optional[str]) -
     return {"steps": steps, "missing_durations": missing, "scheduled": True}
 
 
-def summarize(lines: List[dict], steps: List[dict], date: str, target_time: Optional[str]) -> dict:
-    """Everything the planning screens need, derived from stored data."""
+def summarize(
+    lines: List[dict], steps: List[dict], date: str, target_time: Optional[str],
+    extra_ingredient_lines: Optional[List[dict]] = None,
+) -> dict:
+    """Everything the planning screens need, derived from stored data.
+
+    `extra_ingredient_lines` — already-scaled lines (the shape
+    `scale_ingredients` produces) from outside this production's own
+    `lines`, folded into the same ingredient aggregate. This is how a pro
+    order due the same day (`orders.scaled_lines_for_order`, phase 7b)
+    contributes to "Farine T65 : 42,6 kg" without ever being copied into
+    the production's own `lines` — merged only here, at read time, never
+    stored twice.
+    """
     normalized = [normalize_line(l) for l in (lines or [])]
     scaled: List[dict] = []
     for line in normalized:
         scaled.extend(scale_ingredients(line.get("ingredients") or [], line.get("batches") or 0))
+    if extra_ingredient_lines:
+        scaled.extend(extra_ingredient_lines)
     schedule = compute_schedule(steps or [], date, target_time)
     return {
         "lines": normalized,

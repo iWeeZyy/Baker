@@ -37,6 +37,47 @@ jobs:
       # CI instead of asserting against a permanently-free test account (the
       # former) or self-skipping (the latter).
       PRO_EMAILS: test.pro@bakers.app
+      # Test/dev only, même rôle que PRO_EMAILS ci-dessus mais pour les paliers
+      # que celui-ci ne sait pas exprimer. Sans ça, test_entitlements_api.py
+      # s'ignorerait faute de compte Pro+/Équipe et les droits des deux paliers
+      # supérieurs ne seraient jamais exercés de bout en bout en CI.
+      # Les quatre entrées `test.*:pro` qui suivent font la même chose pour
+      # des comptes fixes d'autres suites qui exercent des fonctionnalités
+      # devenues Pro-gated par le chantier des droits (gating.py) : sans
+      # elles, ces classes échoueraient pour une raison sans rapport avec ce
+      # qu'elles testent le jour où ENTITLEMENTS_ENFORCED passe à vrai.
+      # - test.feed.e@bakers.app : publie plus de dix recettes (plafond
+      #   Free) pour remplir test_feed_api.py::TestFeedPagination au-delà
+      #   d'une page.
+      # - test.scan@bakers.app, test.instagram_import@bakers.app,
+      #   test.adapt.a@bakers.app : appellent respectivement le scan de
+      #   recette, l'import Instagram et l'interprétation d'adaptation
+      #   (recipe_scan/recipe_adapt), gérés dans test_scan_api.py,
+      #   test_instagram_import_api.py et test_recipe_adapt_api.py.
+      # - test.org.{creation,invites,roles,retrait,bascule,quota,sharing,tasks,
+      #   dashboard.acces,dashboard.contenu,orders.acces,orders.crud,orders.fusion}@bakers.app :
+      #   test_organisations_api.py + test_org_sharing_api.py + test_task_assignment_api.py +
+      #   test_dashboard_api.py + test_orders_api.py, un compte Équipe DÉDIÉ par classe (créer
+      #   une organisation exige elle aussi le palier Équipe) — dédié plutôt que partagé pour
+      #   que pytest-xdist --dist loadscope, qui peut répartir deux classes sur deux workers
+      #   différents, ne fasse jamais courir deux classes sur le même compte
+      #   (qui changerait active_org_id sous les pieds l'une de l'autre).
+      # - test.collections.{a,b}@bakers.app : test_collections.py crée bien plus
+      #   de trois collections sur la durée du fichier (le nouveau plafond
+      #   d'essai Free, collections_total=3, chantier des quotas) — Pro pour
+      #   que ce fichier continue de tester les Collections elles-mêmes plutôt
+      #   que d'échouer sur le quota, déjà couvert par test_gating_api.py.
+      # - test.gamification.collections@bakers.app : idem pour
+      #   test_gamification_api.py::TestCollectionXp::test_lifetime_cap_stops_after_ten_collections,
+      #   qui crée 15 collections pour vérifier le plafond XP interne (10) —
+      #   sans Pro, le quota Free (3) bloquerait bien avant d'y arriver.
+      PLAN_OVERRIDES: test.proplus@bakers.app:pro_plus,test.team@bakers.app:team,test.feed.e@bakers.app:pro,test.scan@bakers.app:pro,test.instagram_import@bakers.app:pro,test.adapt.a@bakers.app:pro,test.collections.a@bakers.app:pro,test.collections.b@bakers.app:pro,test.gamification.collections@bakers.app:pro,test.org.creation@bakers.app:team,test.org.invites@bakers.app:team,test.org.roles@bakers.app:team,test.org.retrait@bakers.app:team,test.org.bascule@bakers.app:team,test.org.quota@bakers.app:team,test.org.sharing@bakers.app:team,test.org.tasks@bakers.app:team,test.org.dashboard.acces@bakers.app:team,test.org.dashboard.contenu@bakers.app:team,test.org.orders.acces@bakers.app:team,test.org.orders.crud@bakers.app:team,test.org.orders.fusion@bakers.app:team
+      # Test/dev only — the same value configures both the uvicorn process
+      # started below and pytest itself (shared job env, see
+      # test_subscriptions_api.py's header), so the tests can sign a real
+      # webhook request. Without it, the whole authenticated-webhook suite
+      # self-skips rather than failing.
+      REVENUECAT_WEBHOOK_SECRET: ci-test-webhook-secret
     defaults:
       run:
         working-directory: backend

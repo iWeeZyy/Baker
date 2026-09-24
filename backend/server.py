@@ -25,6 +25,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 from core import db, client, get_current_user, sign_jwt, verify_jwt
+from gating import record_ai_usage, require
 import leaderboard
 import imaging
 import moderation
@@ -40,6 +41,10 @@ from routers.production import router as production_router
 from routers.staff import router as staff_router
 from routers.cost import router as cost_router
 from routers.tips import router as tips_router
+from routers.ads import router as ads_router
+from routers.subscription import router as subscription_router
+from routers.organisations import router as organisations_router
+from routers.orders import router as orders_router
 
 # ---------- Config ----------
 APP_NAME = "bakers-app"
@@ -747,7 +752,7 @@ async def _moderate_and_flag(result: "text_moderation.TextModerationResult", con
         })
 
 @api_router.post("/recipes")
-async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(get_current_user)):
+async def create_recipe(inp: RecipeCreateInput, user: dict = Depends(require(quota="recipes_total"))):
     fields = inp.dict()
     # A client that sends no family — or an unknown one — still gets a browsable
     # recipe: the category's catch-all rather than nothing at all.
@@ -870,7 +875,16 @@ def _scan_ingredient_lines(ingredients: list) -> List[str]:
     return lines
 
 @api_router.post("/recipes/scan/analyze")
-async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict = Depends(get_current_user)):
+async def analyze_scanned_recipe(
+    files: List[UploadFile] = File(...),
+    # Deux quotas indépendants, tous deux amount=1 : scans_total (l'essai
+    # gratuit Free, 3 à vie, jamais remboursé) et scans_per_month (le quota
+    # mensuel payant préexistant, 30/mois pour Pro, illimité au-delà) —
+    # scans_total vaut None dès Pro (pas de plafond à vie une fois payant),
+    # scans_per_month vaut None pour Free (débloqué, borné par scans_total
+    # à la place) : un seul des deux borne réellement, selon le palier.
+    user: dict = Depends(require(feature="recipe_scan", quotas=[("scans_total", 1), ("scans_per_month", 1)])),
+):
     """Extrait les informations d'une ou plusieurs photos de fiche recette
     via Claude Vision — le même client que /chat, seul service IA du
     projet, appelé différemment (tool-use) pour garantir une sortie
@@ -919,6 +933,10 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (scan): {e}")
         raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    # Journalisé après coup : un appel qui a échoué n'a rien coûté à
+    # l'utilisateur et ne doit pas entamer son quota.
+    await record_ai_usage(user["user_id"], "scan")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -1003,7 +1021,15 @@ class InstagramCaptionInput(BaseModel):
     caption: str
 
 @api_router.post("/recipes/instagram-import/analyze")
-async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Depends(get_current_user)):
+async def analyze_instagram_caption(
+    inp: InstagramCaptionInput,
+    # Même feature ET même quota d'essai que /recipes/scan/analyze : deux
+    # façons d'obtenir une extraction assistée par IA, un seul droit et un
+    # seul compteur qui les couvre (scans_total compte les deux `kind`,
+    # voir gating.usage()) — sinon l'import Instagram contournerait
+    # librement le plafond gratuit du scan.
+    user: dict = Depends(require(feature="recipe_scan", quota="scans_total")),
+):
     """Extrait une recette d'une légende Instagram collée par l'utilisateur —
     même client Anthropic et même mécanisme tool-use que /recipes/scan/
     analyze, sans aucune image (texte seul, comme /adapt/interpret)."""
@@ -1027,6 +1053,8 @@ async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Dep
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (instagram-import): {e}")
         raise HTTPException(502, "L'analyse est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "instagram_import")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -1117,7 +1145,13 @@ class RecipeAdaptTextInput(BaseModel):
     text: str
 
 @api_router.post("/recipes/{recipe_id}/adapt/interpret")
-async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput, user: dict = Depends(get_current_user)):
+async def interpret_recipe_adaptation(
+    recipe_id: str, inp: RecipeAdaptTextInput,
+    # adapts_total : essai gratuit Free (5 à vie, jamais remboursé) ;
+    # None dès Pro, comme aujourd'hui (aucun autre mécanisme de comptage
+    # n'existait avant ce quota — illimité une fois débloqué).
+    user: dict = Depends(require(feature="recipe_adapt", quota="adapts_total")),
+):
     """Traduit une demande en langage naturel en paramètres structurés —
     jamais en quantités calculées. Le client fusionne ces paramètres dans
     la même requête que les contrôles manuels, puis appelle /adapt/preview
@@ -1139,6 +1173,8 @@ async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput,
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error (adapt/interpret): {e}")
         raise HTTPException(502, "L'interprétation est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "adapt")
 
     tool_use = next((b for b in response.content if b.type == "tool_use"), None)
     if not tool_use:
@@ -1725,7 +1761,13 @@ async def get_collection(collection_id: str, user: dict = Depends(get_current_us
     return {**c, "recipe_count": count}
 
 @api_router.post("/collections")
-async def create_collection(inp: CollectionInput, user: dict = Depends(get_current_user)):
+async def create_collection(
+    inp: CollectionInput,
+    # collections_total : stock (3 pour Free, illimité dès Pro) — supprimer
+    # une collection libère une place. Aucune garde n'existait avant ce
+    # chantier sur cette route.
+    user: dict = Depends(require(quota="collections_total")),
+):
     _validate_collection_input(inp)
     doc = {
         "id": str(uuid.uuid4()), "user_id": user["user_id"],
@@ -3386,7 +3428,7 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 @api_router.post("/chat")
-async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
+async def chat(inp: ChatMessageInput, user: dict = Depends(require(feature="ai_assistant", quota="ai_messages_per_month"))):
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
     session_id = inp.session_id or f"{user['user_id']}_default"
@@ -3415,6 +3457,8 @@ async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
     except anthropic.APIError as e:
         logger.error(f"Anthropic API error: {e}")
         raise HTTPException(502, "L'assistant IA est momentanément indisponible, réessaie dans un instant")
+
+    await record_ai_usage(user["user_id"], "chat")
 
     resp_text = "".join(b.text for b in response.content if b.type == "text")
 
@@ -3516,6 +3560,34 @@ async def startup():
     await db.tips.create_index("title", unique=True)
     await db.tips.create_index("category")
     await db.tip_favorites.create_index([("user_id", 1), ("tip_id", 1)], unique=True)
+    await db.ad_events.create_index("created_at")
+    await db.ad_events.create_index("event_type")
+    # Journal d'usage IA : sert les quotas mensuels (gating.usage), toujours
+    # interrogé par (user_id, kind, created_at).
+    await db.ai_usage.create_index([("user_id", 1), ("kind", 1), ("created_at", 1)])
+    # Un abonnement par utilisateur : l'unicité est ce qui empêche deux
+    # documents concurrents d'accorder deux paliers différents au même compte.
+    await db.subscriptions.create_index("user_id", unique=True)
+    # Organisations (offre Équipe, phase 7a) — voir org_scope.py/organisations.py.
+    await db.organisations.create_index("id", unique=True)
+    # Pas d'unicité sur owner_user_id : rien n'interdit à un compte de
+    # posséder plusieurs organisations, aucune règle métier ne le demande.
+    await db.organisations.create_index("owner_user_id")
+    # Une ligne par (organisation, personne) : réinviter quelqu'un qui a
+    # quitté ré-active sa ligne existante plutôt que d'en créer une seconde.
+    await db.org_members.create_index([("org_id", 1), ("user_id", 1)], unique=True)
+    # Mes organisations actives (get_org_context) ; le roster d'une
+    # organisation et le comptage du quota org_members.
+    await db.org_members.create_index([("user_id", 1), ("status", 1)])
+    await db.org_members.create_index([("org_id", 1), ("status", 1)])
+    await db.org_invites.create_index([("to_user_id", 1), ("status", 1)])
+    await db.org_invites.create_index([("org_id", 1), ("status", 1)])
+    await db.pro_orders.create_index("id", unique=True)
+    # Liste et agrégat par date, scope() résolvant vers org_id en pratique
+    # (les commandes pro exigent une organisation active) ; user_id gardé
+    # pour la même défense en profondeur que scope() lui-même.
+    await db.pro_orders.create_index([("org_id", 1), ("pickup_date", 1)])
+    await db.pro_orders.create_index([("user_id", 1), ("pickup_date", 1)])
     await db.raw_materials.create_index([("user_id", 1), ("normalized_name", 1)], unique=True)
     await db.cost_calculations.create_index([("user_id", 1), ("created_at", -1)])
     await db.cost_calculations.create_index([("user_id", 1), ("recipe_id", 1)])
@@ -3617,6 +3689,10 @@ app.include_router(production_router)
 app.include_router(staff_router)
 app.include_router(cost_router)
 app.include_router(tips_router)
+app.include_router(ads_router)
+app.include_router(subscription_router)
+app.include_router(organisations_router)
+app.include_router(orders_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,

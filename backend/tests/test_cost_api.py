@@ -2,6 +2,15 @@
 
 Each class registers its own account so prices/history never leak between
 tests. The server must be running (see CLAUDE.md).
+
+`token` runs as the Pro+ override account (`PLAN_OVERRIDES`, see plans.py and
+ci.yml): raw materials (`cost_materials`) and saved cost history
+(`cost_profitability`) became Pro+-gated in the entitlements chantier
+(gating.py, routers/cost.py). This file tests the *feature*, not the gate —
+whether the gate itself refuses correctly is `test_gating_api.py`'s job — so
+it must keep exercising the allowed path regardless of
+`ENTITLEMENTS_ENFORCED`, exactly like `test_productions_api.py::TestProPlan`
+already does for Pro.
 """
 import os
 import uuid
@@ -12,25 +21,39 @@ import requests
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'http://localhost:8000').rstrip('/')
 API = f"{BASE_URL}/api"
 
+PRO_PLUS_EMAIL = os.environ.get('TEST_PRO_PLUS_EMAIL', 'test.proplus@bakers.app')
+# The Pro+ account is a fixed, shared address: whichever test file registers
+# it first owns its password. Matches test_entitlements_api.py's `_token()`
+# default, the other file that registers this same address.
+PRO_PLUS_PASSWORD = 'TestEnt2026!'
+
 
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def register():
-    email = f"costapi.{uuid.uuid4().hex[:10]}@bakers.app"
+def register(email=None):
+    email = email or f"costapi.{uuid.uuid4().hex[:10]}@bakers.app"
+    password = PRO_PLUS_PASSWORD if email == PRO_PLUS_EMAIL else "TestCost2026!"
     r = requests.post(
         f"{API}/auth/register",
-        json={"email": email, "password": "TestCost2026!", "name": "Costeur"},
+        json={"email": email, "password": password, "name": "Costeur"},
         timeout=30,
     )
+    if r.status_code == 400:  # already exists (the fixed Pro+ address)
+        r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=30)
+        if r.status_code == 401:
+            # Exists with a different password: reused dev DB, not a
+            # regression — same convention as test_entitlements_api.py's
+            # `_token()`. In CI the DB is fresh, so this never triggers.
+            pytest.skip(f"{email} existe déjà avec un autre mot de passe (base non vierge)")
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
 
 @pytest.fixture(scope="class")
 def token():
-    return register()
+    return register(PRO_PLUS_EMAIL)
 
 
 class TestRawMaterialsCrud:

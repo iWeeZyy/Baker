@@ -31,6 +31,19 @@ export const API_BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
 let cachedToken: string | null = null;
 export function setInMemoryToken(t: string | null) { cachedToken = t; }
 
+// A route this file knows nothing about (entitlements.ts) needs to react the
+// moment ANY request is turned away on plan grounds, wherever in the app that
+// request was made — this is the one place every request already passes
+// through, so it is also the one place that can notice for free. Kept as a
+// plain listener set rather than an import of `isPlanLimitError` from
+// src/plan.ts to avoid a circular import (plan.ts already imports this file).
+type PlanLimitListener = () => void;
+const planLimitListeners = new Set<PlanLimitListener>();
+export function onPlanLimitError(cb: PlanLimitListener): () => void {
+  planLimitListeners.add(cb);
+  return () => planLimitListeners.delete(cb);
+}
+
 export async function api(path: string, opts: RequestInit = {}) {
   const token = cachedToken || (await getToken());
   const headers: any = {
@@ -50,6 +63,14 @@ export async function api(path: string, opts: RequestInit = {}) {
       if (typeof detail === 'string') msg = detail;
       else if (detail?.message) msg = detail.message;
     } catch {}
+    if (res.status === 403 && (detail?.error === 'plan_limit_reached' || detail?.error === 'plan_feature_locked')) {
+      // A quota/feature refusal almost always means the account's usage (or,
+      // once billing exists, its tier) just changed underneath a stale
+      // entitlements snapshot — notify rather than wait for the next
+      // scheduled refresh, so the screen that shows the "Verrouillé" chip
+      // reflects the server's answer immediately, not on the next foreground.
+      planLimitListeners.forEach(cb => { try { cb(); } catch {} });
+    }
     const err: any = new Error(msg);
     err.status = res.status;
     err.detail = detail;

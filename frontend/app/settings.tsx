@@ -190,6 +190,25 @@ export default function Settings() {
             {busyLogoutAll && <ActivityIndicator size="small" color={colors.error} />}
           </Pressable>
         </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>À PROPOS</Text>
+        <View style={styles.card}>
+          <Pressable
+            testID="privacy-policy-link"
+            onPress={() => router.push('/privacy-policy')}
+            style={styles.row}
+            accessibilityRole="button"
+            accessibilityLabel="Politique de confidentialité"
+          >
+            <View style={styles.rowIcon}>
+              <Feather name="file-text" size={17} color={colors.onSurfaceSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>Politique de confidentialité</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.muted} />
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

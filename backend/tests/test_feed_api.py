@@ -74,6 +74,10 @@ def auth_d():
 
 @pytest.fixture(scope="module")
 def auth_e():
+    # `TestFeedPagination` publie plus de dix recettes depuis ce compte,
+    # au-delà du plafond Free ("recipes_total") -- il doit donc rester
+    # couvert par PLAN_OVERRIDES (voir ci.yml) pour que la pagination du fil
+    # reste ce qui est testé, pas le quota.
     return _login_or_register("test.feed.e@bakers.app", "TestFeedE2026!", "Chef Feed E")
 
 

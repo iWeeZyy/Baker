@@ -1,59 +1,24 @@
-import { useCallback, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { useTimer } from '@/src/TimerContext';
+import { useEntitlements } from '@/src/entitlements';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { syncWidgetData } from '@/src/widgetData';
 import { EmptyState } from '@/src/EmptyState';
-import { startBakeActivity, updateBakeActivity, endBakeActivity } from '@/modules/levanea-live-activity';
-
-type Line = {
-  line_id: string;
-  recipe_id: string;
-  recipe_title: string;
-  mode: 'pieces' | 'batches';
-  quantity: number;
-  yield_pieces: number | null;
-  batches: number;
-};
-
-type Step = {
-  step_id: string;
-  line_id: string;
-  recipe_title: string;
-  order: number;
-  text: string;
-  duration_minutes: number | null;
-  duration_source: 'recipe' | 'manual' | null;
-  status: 'todo' | 'doing' | 'done';
-  start_at: string | null;
-  end_at: string | null;
-};
-
-type Detail = {
-  id: string;
-  date: string;
-  target_time: string | null;
-  notes: string;
-  lines: Line[];
-  steps: Step[];
-  ingredients: {
-    items: { name: string; quantity: number; unit: string }[];
-    unparsed: string[];
-  };
-  missing_durations: string[];
-  scheduled: boolean;
-  total_pieces: number | null;
-};
+import { endBakeActivity } from '@/modules/levanea-live-activity';
+import { useProductionSteps, type Step } from '@/src/useProductionSteps';
+import { useOrgMembers } from '@/src/useOrgMembers';
+import { AssigneeControl } from '@/src/AssigneeControl';
 
 type Tab = 'summary' | 'ingredients' | 'schedule';
 
@@ -108,63 +73,12 @@ export default function ProductionDetail() {
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { start } = useTimer();
+  const { can } = useEntitlements();
 
-  const [data, setData] = useState<Detail | null>(null);
+  const { data, loading, error, setError, busyStep, patchStep, orderedSteps, missing } = useProductionSteps(id);
+  const { members } = useOrgMembers();
   const [tab, setTab] = useState<Tab>('summary');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busyStep, setBusyStep] = useState<string | null>(null);
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
-
-  const load = useCallback(async () => {
-    try {
-      setData(await api(`/productions/${id}`));
-      setError(null);
-    } catch (e: any) {
-      setError(e.message || 'Production introuvable');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const patchStep = async (stepId: string, body: Record<string, unknown>) => {
-    setBusyStep(stepId);
-    setError(null);
-    const before = data?.steps.find(s => s.step_id === stepId) || null;
-    try {
-      // The server returns the whole production: one round-trip also refreshes
-      // the schedule, which a new duration may have unblocked upstream.
-      const updated: Detail = await api(`/productions/${id}/steps/${stepId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      });
-      setData(updated);
-
-      // Live Activity "cuisson en cours" : démarre/actualise/termine sur le
-      // même choix de statut que l'utilisateur vient de faire, jamais un
-      // second geste à part. L'échéance vient de la durée connue de
-      // l'étape — jamais devinée — décomptée à partir de maintenant, comme
-      // le minuteur de cuisson (startTimer) déjà déclenché par le même tap.
-      const after = updated.steps.find(s => s.step_id === stepId) || null;
-      if (after?.status === 'doing') {
-        const endAtIso = after.duration_minutes != null
-          ? new Date(Date.now() + after.duration_minutes * 60000).toISOString()
-          : null;
-        if (before?.status === 'doing') updateBakeActivity(after.text, endAtIso);
-        else startBakeActivity(after.recipe_title, after.text, endAtIso);
-      } else if (before?.status === 'doing') {
-        endBakeActivity();
-      }
-
-      if (user) syncWidgetData(user.user_id);
-    } catch (e: any) {
-      setError(e.message || 'Mise à jour impossible');
-    } finally {
-      setBusyStep(null);
-    }
-  };
 
   /**
    * Arming the timer *is* the act of starting the step, so the status follows
@@ -220,32 +134,6 @@ export default function ProductionDetail() {
   }
 
   const doneCount = data.steps.filter(s => s.status === 'done').length;
-  const missing = new Set(data.missing_durations);
-
-  /**
-   * Chronological order, with undated steps kept where they belong.
-   *
-   * A step with no duration leaves everything before it in its recipe undated
-   * too. Sorting on the timestamp alone would dump that whole run at the
-   * bottom — putting the autolyse *after* the bake. Undated steps therefore
-   * borrow their recipe's earliest known time, and the recipe's own order
-   * breaks the tie, which is chronological by construction.
-   */
-  const anchors = new Map<string, string>();
-  for (const s of data.steps) {
-    const t = s.start_at || s.end_at;
-    if (!t) continue;
-    const current = anchors.get(s.line_id);
-    if (!current || t < current) anchors.set(s.line_id, t);
-  }
-
-  const orderedSteps = [...data.steps].sort((a, b) => {
-    const ta = a.start_at || a.end_at || anchors.get(a.line_id) || '';
-    const tb = b.start_at || b.end_at || anchors.get(b.line_id) || '';
-    if (ta !== tb) return ta < tb ? -1 : 1;
-    if (a.line_id !== b.line_id) return a.line_id < b.line_id ? -1 : 1;
-    return a.order - b.order;
-  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -254,6 +142,18 @@ export default function ProductionDetail() {
           <Feather name="arrow-left" size={22} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{formatDate(data.date)}</Text>
+        <Pressable
+          testID="detail-fournil"
+          onPress={() => {
+            if (can('fournil_mode')) router.push({ pathname: '/fournil/[id]', params: { id: data.id } } as any);
+            else router.push('/pro?feature=fournil_mode' as any);
+          }}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Mode Fournil"
+        >
+          <Feather name="maximize" size={18} color={colors.onSurface} />
+        </Pressable>
         <Pressable
           testID="detail-edit"
           onPress={() => router.push({ pathname: '/production/new', params: { id: data.id } } as any)}
@@ -342,6 +242,11 @@ export default function ProductionDetail() {
             ) : (
               <>
                 <Text style={styles.sectionLabel}>TOTAUX</Text>
+                {data.orders_count > 0 && (
+                  <Text style={styles.hint}>
+                    Inclut {data.orders_count} commande{data.orders_count > 1 ? 's' : ''} pro due{data.orders_count > 1 ? 's' : ''} ce jour.
+                  </Text>
+                )}
                 {data.ingredients.items.map(item => (
                   <View key={`${item.name}-${item.unit}`} style={styles.ingRow} testID={`ing-${item.name}`}>
                     <Text style={styles.ingName}>{item.name}</Text>
@@ -450,6 +355,17 @@ export default function ProductionDetail() {
                       </Pressable>
                     )}
 
+                    {members.length > 0 && (
+                      <View style={styles.assigneeRow}>
+                        <AssigneeControl
+                          assigneeUserId={step.assignee_user_id}
+                          members={members}
+                          busy={busyStep === step.step_id}
+                          onChange={userId => patchStep(step.step_id, { assignee_user_id: userId || '' })}
+                        />
+                      </View>
+                    )}
+
                     {needsDuration && (
                       <View style={styles.durationBox}>
                         <Text style={styles.durationHint}>
@@ -537,6 +453,7 @@ const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   stepDuration: { fontSize: 11, color: colors.muted },
   timerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 56, alignSelf: 'flex-start', backgroundColor: colors.brandTertiary, paddingHorizontal: 12, paddingVertical: 9, borderRadius: theme.radius.pill },
   timerChipText: { fontSize: 12, color: colors.onBrandTertiary, fontWeight: '600' },
+  assigneeRow: { marginTop: 10, marginLeft: 56 },
   durationBox: { marginTop: 12, marginLeft: 56 },
   durationHint: { fontSize: 11, color: colors.muted, lineHeight: 16 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

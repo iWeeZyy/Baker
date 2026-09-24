@@ -7,6 +7,8 @@ import { api } from '@/src/api';
 import { scaleIngredientLine } from '@/src/ingredientScale';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { confirmAsync } from '@/src/confirm';
+import { useEntitlements } from '@/src/entitlements';
+import { LockedFeatureNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
@@ -110,6 +112,12 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
   );
 
   const router = useRouter();
+  const { can } = useEntitlements();
+  // Seul l'enregistrement d'un calcul (POST /cost/history) est verrouillé
+  // côté serveur — le calculateur lui-même (coût, marge, comparaison de
+  // scénario) et la consultation de l'historique déjà enregistré restent
+  // gratuits pour tout le monde.
+  const historyLocked = !can('cost_profitability');
   const [loading, setLoading] = useState(true);
   const [recipe, setRecipe] = useState<any>(null);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
@@ -511,14 +519,23 @@ export function CostScreen({ recipeId }: { recipeId?: string }) {
             </View>
           )}
 
-          <Pressable testID="cost-save" onPress={saveCalculation} disabled={saving || result.items.length === 0} style={[styles.saveBtn, (saving || result.items.length === 0) && { opacity: 0.5 }]}>
-            {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
-              <>
-                <Feather name="save" size={16} color={colors.onBrandPrimary} />
-                <Text style={styles.saveBtnText}>{saveFlash ? 'Calcul enregistré ✓' : 'Enregistrer ce calcul'}</Text>
-              </>
-            )}
-          </Pressable>
+          {historyLocked ? (
+            <LockedFeatureNotice
+              minPlan="pro_plus"
+              label="Enregistrer ce calcul est réservé à l'offre Pro+"
+              onPress={() => router.push('/pro?feature=cost_profitability' as any)}
+              style={{ marginTop: 8 }}
+            />
+          ) : (
+            <Pressable testID="cost-save" onPress={saveCalculation} disabled={saving || result.items.length === 0} style={[styles.saveBtn, (saving || result.items.length === 0) && { opacity: 0.5 }]}>
+              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : (
+                <>
+                  <Feather name="save" size={16} color={colors.onBrandPrimary} />
+                  <Text style={styles.saveBtnText}>{saveFlash ? 'Calcul enregistré ✓' : 'Enregistrer ce calcul'}</Text>
+                </>
+              )}
+            </Pressable>
+          )}
         </ScrollView>
         )}
       </KeyboardAvoidingView>

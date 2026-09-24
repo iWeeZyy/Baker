@@ -1,71 +1,119 @@
+/**
+ * L'écran des quatre offres — Gratuit / Pro / Pro+ / Équipe — entièrement
+ * piloté par `plan.plans` (le catalogue renvoyé par `/me/plan`,
+ * `entitlements.plan_catalogue()` côté serveur) : changer un prix ou une
+ * fonctionnalité d'offre ne demande aucune livraison de l'app, seulement un
+ * déploiement backend. Ce fichier ne fait que mettre en forme ce que le
+ * serveur envoie ; les libellés de fonctionnalité et les taglines
+ * ci-dessous sont la seule chose écrite en dur ici — la même répartition
+ * que l'ancien écran (prix/plafonds venaient déjà du serveur, les phrases
+ * de présentation étaient déjà écrites dans ce fichier).
+ *
+ * Remplace l'ancien écran Free/Pro à deux offres. `?feature=` (optionnel,
+ * `useLocalSearchParams`) est le point d'entrée depuis un `LockedFeatureNotice`
+ * ailleurs dans l'app (`src/PlanChip.tsx`) : quand présent, la carte du
+ * palier qui débloque cette fonctionnalité est mise en avant à l'ouverture.
+ */
+import { useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
-import { useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAds } from '@/src/ads';
-import { usePlan } from '@/src/plan';
+import { useEntitlements, type PlanTier } from '@/src/entitlements';
+import { PlanChip } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 
-type FeatureKey = 'productions' | 'no_ads' | 'multi_day' | 'recurring' | 'sharing' | 'full_history';
+/** Libellé court de chaque fonctionnalité — la seule traduction dont ce
+ * fichier a besoin, `entitlements.MIN_TIER` (backend) reste la seule
+ * source de quel palier la débloque. Une clé absente d'ici (une
+ * fonctionnalité future non encore présentée) s'affiche sous son
+ * identifiant technique plutôt que de faire disparaître la ligne. */
+const FEATURE_LABELS: Record<string, string> = {
+  recipes_unlimited: 'Recettes illimitées',
+  recipe_scan: 'Scan de recette (photo → fiche)',
+  recipe_adapt: 'Adaptation de recette',
+  recipe_history: 'Historique des recettes',
+  sub_recipes: 'Sous-recettes',
+  ai_assistant: 'Assistant IA',
+  ai_advanced: 'Assistant IA avancé (données réelles)',
+  cost_basic: 'Calculateur de coût',
+  cost_materials: 'Matières premières & fournisseurs',
+  cost_profitability: 'Rentabilité & historique de coût',
+  production_advanced: 'Besoins matières automatiques',
+  staff_schedule: 'Planning du personnel',
+  fournil_mode: 'Mode Fournil',
+  org_team: "Comptes employés & rôles",
+  org_tasks: 'Attribution de tâches',
+  pro_orders: 'Commandes professionnelles',
+  org_dashboard: 'Tableau de bord',
+  org_multi_shop: 'Multi-boutiques',
+  collections: 'Collections',
+};
 
-const FEATURES: { key: FeatureKey; icon: any; title: string; body: string; available: boolean }[] = [
-  {
-    key: 'productions',
-    icon: 'calendar',
-    title: 'Productions illimitées',
-    body: "Planifiez autant de journées que nécessaire. L'offre gratuite en autorise 3 par mois.",
-    available: true,
-  },
-  {
-    key: 'no_ads',
-    icon: 'eye-off',
-    title: 'Aucune publicité',
-    body: "Baker Pro n'affiche aucune publicité, nulle part dans l'application.",
-    available: true,
-  },
-  {
-    key: 'multi_day',
-    icon: 'layers',
-    title: 'Planification sur plusieurs jours',
-    body: 'Enchaînez pousses lentes et fabrications réparties sur deux ou trois jours.',
-    available: false,
-  },
-  {
-    key: 'recurring',
-    icon: 'repeat',
-    title: 'Productions récurrentes',
-    body: 'Rejouez une journée type sans la ressaisir.',
-    available: false,
-  },
-  {
-    key: 'sharing',
-    icon: 'users',
-    title: 'Partage du planning',
-    body: "Transmettez le déroulé de la journée à l'équipe du fournil.",
-    available: false,
-  },
-  {
-    key: 'full_history',
-    icon: 'archive',
-    title: 'Historique complet',
-    body: 'Retrouvez toutes vos productions passées et leurs quantités.',
-    available: false,
-  },
-];
+const QUOTA_LABELS: Record<string, (n: number) => string> = {
+  recipes_total: (n) => `${n} recette${n > 1 ? 's' : ''} personnelle${n > 1 ? 's' : ''}`,
+  productions_per_month: (n) => `${n} production${n > 1 ? 's' : ''} / mois`,
+  ai_messages_per_month: (n) => `${n} message${n > 1 ? 's' : ''} IA / mois`,
+  scans_per_month: (n) => `${n} scan${n > 1 ? 's' : ''} / mois`,
+  schedule_employees: (n) => `${n} employé${n > 1 ? 's' : ''} au planning`,
+  org_members: (n) => `${n} membre${n > 1 ? 's' : ''} d'équipe`,
+  scans_total: (n) => `${n} scan${n > 1 ? 's' : ''} de recette`,
+  adapts_total: (n) => `${n} adaptation${n > 1 ? 's' : ''} de recette`,
+  collections_total: (n) => `${n} collection${n > 1 ? 's' : ''}`,
+  schedules_total: (n) => `${n} planning${n > 1 ? 's' : ''} personnel${n > 1 ? 's' : ''}`,
+};
+
+/**
+ * `scans_per_month` (le quota mensuel payant) et `scans_total` (l'essai
+ * gratuit à vie) coexistent dans `entitlements.QUOTAS` pour que la colonne
+ * `scans_per_month` elle-même reste monotone (Free=3 → Pro=30 → illimité,
+ * voir entitlements.py) — mais pour Free les deux valent 3 : afficher les
+ * deux ferait apparaître deux plafonds de scan qui se chevauchent sur la
+ * même carte. Masqué seulement quand `scans_total` est lui-même fini pour
+ * cette offre (Free) ; pour Pro (`scans_total` illimité), `scans_per_month`
+ * reste affiché normalement — c'est la seule vraie contrainte de son offre.
+ */
+function isQuotaShown(key: string, quotas: Record<string, number | null>): boolean {
+  if (key === 'scans_per_month' && quotas.scans_total != null) return false;
+  return true;
+}
+
+const TAGLINES: Record<PlanTier, string> = {
+  free: 'Pour découvrir Levanea : recettes illimitées, planning simple, assistant IA, et un aperçu gratuit du scan, de l\'adaptation et du planning personnel.',
+  pro: 'Pour une utilisation professionnelle : productions et plannings illimités, scan et adaptation sans limite, calculateur de coût.',
+  pro_plus: 'Pour une utilisation intensive : besoins matières automatiques, rentabilité, IA sur vos données.',
+  team: "Pour les équipes : comptes employés, tâches, commandes et tableau de bord.",
+};
 
 export default function Pro() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const { plan, loading } = usePlan();
+  const { feature: highlightFeature } = useLocalSearchParams<{ feature?: string }>();
+  const { plan, loading } = useEntitlements();
   const { config: ads } = useAds();
-  const isPro = plan?.plan === 'pro';
+  const scrollRef = useRef<ScrollView>(null);
+  const cardOffsets = useRef<Record<string, number>>({});
 
-  // "No ads" is only worth promising while ads actually exist. Advertising the
-  // absence of something the app never shows would be an empty claim.
-  const features = FEATURES.filter(f => f.key !== 'no_ads' || ads.available);
+  // Le catalogue est la seule source des paliers eux-mêmes (prix, ordre,
+  // fonctionnalités par offre) — la forme vient directement de
+  // `PlanState['plans']` (src/plan.ts), qui mirore `entitlements.plan_catalogue()`.
+  const catalogue = plan?.plans ?? [];
+  const currentTier = plan?.plan;
+
+  // La carte du palier qui débloque `?feature=` — le point d'entrée d'un
+  // LockedFeatureNotice ailleurs dans l'app.
+  const highlightTier = highlightFeature
+    ? plan?.features?.[highlightFeature]?.min_plan
+    : undefined;
+
+  useEffect(() => {
+    if (!highlightTier) return;
+    const y = cardOffsets.current[highlightTier];
+    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  }, [highlightTier, catalogue.length]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -76,66 +124,105 @@ export default function Pro() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.brandLabel}>LE FOURNIL</Text>
-        <Text style={styles.title}>Baker Pro</Text>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
+        <Text style={styles.brandLabel}>LEVANEA</Text>
+        <Text style={styles.title}>Nos offres</Text>
+        <Text style={styles.intro}>
+          Quatre offres, de l&apos;essentiel gratuit à l&apos;atelier au complet. Choisissez celle qui
+          correspond à votre activité aujourd&apos;hui — rien de ce que vous avez créé n&apos;est jamais
+          perdu en changeant d&apos;offre.
+        </Text>
 
         {loading ? (
           <ActivityIndicator color={colors.brand} style={{ marginTop: 24 }} />
-        ) : isPro ? (
-          <View style={styles.statusBox} testID="pro-active">
-            <Feather name="check-circle" size={16} color={colors.success} />
-            <Text style={styles.statusText}>Votre compte est en Baker Pro. Aucune limite de production.</Text>
-          </View>
         ) : (
-          <View style={styles.statusBox} testID="pro-quota">
-            <Feather name="info" size={16} color={colors.onSurfaceSecondary} />
-            <Text style={styles.statusText}>
-              {plan?.productions_limit != null
-                ? `Vous avez utilisé ${plan.productions_used} production${plan.productions_used > 1 ? 's' : ''} sur ${plan.productions_limit} ce mois-ci.`
-                : 'Offre gratuite : 3 productions par mois.'}
-            </Text>
-          </View>
-        )}
+          catalogue.map((entry, i) => {
+            const previous = catalogue[i - 1];
+            const incremental = previous
+              ? entry.features.filter(f => !previous.features.includes(f))
+              : entry.features;
+            const finiteQuotas = Object.entries(entry.quotas)
+              .filter(([k, v]) => v != null && v > 0 && isQuotaShown(k, entry.quotas)) as [string, number][];
+            const isCurrent = entry.plan === currentTier;
+            const isRecommended = entry.plan === 'pro_plus';
+            const isHighlighted = entry.plan === highlightTier;
 
-        <Text style={styles.intro}>
-          L&apos;offre gratuite couvre l&apos;essentiel : planifier une journée, calculer les quantités et
-          suivre le déroulé. Baker Pro lève la limite mensuelle et prépare le travail en équipe.
-        </Text>
+            return (
+              <View
+                key={entry.plan}
+                testID={`plan-card-${entry.plan}`}
+                onLayout={(e) => { cardOffsets.current[entry.plan] = e.nativeEvent.layout.y; }}
+                style={[
+                  styles.card,
+                  isRecommended && styles.cardRecommended,
+                  isHighlighted && styles.cardHighlighted,
+                ]}
+              >
+                {isRecommended && (
+                  <View style={styles.ribbon}>
+                    <Text style={styles.ribbonText}>RECOMMANDÉ</Text>
+                  </View>
+                )}
+                <View style={styles.cardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardLabel}>{entry.label}</Text>
+                    <Text style={styles.cardPrice}>
+                      {entry.price_eur > 0 ? `${entry.price_eur.toFixed(2).replace('.', ',')} € / mois` : 'Gratuit'}
+                    </Text>
+                  </View>
+                  {entry.plan !== 'free' && <PlanChip tier={entry.plan} />}
+                  {isCurrent && (
+                    <View style={styles.currentPill} testID={`plan-current-${entry.plan}`}>
+                      <Feather name="check" size={12} color={colors.success} />
+                      <Text style={styles.currentPillText}>Votre offre</Text>
+                    </View>
+                  )}
+                </View>
 
-        {features.map(f => (
-          <View key={f.key} style={styles.feature} testID={`feature-${f.key}`}>
-            <View style={styles.featureIcon}>
-              <Feather name={f.icon} size={17} color={colors.brand} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.featureTitleRow}>
-                <Text style={styles.featureTitle}>{f.title}</Text>
-                {!f.available && (
-                  <View style={styles.soonPill}>
-                    <Text style={styles.soonText}>À VENIR</Text>
+                <Text style={styles.tagline}>{TAGLINES[entry.plan]}</Text>
+
+                {previous && (
+                  <Text style={styles.everythingIn}>Tout {previous.label}, plus :</Text>
+                )}
+                {incremental.map((f) => (
+                  <View key={f} style={styles.featureRow}>
+                    <Feather name="check" size={14} color={colors.brand} />
+                    <Text style={styles.featureText}>{FEATURE_LABELS[f] ?? f}</Text>
+                  </View>
+                ))}
+
+                {finiteQuotas.length > 0 && (
+                  <View style={styles.quotaRow}>
+                    {finiteQuotas.map(([key, n]) => (
+                      <View key={key} style={styles.quotaChip}>
+                        <Text style={styles.quotaChipText}>{QUOTA_LABELS[key]?.(n) ?? `${n} ${key}`}</Text>
+                      </View>
+                    ))}
                   </View>
                 )}
               </View>
-              <Text style={styles.featureBody}>{f.body}</Text>
-            </View>
-          </View>
-        ))}
+            );
+          })
+        )}
 
         {/*
-          No purchase button: there is no billing provider connected. Showing a
-          fake one would take money-shaped decisions from the user for nothing.
+          Ni ce chantier ni le précédent n'ont installé de fournisseur de
+          paiement (voir CLAUDE.md, "Offres et droits") : aucun bouton
+          d'achat n'est affiché, il ne ferait qu'imiter une décision d'argent
+          sans rien pouvoir déclencher derrière.
         */}
         <View style={styles.noticeBox}>
           <Text style={styles.noticeTitle}>Abonnement pas encore ouvert</Text>
           <Text style={styles.noticeBody}>
-            Baker Pro n&apos;est pas encore commercialisé : aucun paiement n&apos;est possible aujourd&apos;hui,
-            et rien ne vous sera facturé. Les limites de l&apos;offre gratuite restent en place d&apos;ici là.
+            {plan?.enforced
+              ? "Les offres payantes sont actives sur ce compte, mais aucun paiement en ligne n'est encore possible : le palier est accordé manuellement."
+              : "Aucune offre n'est encore commercialisée : aucun paiement n'est possible aujourd'hui, et rien ne vous sera facturé. Toutes les fonctionnalités listées ci-dessus restent accessibles d'ici là."}
+            {ads.available === false && ' Aucune publicité ne sera jamais affichée aux offres payantes une fois la publicité activée.'}
           </Text>
         </View>
 
         <Pressable testID="pro-close" onPress={() => router.back()} style={styles.closeBtn}>
-          <Text style={styles.closeText}>Revenir au planning</Text>
+          <Text style={styles.closeText}>Revenir</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -149,16 +236,29 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   body: { paddingHorizontal: 24, paddingBottom: 60 },
   brandLabel: { fontSize: 11, letterSpacing: 4, color: colors.muted, fontWeight: '600' },
   title: { fontFamily: theme.serif, fontSize: 34, color: colors.onSurface, marginTop: 4 },
-  statusBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: colors.surfaceSecondary, borderRadius: 8 },
-  statusText: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18 },
-  intro: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginTop: 20, marginBottom: 8 },
-  feature: { flexDirection: 'row', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
-  featureIcon: { width: 38, height: 38, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandTertiary },
-  featureTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  featureTitle: { fontFamily: theme.serif, fontSize: 17, color: colors.onSurface },
-  soonPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.surfaceTertiary },
-  soonText: { fontSize: 9, letterSpacing: 1, color: colors.onSurfaceTertiary, fontWeight: '700' },
-  featureBody: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19, marginTop: 4 },
+  intro: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginTop: 12, marginBottom: 8 },
+
+  card: {
+    marginTop: 18, padding: 18, borderRadius: theme.radius.xl,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary,
+  },
+  cardRecommended: { borderColor: colors.brand, borderWidth: 1.5 },
+  cardHighlighted: { borderColor: colors.brand, borderWidth: 2 },
+  ribbon: { alignSelf: 'flex-start', backgroundColor: colors.brand, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 10 },
+  ribbonText: { color: colors.onBrandPrimary, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  cardLabel: { fontFamily: theme.serif, fontSize: 22, color: colors.onSurface },
+  cardPrice: { fontSize: 14, color: colors.onSurfaceSecondary, marginTop: 2 },
+  currentPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceTertiary },
+  currentPillText: { fontSize: 10, fontWeight: '700', color: colors.success },
+  tagline: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19, marginTop: 12 },
+  everythingIn: { fontSize: 12, fontWeight: '600', color: colors.muted, marginTop: 14, marginBottom: 4 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  featureText: { flex: 1, fontSize: 13, color: colors.onSurface },
+  quotaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
+  quotaChip: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.surfaceTertiary },
+  quotaChipText: { fontSize: 11, color: colors.onSurfaceTertiary },
+
   noticeBox: { marginTop: 26, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   noticeTitle: { fontFamily: theme.serif, fontSize: 16, color: colors.onSurface },
   noticeBody: { fontSize: 13, color: colors.muted, lineHeight: 19, marginTop: 6 },
