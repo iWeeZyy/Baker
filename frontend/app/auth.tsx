@@ -313,6 +313,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.onSurface,
     paddingHorizontal: 18,
     paddingVertical: 16,
+    // Même rayon que `inputWrapper` : c'est ce `<input>` DOM-là (pas son
+    // conteneur) que Safari recolore à l'auto-remplissage — sans son propre
+    // arrondi, la teinte d'auto-remplissage dessine un rectangle à coins
+    // droits qui dépasse visuellement de la pilule du conteneur.
+    borderRadius: theme.radius.xl,
     // react-native-web dessine sinon le contour de focus natif du navigateur
     // (un anneau noir) par-dessus notre bordure terracotta au focus.
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null),
