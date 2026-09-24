@@ -45,7 +45,11 @@ const BACKGROUNDS = {
 // de carré ni de halo derrière le motif, sur aucun des deux thèmes.
 const LOGO = require('../assets/images/auth-logo.png');
 
-const SPRING = { damping: 14, stiffness: 150, mass: 0.9 } as const;
+// Amortissement volontairement serré (ζ ≈ 0,85) : un ressort plus lâche
+// (essayé d'abord) produisait un dépassement discret mais une traîne
+// d'oscillations perceptible jusqu'à ~900 ms avant stabilisation complète —
+// trop long pour une entrée d'écran, lu comme mou plutôt que premium.
+const SPRING = { damping: 24, stiffness: 200, mass: 1 } as const;
 
 /**
  * Un seul petit hook pour toute la choréographie d'entrée : fade + léger
@@ -94,17 +98,21 @@ function BackgroundShapes({ colors, reducedMotion }: { colors: ThemeColors; redu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Amplitude réduite d'un tiers environ par rapport au premier jet (revue
+  // produit : des cercles pleins sans flou, même lents, restaient trop
+  // graphiques face au fond photo déjà présent — l'objectif est un fond
+  // « ressenti plutôt que remarqué »).
   const style1 = useAnimatedStyle(() => ({
-    opacity: 0.32 + t1.value * 0.26,
-    transform: [{ translateX: t1.value * 24 }, { translateY: t1.value * -18 }],
+    opacity: 0.3 + t1.value * 0.14,
+    transform: [{ translateX: t1.value * 15 }, { translateY: t1.value * -11 }],
   }));
   const style2 = useAnimatedStyle(() => ({
-    opacity: 0.26 + t2.value * 0.22,
-    transform: [{ translateX: t2.value * -20 }, { translateY: t2.value * 22 }],
+    opacity: 0.24 + t2.value * 0.12,
+    transform: [{ translateX: t2.value * -13 }, { translateY: t2.value * 14 }],
   }));
   const style3 = useAnimatedStyle(() => ({
-    opacity: 0.2 + t3.value * 0.18,
-    transform: [{ translateX: t3.value * 16 }, { translateY: t3.value * 14 }],
+    opacity: 0.18 + t3.value * 0.1,
+    transform: [{ translateX: t3.value * 10 }, { translateY: t3.value * 9 }],
   }));
 
   return (
@@ -188,13 +196,17 @@ export default function AuthScreen() {
   }, []);
   const backgroundStyle = useAnimatedStyle(() => ({ opacity: backgroundOpacity.value }));
 
+  // Cadence régularisée à ~70 ms entre chaque élément (un premier jet avait
+  // un écart de 50 ms entre les deux champs contre 70-100 ms partout
+  // ailleurs — un décalage imperceptible isolément mais qui cassait la
+  // régularité du rythme d'ensemble).
   const logoStyle = useEntranceStyle(60, reducedMotion, { distance: 22, withScale: true });
-  const titleStyle = useEntranceStyle(160, reducedMotion, { distance: 20 });
-  const subtitleStyle = useEntranceStyle(230, reducedMotion, { distance: 16 });
-  const emailFieldStyle = useEntranceStyle(300, reducedMotion, { distance: 16 });
-  const passwordFieldStyle = useEntranceStyle(350, reducedMotion, { distance: 16 });
-  const buttonEntranceStyle = useEntranceStyle(420, reducedMotion, { distance: 14 });
-  const signupLinkStyle = useEntranceStyle(480, reducedMotion, { distance: 10 });
+  const titleStyle = useEntranceStyle(150, reducedMotion, { distance: 20 });
+  const subtitleStyle = useEntranceStyle(220, reducedMotion, { distance: 16 });
+  const emailFieldStyle = useEntranceStyle(290, reducedMotion, { distance: 16 });
+  const passwordFieldStyle = useEntranceStyle(360, reducedMotion, { distance: 16 });
+  const buttonEntranceStyle = useEntranceStyle(430, reducedMotion, { distance: 14 });
+  const signupLinkStyle = useEntranceStyle(500, reducedMotion, { distance: 10 });
 
   // Compression au toucher du bouton principal — Button.tsx expose
   // désormais onPressIn/onPressOut en passthrough (voir ce fichier), utilisé
@@ -208,7 +220,11 @@ export default function AuthScreen() {
   };
   const onButtonPressOut = () => {
     if (reducedMotion) return;
-    pressScale.value = withSpring(1, { damping: 12, stiffness: 220 });
+    // Amortissement serré (ζ ≈ 0,93) — l'essai précédent (damping 12/
+    // stiffness 220) faisait dépasser le bouton de 1,4 % de sa taille et
+    // osciller plus de 500 ms après le relâchement, perceptible comme un
+    // effet "élastique" plutôt qu'une pression premium.
+    pressScale.value = withSpring(1, { damping: 28, stiffness: 320, mass: 0.7 });
   };
 
   // Secousse courte du formulaire sur une erreur de connexion — n'accompagne
