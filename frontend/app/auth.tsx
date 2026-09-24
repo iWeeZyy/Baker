@@ -9,16 +9,16 @@ import Animated, {
   withTiming,
   withDelay,
   withSpring,
-  withRepeat,
   withSequence,
   interpolateColor,
-  Easing,
   useReducedMotion,
 } from 'react-native-reanimated';
 import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { Button } from '@/src/Button';
+import { BackgroundShapes } from '@/src/BackgroundShapes';
+import { usePressScale } from '@/src/usePressScale';
 
 // La grande photo de four (`auth-hero.jpg`, fournie par Lucas) a été retirée
 // de cet écran lors de la refonte premium/minimaliste — sa présence en
@@ -79,49 +79,6 @@ function useEntranceStyle(delayMs: number, reducedMotion: boolean, opts: { dista
       transform: [{ translateY: (1 - progress.value) * distance }],
     };
   });
-}
-
-// Formes organiques très discrètes derrière le contenu — jamais interactives
-// (`pointerEvents="none"`), uniquement `transform`/`opacity` (aucun coût de
-// mise en page), dérive lente (7 à 9,5 s par cycle) désactivée sous reduced
-// motion. Couleurs exclusivement issues des tokens du thème.
-function BackgroundShapes({ colors, reducedMotion }: { colors: ThemeColors; reducedMotion: boolean }) {
-  const t1 = useSharedValue(0);
-  const t2 = useSharedValue(0);
-  const t3 = useSharedValue(0);
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    t1.value = withRepeat(withTiming(1, { duration: 8200, easing: Easing.inOut(Easing.sin) }), -1, true);
-    t2.value = withRepeat(withTiming(1, { duration: 9600, easing: Easing.inOut(Easing.sin) }), -1, true);
-    t3.value = withRepeat(withTiming(1, { duration: 7100, easing: Easing.inOut(Easing.sin) }), -1, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Amplitude réduite d'un tiers environ par rapport au premier jet (revue
-  // produit : des cercles pleins sans flou, même lents, restaient trop
-  // graphiques face au fond photo déjà présent — l'objectif est un fond
-  // « ressenti plutôt que remarqué »).
-  const style1 = useAnimatedStyle(() => ({
-    opacity: 0.3 + t1.value * 0.14,
-    transform: [{ translateX: t1.value * 15 }, { translateY: t1.value * -11 }],
-  }));
-  const style2 = useAnimatedStyle(() => ({
-    opacity: 0.24 + t2.value * 0.12,
-    transform: [{ translateX: t2.value * -13 }, { translateY: t2.value * 14 }],
-  }));
-  const style3 = useAnimatedStyle(() => ({
-    opacity: 0.18 + t3.value * 0.1,
-    transform: [{ translateX: t3.value * 10 }, { translateY: t3.value * 9 }],
-  }));
-
-  return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      <Animated.View style={[blobLayout.a, { backgroundColor: colors.brandTertiary }, style1]} />
-      <Animated.View style={[blobLayout.b, { backgroundColor: colors.brandSecondary }, style2]} />
-      <Animated.View style={[blobLayout.c, { backgroundColor: colors.surfaceTertiary }, style3]} />
-    </View>
-  );
 }
 
 /**
@@ -211,21 +168,9 @@ export default function AuthScreen() {
   // Compression au toucher du bouton principal — Button.tsx expose
   // désormais onPressIn/onPressOut en passthrough (voir ce fichier), utilisé
   // ici seulement : le composant partagé n'anime rien par lui-même ailleurs
-  // dans l'app.
-  const pressScale = useSharedValue(1);
-  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: pressScale.value }] }));
-  const onButtonPressIn = () => {
-    if (reducedMotion) return;
-    pressScale.value = withTiming(0.97, { duration: 90 });
-  };
-  const onButtonPressOut = () => {
-    if (reducedMotion) return;
-    // Amortissement serré (ζ ≈ 0,93) — l'essai précédent (damping 12/
-    // stiffness 220) faisait dépasser le bouton de 1,4 % de sa taille et
-    // osciller plus de 500 ms après le relâchement, perceptible comme un
-    // effet "élastique" plutôt qu'une pression premium.
-    pressScale.value = withSpring(1, { damping: 28, stiffness: 320, mass: 0.7 });
-  };
+  // dans l'app. `usePressScale` (src/) porte les constantes réglées ici et
+  // est réutilisé tel quel par l'onboarding.
+  const { style: pressStyle, onPressIn: onButtonPressIn, onPressOut: onButtonPressOut } = usePressScale(reducedMotion);
 
   // Secousse courte du formulaire sur une erreur de connexion — n'accompagne
   // jamais le message d'erreur, ne le remplace jamais (il reste affiché tel
@@ -346,14 +291,6 @@ export default function AuthScreen() {
     </SafeAreaView>
   );
 }
-
-// Géométrie des formes de fond — indépendante du thème (seule la couleur
-// est injectée en ligne), donc hors de `makeStyles`.
-const blobLayout = StyleSheet.create({
-  a: { position: 'absolute', top: '-9%', right: '-14%', width: 300, height: 300, borderRadius: 999 },
-  b: { position: 'absolute', bottom: '-8%', left: '-16%', width: 340, height: 340, borderRadius: 999 },
-  c: { position: 'absolute', top: '28%', left: '58%', width: 200, height: 200, borderRadius: 999 },
-});
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
