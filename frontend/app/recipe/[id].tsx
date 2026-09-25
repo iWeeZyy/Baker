@@ -18,6 +18,7 @@ import { recipeImage } from '@/src/products';
 import { QuantitySelector } from '@/src/QuantitySelector';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 import { cardElevation } from '@/src/elevation';
@@ -204,6 +205,7 @@ export default function RecipeDetail() {
   const [expandedRoots, setExpandedRoots] = useState<Set<string>>(new Set());
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const { progress, onScroll } = useScrollProgress();
   const commentRefs = useRef<Record<string, View | null>>({});
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(true);
@@ -442,8 +444,14 @@ export default function RecipeDetail() {
 
   return (
     <View style={styles.container}>
+      {/* Superposée : ce héros photo n'a pas d'en-tête classique (le bouton
+          retour flotte déjà par-dessus l'image), même choix que
+          `creation/[id].tsx`. */}
+      <View style={styles.progressOverlay} pointerEvents="none">
+        <ScrollProgressBar progress={progress} />
+      </View>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={0}>
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" onScroll={onScroll} scrollEventThrottle={16}>
         <View style={styles.heroWrap}>
           {hasPhoto ? (
             <Image source={photo ? { uri: photo } : localPhoto} style={StyleSheet.absoluteFillObject} contentFit="cover" />
@@ -822,6 +830,7 @@ export default function RecipeDetail() {
 
 const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
+  progressOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   heroWrap: { height: 420, position: 'relative' },
   heroPlain: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surfaceSecondary },

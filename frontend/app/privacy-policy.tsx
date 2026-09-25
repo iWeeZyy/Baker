@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 /**
  * Politique de confidentialité — brouillon.
@@ -50,6 +51,7 @@ export default function PrivacyPolicy() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { progress, onScroll } = useScrollProgress();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -60,8 +62,9 @@ export default function PrivacyPolicy() {
         <Text style={styles.headerTitle}>Confidentialité</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={styles.draftBanner}>
           <Feather name="alert-triangle" size={16} color={colors.warning} />
           <Text style={styles.draftBannerText}>

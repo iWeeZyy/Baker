@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
+import { Feather } from '@expo/vector-icons';
 import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -96,6 +97,7 @@ function AnimatedField({
   inputStyle,
   labelStyle,
   wrapperStyle,
+  rightAccessory,
   ...inputProps
 }: {
   label: string;
@@ -105,6 +107,9 @@ function AnimatedField({
   inputStyle: any;
   labelStyle: any;
   wrapperStyle: any;
+  // Bouton optionnel dans la pilule elle-même (l'œil du mot de passe) —
+  // jamais un second champ, juste un accessoire à droite du TextInput.
+  rightAccessory?: React.ReactNode;
 } & React.ComponentProps<typeof TextInput>) {
   const focusProgress = useSharedValue(0);
 
@@ -126,6 +131,7 @@ function AnimatedField({
           style={inputStyle}
           {...inputProps}
         />
+        {rightAccessory}
       </Animated.View>
     </Animated.View>
   );
@@ -139,6 +145,9 @@ export default function AuthScreen() {
   const reducedMotion = useReducedMotion();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Même bascule que `signup.tsx` (`showPassword`/l'icône `eye`/`eye-off`) —
+  // jamais un second mécanisme pour la même chose.
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Purement visuel — le contour terracotta au focus d'un champ. N'affecte
@@ -249,14 +258,26 @@ export default function AuthScreen() {
               entranceStyle={passwordFieldStyle}
               labelStyle={styles.label}
               wrapperStyle={styles.inputWrapper}
-              inputStyle={styles.input}
+              inputStyle={[styles.input, styles.inputWithAccessory]}
               value={password}
               onChangeText={setPassword}
               onFocus={() => setFocusedField('password')}
               onBlur={() => setFocusedField(null)}
               placeholder="Votre mot de passe"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               autoComplete="password"
+              rightAccessory={
+                <Pressable
+                  testID="auth-toggle-password"
+                  onPress={() => setShowPassword(v => !v)}
+                  hitSlop={10}
+                  style={styles.eyeBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  <Feather name={showPassword ? 'eye-off' : 'eye'} size={19} color={colors.muted} />
+                </Pressable>
+              }
               {...(Platform.OS === 'web' ? { dataSet: { autofillThemed: 'true' } } : null)}
             />
 
@@ -307,8 +328,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   inputWrapper: {
     borderRadius: theme.radius.xl,
     borderWidth: 1,
+    // Ligne plutôt qu'un bloc simple : l'œil du mot de passe (`rightAccessory`)
+    // vit dans la même pilule que le champ, jamais un second élément à côté.
+    // Inoffensif pour le champ e-mail (sans accessoire) : un seul enfant en
+    // `flex:1` remplit toujours toute la largeur.
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   input: {
+    flex: 1,
     fontSize: 16,
     color: colors.onSurface,
     paddingHorizontal: 18,
@@ -322,6 +350,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     // (un anneau noir) par-dessus notre bordure terracotta au focus.
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null),
   },
+  // Coins droits carrés : avec l'œil, le `<input>` DOM ne va plus jusqu'au
+  // bord droit de la pilule (l'accessoire occupe cet espace) — un arrondi à
+  // droite y dessinerait une encoche visible dans la teinte d'auto-remplissage
+  // Safari. Les coins gauches restent arrondis comme le reste de la pilule.
+  inputWithAccessory: { borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+  eyeBtn: { paddingHorizontal: 16, paddingVertical: 16 },
   error: { color: colors.error, fontSize: 13, textAlign: 'center' },
   submitBtn: { borderRadius: theme.radius.xl, marginTop: 4 },
   signupLink: { marginTop: 32, alignItems: 'center' },

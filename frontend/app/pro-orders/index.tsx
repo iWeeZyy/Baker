@@ -11,6 +11,7 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { Chip } from '@/src/Chip';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Status = 'pending' | 'confirmed' | 'ready' | 'picked_up' | 'cancelled';
 type OrderSummary = {
@@ -67,6 +68,7 @@ export default function ProOrdersScreen() {
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -102,6 +104,7 @@ export default function ProOrdersScreen() {
           <Feather name="plus" size={22} color={colors.brand} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {locked ? (
         <View style={styles.body}>
@@ -133,7 +136,7 @@ export default function ProOrdersScreen() {
               testID="orders-empty-cta"
             />
           ) : (
-            <ScrollView contentContainerStyle={styles.body}>
+            <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
               {orders.map(o => (
                 <Pressable
                   key={o.id}

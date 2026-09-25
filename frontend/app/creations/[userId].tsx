@@ -9,6 +9,7 @@ import { useAuth } from '@/src/auth';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type CreationStub = { id: string; title: string; category: string; photos: string[]; like_count: number };
 
@@ -20,6 +21,7 @@ export default function CreationsGallery() {
   const { user } = useAuth();
   const [items, setItems] = useState<CreationStub[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
 
   useEffect(() => {
     api(`/users/${userId}/profile`)
@@ -39,6 +41,7 @@ export default function CreationsGallery() {
         <Text style={styles.title}>{isMine ? 'Mes créations' : 'Créations'}</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -50,6 +53,8 @@ export default function CreationsGallery() {
           numColumns={3}
           columnWrapperStyle={{ gap: 8, paddingHorizontal: 16 }}
           contentContainerStyle={{ gap: 8, paddingVertical: 16, paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           renderItem={({ item }) => (
             <Pressable testID={`gallery-creation-${item.id}`} onPress={() => router.push(`/creation/${item.id}` as any)} style={styles.tile}>
               <Image source={{ uri: `${API_BASE}/files/${item.photos[0]}` }} style={styles.tileImage} contentFit="cover" />

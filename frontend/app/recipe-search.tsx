@@ -15,6 +15,7 @@ import { searchRecipes, suggestTerms, type RecipeSearchable } from '@/src/recipe
 import { getRecentSearches, addRecentSearch, removeRecentSearch } from '@/src/recentRecipeSearches';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Recipe = {
   id: string;
@@ -60,6 +61,7 @@ export default function RecipeSearchScreen() {
   const [familyLabelByKey, setFamilyLabelByKey] = useState<Record<string, string>>({});
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -175,6 +177,7 @@ export default function RecipeSearchScreen() {
           <Feather name="sliders" size={18} color={hasActiveFilters ? colors.onBrandPrimary : colors.onSurface} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {filtersOpen && (
         <View style={styles.filtersPanel}>
@@ -224,6 +227,8 @@ export default function RecipeSearchScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           renderItem={({ item }) => (
             <Pressable
               testID={`search-result-${item.id}`}

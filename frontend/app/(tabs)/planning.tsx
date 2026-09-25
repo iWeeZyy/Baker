@@ -15,6 +15,7 @@ import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { SegmentedControl } from '@/src/SegmentedControl';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { EmptyState } from '@/src/EmptyState';
 import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { syncWidgetData } from '@/src/widgetData';
@@ -54,6 +55,7 @@ export default function Planning() {
   const [productions, setProductions] = useState<ProductionRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -192,9 +194,12 @@ export default function Planning() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollProgressBar progress={progress} />
       <ScrollView
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); reloadPlan(); }} tintColor={colors.brand} />}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>LE FOURNIL</Text>

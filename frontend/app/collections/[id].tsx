@@ -22,6 +22,7 @@ import { EmptyState } from '@/src/EmptyState';
 import { FAVORITES_COLLECTION_ID } from '@/src/collections';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Sort = 'recent' | 'oldest' | 'popular';
 const SORT_OPTIONS: { key: Sort; label: string }[] = [
@@ -48,6 +49,7 @@ export default function CollectionDetail() {
   const [sort, setSort] = useState<Sort>('recent');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -181,6 +183,7 @@ export default function CollectionDetail() {
           </View>
         )}
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <View style={styles.searchRow}>
         <Feather name="search" size={16} color={colors.muted} />
@@ -217,6 +220,8 @@ export default function CollectionDetail() {
           data={items}
           keyExtractor={r => r.id}
           contentContainerStyle={{ paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.brand} /> : null}

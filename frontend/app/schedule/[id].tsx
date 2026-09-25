@@ -12,6 +12,7 @@ import { useEntitlements } from '@/src/entitlements';
 import { LimitReachedNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { cardElevation } from '@/src/elevation';
 import { Button } from '@/src/Button';
 import { EmptyState } from '@/src/EmptyState';
@@ -76,6 +77,7 @@ export default function ScheduleScreen() {
   const [flash, setFlash] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ row: number; day: number } | null>(null);
   const [view, setView] = useState<'edit' | 'preview'>('edit');
+  const { progress, onScroll } = useScrollProgress();
 
   const exportRef = useRef<View>(null);
 
@@ -235,6 +237,7 @@ export default function ScheduleScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>{weekTitle(weekStart)}</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <View style={styles.viewSwitch}>
         {([['edit', 'Saisie'], ['preview', 'Aperçu']] as ['edit' | 'preview', string][]).map(([key, label]) => (
@@ -250,7 +253,7 @@ export default function ScheduleScreen() {
       </View>
 
       {view === 'preview' ? (
-        <ScrollView contentContainerStyle={styles.previewBody}>
+        <ScrollView contentContainerStyle={styles.previewBody} onScroll={onScroll} scrollEventThrottle={16}>
           {computed ? (
             <>
               <Text style={styles.previewTitle}>{weekTitle(weekStart)}</Text>
@@ -283,7 +286,7 @@ export default function ScheduleScreen() {
         </ScrollView>
       ) : (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" onScroll={onScroll} scrollEventThrottle={16}>
           <Text style={styles.label}>SEMAINE (DIMANCHE)</Text>
           <View style={styles.weekRow}>
             <Pressable testID="week-prev" onPress={() => setWeekStart(w => addDays(w, -7))} style={styles.weekBtn} accessibilityRole="button" accessibilityLabel="Semaine précédente">

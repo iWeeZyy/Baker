@@ -15,6 +15,7 @@ import { LockedFeatureNotice } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type OrgRow = { org_id: string; name: string; role: string; active: boolean };
 type Member = { user_id: string; name: string; picture?: string | null; role: string; shop_ids: string[]; joined_at: string };
@@ -41,6 +42,7 @@ export default function OrganisationScreen() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState<string | null>(null);
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
@@ -198,8 +200,9 @@ export default function OrganisationScreen() {
         <Text style={styles.headerTitle}>Organisation</Text>
         <View style={styles.iconBtn} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         {error && <Text style={styles.error} testID="org-error">{error}</Text>}
 
         {invites.length > 0 && (

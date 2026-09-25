@@ -12,6 +12,7 @@ import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 // Ordre canonique. Les puces réellement affichées sont celles qui ont au moins
 // une famille : « Pains » disparaît tant que le catalogue n'a pas de pain, et
@@ -32,6 +33,7 @@ export default function Recipes() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [category, setCategory] = useState('Tous');
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [refreshing, setRefreshing] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const router = useRouter();
@@ -99,6 +101,7 @@ export default function Recipes() {
           ))}
         </ScrollView>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -108,6 +111,8 @@ export default function Recipes() {
           data={rows}
           keyExtractor={(row) => row.map(f => f.key).join('+')}
           contentContainerStyle={{ gap: 24, paddingVertical: 20, paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
           renderItem={({ item: row }) => (
             <View style={styles.gridRow}>

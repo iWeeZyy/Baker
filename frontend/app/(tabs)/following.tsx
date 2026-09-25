@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { EmptyState } from '@/src/EmptyState';
 
 type FeedItem = {
@@ -56,6 +57,7 @@ export default function Following() {
 
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -105,6 +107,7 @@ export default function Following() {
         <Text style={styles.brandLabel}>LE FOURNIL</Text>
         <Text style={styles.title}>Abonnements</Text>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -123,6 +126,8 @@ export default function Following() {
           data={items}
           keyExtractor={item => `${item.kind}-${item.id}`}
           contentContainerStyle={items.length === 0 ? { flex: 1 } : { padding: 24, paddingTop: 16, gap: 20, paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={colors.brand} />}

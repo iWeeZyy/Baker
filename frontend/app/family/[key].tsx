@@ -10,6 +10,7 @@ import { formatDuration } from '@/src/format';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Recipe = { id: string; title: string; difficulty: string; time_minutes: number; coup_de_coeur?: boolean; like_count?: number };
 
@@ -30,6 +31,7 @@ export default function FamilyScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [family, setFamily] = useState<Family | null>(null);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const { canShowAds, config } = useAds();
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export default function FamilyScreen() {
           )}
         </View>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -80,6 +83,8 @@ export default function FamilyScreen() {
           data={rows}
           keyExtractor={(row) => row.key}
           contentContainerStyle={{ paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           renderItem={({ item: row }) => {
             if (row.type === 'ad') {
               return <View style={styles.adRow}><AdSlot placement="recipe_list" /></View>;

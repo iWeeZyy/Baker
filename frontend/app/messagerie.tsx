@@ -16,6 +16,7 @@ import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
 import { SegmentedControl } from '@/src/SegmentedControl';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Peer = { user_id: string; name: string; picture?: string | null };
 type Conversation = { peer: Peer; last_message: { content: string; type: string; from_me: boolean; created_at: string } | null; unread: number };
@@ -70,6 +71,7 @@ export default function Messagerie() {
   const { refreshUser } = useAuth();
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<'messages' | 'activity'>(tabParam === 'activity' ? 'activity' : 'messages');
+  const { progress, onScroll } = useScrollProgress();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
@@ -251,6 +253,7 @@ export default function Messagerie() {
           <View style={{ width: 40 }} />
         )}
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <SegmentedControl
         testID="messagerie-tab"
@@ -265,6 +268,8 @@ export default function Messagerie() {
           data={loadingConvos ? [] : filteredConversations}
           keyExtractor={c => c.peer.user_id}
           contentContainerStyle={{ paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMoreConversations}
           onEndReachedThreshold={0.4}
           ListHeaderComponent={messagesHeader}
@@ -323,6 +328,8 @@ export default function Messagerie() {
           data={loadingNotifs ? [] : notifs}
           keyExtractor={n => n.id}
           contentContainerStyle={{ paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMoreNotifications}
           onEndReachedThreshold={0.4}
           ListFooterComponent={loadingMoreNotifs ? <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} /> : null}

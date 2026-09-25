@@ -23,6 +23,7 @@ import { recipeImageSource } from '@/src/products';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 import { EmptyState } from '@/src/EmptyState';
 import { FAVORITES_COLLECTION_ID } from '@/src/collections';
@@ -82,6 +83,7 @@ export default function CollectionsScreen() {
   // d'ouvrir le formulaire de création, pour avertir plutôt que de
   // bloquer après coup.
   const collectionsQuota = quota('collections_total');
+  const { progress, onScroll } = useScrollProgress();
   const limitReached = collectionsQuota?.limit != null && (collectionsQuota.remaining ?? 1) <= 0;
   const [items, setItems] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +146,7 @@ export default function CollectionsScreen() {
           <Feather name="plus" size={22} color={colors.onSurface} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <QuotaBanner
         quotaKey="collections_total"
@@ -170,6 +173,8 @@ export default function CollectionsScreen() {
           numColumns={2}
           columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
           contentContainerStyle={{ gap: 12, paddingVertical: 16, paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
           renderItem={({ item }) => (
             <Pressable

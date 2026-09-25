@@ -12,6 +12,7 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { Chip } from '@/src/Chip';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Period = 'week' | 'month' | 'year' | 'all';
 const PERIODS: [Period, string][] = [
@@ -66,6 +67,7 @@ export default function DashboardScreen() {
   const router = useRouter();
 
   const [period, setPeriod] = useState<Period>('week');
+  const { progress, onScroll } = useScrollProgress();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'ok' | 'no_org' | 'locked' | 'forbidden' | 'error'>('ok');
@@ -118,6 +120,7 @@ export default function DashboardScreen() {
         <Text style={styles.title}>Tableau de bord</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
         {PERIODS.map(([key, label]) => (
@@ -160,7 +163,7 @@ export default function DashboardScreen() {
           testID="dashboard-retry"
         />
       ) : data ? (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Production</Text>
             <Text style={styles.sectionStat}>{data.production.production_count}</Text>

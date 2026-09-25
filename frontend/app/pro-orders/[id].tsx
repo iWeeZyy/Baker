@@ -10,6 +10,7 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { ActionSheet, type ActionSheetOption } from '@/src/ActionSheet';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Status = 'pending' | 'confirmed' | 'ready' | 'picked_up' | 'cancelled';
 type Item = { item_id: string; recipe_id: string; recipe_title: string; quantity: number; mode: 'pieces' | 'batches' };
@@ -58,6 +59,7 @@ export default function ProOrderDetail() {
 
   const [data, setData] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState<string | null>(null);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -125,8 +127,9 @@ export default function ProOrderDetail() {
           <Feather name="edit-2" size={20} color={colors.brand} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         {error && <Text style={styles.error} testID="order-detail-error">{error}</Text>}
 
         <View style={styles.topRow}>

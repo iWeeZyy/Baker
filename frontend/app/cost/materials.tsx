@@ -10,6 +10,7 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import type { RawMaterial } from '@/src/cost/costCalc';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 function unitPriceOf(m: RawMaterial): { value: number; label: string } | null {
   if (m.price_per_kg != null) return { value: m.price_per_kg, label: '/kg' };
@@ -28,6 +29,7 @@ export default function RawMaterials() {
   const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const router = useRouter();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const { progress, onScroll } = useScrollProgress();
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -62,6 +64,7 @@ export default function RawMaterials() {
           <Feather name="plus" size={22} color={colors.brand} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -75,7 +78,7 @@ export default function RawMaterials() {
           testID="materials-add-empty"
         />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 60, gap: 12 }}>
+        <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 60, gap: 12 }} onScroll={onScroll} scrollEventThrottle={16}>
           {materials.map(m => {
             const unit = unitPriceOf(m);
             return (

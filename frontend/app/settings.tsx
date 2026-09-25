@@ -7,6 +7,7 @@ import { useAuth } from '@/src/auth';
 import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemePreference } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const OPTIONS: { key: ThemePreference; icon: any; label: string; body: string }[] = [
   { key: 'system', icon: 'smartphone', label: 'Système', body: "Suit le réglage d'apparence de l'appareil." },
@@ -39,6 +40,7 @@ export default function Settings() {
   const [busyKey, setBusyKey] = useState<NotifKey | null>(null);
   const [busyPrivacy, setBusyPrivacy] = useState(false);
   const [busyLogoutAll, setBusyLogoutAll] = useState(false);
+  const { progress, onScroll } = useScrollProgress();
 
   const handleLogoutAllDevices = async () => {
     const confirmed = await confirmAsync(
@@ -86,8 +88,9 @@ export default function Settings() {
         <Text style={styles.headerTitle}>Réglages</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         <Text style={styles.sectionLabel}>APPARENCE</Text>
         <View style={styles.card}>
           {OPTIONS.map((opt, i) => {

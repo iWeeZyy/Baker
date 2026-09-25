@@ -7,6 +7,7 @@ import { api } from '@/src/api';
 import type { Tip } from '@/src/tips/tipsSearch';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 /**
  * La fiche détaillée d'une astuce. Deux présentations selon la nature du
@@ -37,6 +38,7 @@ export default function TipDetail() {
   const [favorited, setFavorited] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const { progress, onScroll } = useScrollProgress();
 
   const load = useCallback(async () => {
     try {
@@ -98,8 +100,9 @@ export default function TipDetail() {
           </Text>
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={styles.iconCircle}>
           <Feather name={(tip.icon as any) || 'star'} size={26} color={colors.brand} />
         </View>

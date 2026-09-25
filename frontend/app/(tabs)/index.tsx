@@ -15,6 +15,7 @@ import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { SectionHeader } from '@/src/SectionHeader';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Recipe = { id: string; title: string; category: string; family?: string | null; image_url: string; image_path?: string | null; product?: string | null; difficulty: string; time_minutes: number; description: string; author_name?: string; author_picture?: string | null; is_user_submitted?: boolean };
 
@@ -58,6 +59,7 @@ export default function Home() {
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
@@ -85,10 +87,13 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollProgressBar progress={progress} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
         contentContainerStyle={{ paddingBottom: 32 }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>LEVANEA</Text>

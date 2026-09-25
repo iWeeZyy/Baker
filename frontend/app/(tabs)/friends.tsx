@@ -10,6 +10,7 @@ import { avatarUrl } from '@/src/avatar';
 import { subscribeRealtime } from '@/src/realtime';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { EmptyState } from '@/src/EmptyState';
 import { showGamificationToast } from '@/src/gamification/UnlockToast';
 
@@ -46,6 +47,7 @@ export default function Friends() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
@@ -152,10 +154,13 @@ export default function Friends() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollProgressBar progress={progress} />
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         <View style={styles.header}>
           <Text style={styles.brandLabel}>LE FOURNIL</Text>

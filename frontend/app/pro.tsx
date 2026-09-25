@@ -23,6 +23,7 @@ import { useAds } from '@/src/ads';
 import { useEntitlements, type PlanTier } from '@/src/entitlements';
 import { PlanChip } from '@/src/PlanChip';
 import { theme, type ThemeColors } from '@/src/theme';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { useTheme } from '@/src/ThemeContext';
 
 /** Libellé court de chaque fonctionnalité — la seule traduction dont ce
@@ -96,6 +97,7 @@ export default function Pro() {
   const { config: ads } = useAds();
   const scrollRef = useRef<ScrollView>(null);
   const cardOffsets = useRef<Record<string, number>>({});
+  const { progress, onScroll } = useScrollProgress();
 
   // Le catalogue est la seule source des paliers eux-mêmes (prix, ordre,
   // fonctionnalités par offre) — la forme vient directement de
@@ -123,8 +125,9 @@ export default function Pro() {
         </Pressable>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.body}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         <Text style={styles.brandLabel}>LEVANEA</Text>
         <Text style={styles.title}>Nos offres</Text>
         <Text style={styles.intro}>

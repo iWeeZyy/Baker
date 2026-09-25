@@ -13,6 +13,7 @@ import { EmptyState } from '@/src/EmptyState';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const CATEGORY_ICON: Record<HygieneCategoryKey, keyof typeof Feather.glyphMap> = {
   temperatures: 'thermometer',
@@ -84,6 +85,7 @@ export default function Hygiene() {
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<HygieneCategoryKey | 'toutes'>('toutes');
+  const { progress, onScroll } = useScrollProgress();
 
   const shown = useMemo(() => filterFiches(HYGIENE_FICHES, query, category), [query, category]);
 
@@ -127,6 +129,7 @@ export default function Hygiene() {
           ))}
         </ScrollView>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {shown.length === 0 ? (
         <EmptyState
@@ -143,6 +146,8 @@ export default function Hygiene() {
           data={shown}
           keyExtractor={f => f.id}
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 16, gap: 12 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           renderItem={({ item }) => (
             <FicheCard fiche={item} colors={colors} styles={styles} onPress={() => router.push(`/hygiene/${item.id}`)} />
           )}

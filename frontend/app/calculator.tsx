@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 function Row({ label, value, onChange, testID }: { label: string; value: string; onChange: (v: string) => void; testID: string }) {
   const { colors } = useTheme();
@@ -29,6 +30,7 @@ export default function Calculator() {
   );
 
   const router = useRouter();
+  const { progress, onScroll } = useScrollProgress();
   const [mode, setMode] = useState<'flour' | 'dough'>('flour');
   const [amount, setAmount] = useState('1000');
   const [hydration, setHydration] = useState('68');
@@ -72,9 +74,10 @@ export default function Calculator() {
         <Text style={styles.title}>Calculateur</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" onScroll={onScroll} scrollEventThrottle={16}>
           <Text style={styles.intro}>Basé sur la méthode du boulanger (pourcentages relatifs à la farine).</Text>
 
           <View style={styles.segment}>

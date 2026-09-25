@@ -12,6 +12,7 @@ import { confirmAsync } from '@/src/confirm';
 import { formatRelativeDate } from '@/src/relativeDate';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Creation = {
   id: string; user_id: string; user_name: string; user_picture?: string | null;
@@ -30,6 +31,7 @@ export default function CreationDetail() {
   const { user } = useAuth();
   const [data, setData] = useState<Creation | null>(null);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState<string | null>(null);
   const [likePending, setLikePending] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -95,7 +97,14 @@ export default function CreationDetail() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+      {/* Superposée, pas dans le flux : ce héros photo n'a pas d'en-tête
+          classique (le bouton retour flotte déjà par-dessus l'image), donc
+          la barre reste au tout premier plan plutôt que de pousser le
+          contenu vers le bas. */}
+      <View style={styles.progressOverlay} pointerEvents="none">
+        <ScrollProgressBar progress={progress} />
+      </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 60 }} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={styles.heroWrap}>
           {data.photos.length > 1 ? (
             <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
@@ -172,6 +181,7 @@ export default function CreationDetail() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  progressOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   heroWrap: { height: 340, backgroundColor: colors.surfaceSecondary },
   heroTop: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(42,31,26,0.5)', alignItems: 'center', justifyContent: 'center' },

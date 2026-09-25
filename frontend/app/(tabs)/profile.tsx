@@ -16,6 +16,7 @@ import { recipeImageSource } from '@/src/products';
 import { formatRelativeDate } from '@/src/relativeDate';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 import { cardElevation } from '@/src/elevation';
 import { ProgressBar } from '@/src/gamification/ProgressBar';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
@@ -45,6 +46,7 @@ export default function Profile() {
   const [mine, setMine] = useState<any[]>([]);
   const [favs, setFavs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -658,6 +660,12 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Superposée : le bloc profil vit dans `ListHeaderComponent` et
+          défile avec le contenu, rien de fixe n'existe déjà pour la porter —
+          même choix que `baker/[id].tsx`. */}
+      <View style={styles.progressOverlay} pointerEvents="none">
+        <ScrollProgressBar progress={progress} />
+      </View>
       {tab === 'comments' ? (
           <FlatList
             key="comments-list"
@@ -665,6 +673,8 @@ export default function Profile() {
             data={myComments}
             keyExtractor={c => c.id}
             contentContainerStyle={{ gap: 16, paddingBottom: 40 }}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
             ListHeaderComponent={header}
             renderItem={({ item }) => {
@@ -725,6 +735,8 @@ export default function Profile() {
           numColumns={2}
           columnWrapperStyle={{ gap: 16, paddingHorizontal: 24 }}
           contentContainerStyle={{ gap: 24, paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
           ListHeaderComponent={header}
           renderItem={({ item }) => (
@@ -788,6 +800,7 @@ export default function Profile() {
 
 const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
+  progressOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   emptyCenter: { paddingTop: 60, alignItems: 'center' },
   header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -10,6 +10,7 @@ import {
 import { openFicheFile, printFicheFile, shareFicheFile, type DocActionResult } from '@/src/hygiene/documentActions';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const DOC_KIND_LABEL: Record<HygieneDocKind, string> = {
   fiche: 'Fiche pratique',
@@ -42,6 +43,7 @@ export default function HygieneDetail() {
   const router = useRouter();
 
   const fiche = useMemo(() => HYGIENE_FICHES.find(f => f.id === id) || null, [id]);
+  const { progress, onScroll } = useScrollProgress();
   const [busy, setBusy] = useState<ActionKey | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +91,9 @@ export default function HygieneDetail() {
         </Pressable>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         <View style={styles.iconCircle}>
           <Feather name={CATEGORY_ICON_BY_KEY[fiche.category]} size={26} color={colors.brand} />
         </View>

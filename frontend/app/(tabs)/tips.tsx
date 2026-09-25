@@ -12,6 +12,7 @@ import { tapFeedback } from '@/src/haptics';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const CATEGORIES = [
   'Toutes', 'Pétrissage', 'Farines', 'Hydratation', 'Température', 'Fermentation',
@@ -86,6 +87,7 @@ export default function Tips() {
   const [category, setCategory] = useState('Toutes');
   const [view, setView] = useState<'toutes' | 'favoris'>('toutes');
   const [lastRandomId, setLastRandomId] = useState<string | null>(null);
+  const { progress, onScroll } = useScrollProgress();
 
   const load = useCallback(async () => {
     try {
@@ -187,6 +189,7 @@ export default function Tips() {
           ))}
         </ScrollView>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
@@ -219,6 +222,8 @@ export default function Tips() {
           data={shown}
           keyExtractor={t => t.id}
           contentContainerStyle={{ padding: 24, paddingTop: 16, paddingBottom: 40, gap: 12 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.brand} />}
           renderItem={({ item }) => (
             <TipCard

@@ -10,6 +10,7 @@ import type { Badge, BadgeCategory } from '@/src/gamification/types';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const CATEGORIES: [BadgeCategory, string, string][] = [
   ['boulanger', '🥖', 'Boulanger'],
@@ -28,6 +29,7 @@ export default function Badges() {
 
   const [loading, setLoading] = useState(true);
   const [badges, setBadges] = useState<Badge[]>([]);
+  const { progress, onScroll } = useScrollProgress();
 
   useEffect(() => {
     if (!user) return;
@@ -49,11 +51,12 @@ export default function Badges() {
         <Text style={styles.title}>Mes badges</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /></View>
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
           <Text style={styles.countLine}>{unlockedCount} / {badges.length} badges obtenus</Text>
           {CATEGORIES.map(([key, emoji, label]) => {
             const items = badges.filter(b => b.category === key);

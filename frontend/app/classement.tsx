@@ -15,6 +15,7 @@ import { LevelBadge } from '@/src/gamification/LevelBadge';
 import { Chip } from '@/src/Chip';
 import { EmptyState } from '@/src/EmptyState';
 import { SegmentedControl } from '@/src/SegmentedControl';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Period = 'week' | 'month' | 'year' | 'all';
 type Category = 'creators' | 'recipes' | 'creations';
@@ -42,6 +43,7 @@ export default function Classement() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const { progress, onScroll } = useScrollProgress();
 
   useEffect(() => {
     let cancelled = false;
@@ -216,6 +218,7 @@ export default function Classement() {
         <Text style={styles.title}>Classement</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
         {PERIODS.map(([key, label]) => (
@@ -242,7 +245,7 @@ export default function Classement() {
           testID="classement-retry"
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
           {category === 'creators' && renderCreators()}
           {category === 'recipes' && renderRecipes()}
           {category === 'creations' && renderCreations()}

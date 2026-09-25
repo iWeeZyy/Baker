@@ -12,6 +12,7 @@ import { confirmAsync } from '@/src/confirm';
 import { theme, type ThemeColors } from '@/src/theme';
 import { useTheme } from '@/src/ThemeContext';
 import { EmptyState } from '@/src/EmptyState';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 const ROLE_OPTIONS = ['Boulanger', 'Pâtissier', 'Apprenti', 'Responsable', 'Chef', 'Tourier', 'Chocolatier', 'Traiteur', 'Autre'];
 
@@ -28,6 +29,7 @@ export default function TeamList() {
   const [members, setMembers] = useState<Member[]>([]);
   const [visible, setVisible] = useState(true);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [query, setQuery] = useState('');
@@ -95,6 +97,7 @@ export default function TeamList() {
         <Text style={styles.title}>{isMine ? 'Ma Team' : 'Team'}</Text>
         <View style={{ width: 40 }} />
       </View>
+      <ScrollProgressBar progress={progress} />
 
       {visible && (
         <View style={styles.searchWrap}>
@@ -126,6 +129,8 @@ export default function TeamList() {
           data={members}
           keyExtractor={m => m.user_id}
           contentContainerStyle={{ paddingBottom: 40 }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.brand} style={{ marginTop: 16 }} /> : null}

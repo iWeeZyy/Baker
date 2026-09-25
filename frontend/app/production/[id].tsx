@@ -19,6 +19,7 @@ import { endBakeActivity } from '@/modules/levanea-live-activity';
 import { useProductionSteps, type Step } from '@/src/useProductionSteps';
 import { useOrgMembers } from '@/src/useOrgMembers';
 import { AssigneeControl } from '@/src/AssigneeControl';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 type Tab = 'summary' | 'ingredients' | 'schedule';
 
@@ -78,6 +79,7 @@ export default function ProductionDetail() {
   const { data, loading, error, setError, busyStep, patchStep, orderedSteps, missing } = useProductionSteps(id);
   const { members } = useOrgMembers();
   const [tab, setTab] = useState<Tab>('summary');
+  const { progress, onScroll } = useScrollProgress();
   const [durationDrafts, setDurationDrafts] = useState<Record<string, string>>({});
 
   /**
@@ -164,6 +166,7 @@ export default function ProductionDetail() {
           <Feather name="edit-2" size={18} color={colors.onSurface} />
         </Pressable>
       </View>
+      <ScrollProgressBar progress={progress} />
 
       <View style={styles.tabs}>
         {([['summary', 'Résumé'], ['ingredients', 'Ingrédients'], ['schedule', 'Déroulé']] as [Tab, string][])
@@ -181,7 +184,7 @@ export default function ProductionDetail() {
 
       {error && <Text style={styles.error} testID="detail-error">{error}</Text>}
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={16}>
         {tab === 'summary' && (
           <>
             <View style={styles.statRow}>

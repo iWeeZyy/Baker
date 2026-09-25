@@ -15,6 +15,7 @@ import { useTheme, type ThemeMode } from '@/src/ThemeContext';
 import { cardElevation } from '@/src/elevation';
 import { EmptyState } from '@/src/EmptyState';
 import { LevelBadge } from '@/src/gamification/LevelBadge';
+import { ScrollProgressBar, useScrollProgress } from '@/src/ScrollProgressBar';
 
 export default function BakerProfile() {
   const { colors, mode } = useTheme();
@@ -23,6 +24,7 @@ export default function BakerProfile() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { progress, onScroll } = useScrollProgress();
   const [actionLoading, setActionLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; picture?: string | null; role: string | null }[]>([]);
@@ -206,6 +208,12 @@ export default function BakerProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Superposée : le bouton retour vit dans `ListHeaderComponent` et
+          défile avec le contenu, donc rien de fixe n'existe déjà pour porter
+          la barre. */}
+      <View style={styles.progressOverlay} pointerEvents="none">
+        <ScrollProgressBar progress={progress} />
+      </View>
       <FlatList
         style={{ flex: 1 }}
         data={recipes}
@@ -213,6 +221,8 @@ export default function BakerProfile() {
         numColumns={2}
         columnWrapperStyle={{ gap: 16, paddingHorizontal: 24 }}
         contentContainerStyle={{ gap: 24, paddingBottom: 40 }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           <View style={styles.header}>
             <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
@@ -368,6 +378,7 @@ export default function BakerProfile() {
 
 const makeStyles = (colors: ThemeColors, mode: ThemeMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
+  progressOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   header: { paddingHorizontal: 24, paddingTop: 8, alignItems: 'center' },
   backBtn: { alignSelf: 'flex-start', width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
