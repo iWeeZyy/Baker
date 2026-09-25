@@ -595,6 +595,15 @@ async def logout_all(user: dict = Depends(get_current_user)):
     valeur : deux appels concurrents (deux onglets, double-tap) ne
     retombent jamais sur la même valeur par accident."""
     await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"token_version": 1}})
+    # Un jeton invalidé ne doit pas continuer à recevoir de messages privés
+    # sur une connexion WebSocket déjà ouverte avant cet appel — sans ça,
+    # `get_current_user` (HTTP) refuserait bien le jeton, mais le canal
+    # temps réel resterait ouvert jusqu'à sa prochaine déconnexion.
+    for ws in list(ws_connections.get(user["user_id"], ())):
+        try:
+            await ws.close(code=4401)
+        except Exception:
+            pass
     return {"ok": True}
 
 # ---------- Profile picture ----------
@@ -3257,6 +3266,13 @@ async def ws_endpoint(websocket: WebSocket, token: str = ""):
         return
     user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0})
     if not user:
+        await websocket.close(code=4401)
+        return
+    # Même contrôle que get_current_user (core.py) pour les routes HTTP —
+    # sans lui, un jeton révoqué par POST /auth/logout-all pourrait quand
+    # même ouvrir une connexion temps réel et continuer à recevoir les
+    # messages privés de la victime.
+    if payload.get("tv", 0) != user.get("token_version", 0):
         await websocket.close(code=4401)
         return
     user_id = user["user_id"]

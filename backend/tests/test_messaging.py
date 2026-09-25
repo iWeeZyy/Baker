@@ -62,6 +62,17 @@ def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def _register_fresh(name="WS Realtime"):
+    """A throwaway account, distinct from the shared A/B/stranger fixtures —
+    needed here because logout-all invalidates a token for the rest of this
+    module, and A/B's tokens are reused by every other test in this file."""
+    import uuid
+    email = f"ws.revoke.{uuid.uuid4().hex[:10]}@bakers.app"
+    r = requests.post(f"{API}/auth/register", json={"email": email, "password": "TestWsRevoke2026!", "name": name}, timeout=30)
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
 # --- Friend system ---
 class TestFriendship:
     def test_search_finds_user(self, users):
@@ -316,6 +327,34 @@ class TestRealtime:
             assert evt["message"]["content"] == content
             assert evt["message"]["from_user_id"] == friends_ab["a"]["user_id"]
             assert evt["message"]["to_user_id"] == friends_ab["b"]["user_id"]
+
+    @pytest.mark.asyncio
+    async def test_token_revoked_by_logout_all_cannot_open_a_connection(self):
+        # The handshake is refused outright (the check happens before
+        # accept()), surfaced by `websockets` as InvalidStatus — but this
+        # also accepts ConnectionClosed in case a future refactor moves the
+        # check after accept(). Either way, specifically NOT a bare
+        # Exception: a hung connection (the bug this guards against — the
+        # server never rejects it, so recv() would just time out) must
+        # fail this test, not pass it disguised as "some exception happened".
+        token = _register_fresh("WS Revoke Connect")
+        requests.post(f"{API}/auth/logout-all", headers=auth_headers(token), timeout=30)
+        uri = f"{WS_BASE}/api/ws?token={token}"
+        with pytest.raises((websockets.exceptions.InvalidStatus, websockets.exceptions.ConnectionClosed)):
+            async with websockets.connect(uri, open_timeout=5) as ws:
+                await asyncio.wait_for(ws.recv(), timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_logout_all_closes_an_already_open_connection(self):
+        token = _register_fresh("WS Revoke Live")
+        uri = f"{WS_BASE}/api/ws?token={token}"
+        async with websockets.connect(uri, open_timeout=5) as ws:
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: requests.post(f"{API}/auth/logout-all", headers=auth_headers(token), timeout=30),
+            )
+            with pytest.raises(websockets.exceptions.ConnectionClosed):
+                await asyncio.wait_for(ws.recv(), timeout=5)
 
 
 # --- Demo bots ---
