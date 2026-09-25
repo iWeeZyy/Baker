@@ -1545,6 +1545,19 @@ def _validate_creation_input(inp: CreationInput):
     if not inp.photos:
         raise HTTPException(422, "Ajoutez au moins une photo.")
 
+def _require_own_upload_paths(photos: List[str], user_id: str):
+    """`photos` n'est jamais qu'une liste de chemins choisie par le client —
+    sans ce garde, `update_creation`/`delete_creation` appelleraient
+    `delete_object` sur le chemin de n'importe qui (avatar, photo de recette,
+    autre création), ces chemins étant visibles publiquement ailleurs dans
+    l'API (`picture`, `image_path`, `photos` d'une création tierce). Chaque
+    chemin doit donc rester sous le seul préfixe que `/upload`/l'avatar
+    génèrent réellement pour cet utilisateur."""
+    prefix = f"{APP_NAME}/uploads/{user_id}/"
+    for path in photos:
+        if not path.startswith(prefix):
+            raise HTTPException(403, "Une des photos ne vous appartient pas.")
+
 @api_router.get("/creations/mine")
 async def my_creations(user: dict = Depends(get_current_user)):
     docs = await db.creations.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -1554,6 +1567,7 @@ async def my_creations(user: dict = Depends(get_current_user)):
 @api_router.post("/creations")
 async def create_creation(inp: CreationInput, user: dict = Depends(get_current_user)):
     _validate_creation_input(inp)
+    _require_own_upload_paths(inp.photos, user["user_id"])
     if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
         raise HTTPException(404, "Recette introuvable")
 
@@ -1589,6 +1603,7 @@ async def update_creation(creation_id: str, inp: CreationInput, user: dict = Dep
     if c["user_id"] != user["user_id"]:
         raise HTTPException(403, "Vous ne pouvez modifier que vos propres créations")
     _validate_creation_input(inp)
+    _require_own_upload_paths(inp.photos, user["user_id"])
     if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
         raise HTTPException(404, "Recette introuvable")
 

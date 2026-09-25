@@ -6,13 +6,24 @@ Comme test_follows_api.py/test_feed_api.py, toute mutation d'un même état
 partagé reste dans une seule classe séquentielle sous `-n 2
 --dist loadscope`.
 """
+import io
 import os
 
 import pytest
 import requests
+from PIL import Image
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 API = f"{BASE_URL}/api"
+
+
+def _upload(token):
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40), (180, 120, 70)).save(buf, format="JPEG")
+    buf.seek(0)
+    r = requests.post(f"{API}/upload", files={"file": ("photo.jpg", buf, "image/jpeg")}, headers=h(token), timeout=30)
+    assert r.status_code == 200, r.text
+    return r.json()["path"]
 
 
 def _login_or_register(email, password, name):
@@ -186,7 +197,7 @@ class TestNotificationFlow:
         before = _unread_count(token_g)
         r = requests.post(
             f"{API}/creations",
-            json={"title": "TEST_Notif_Creation", "category": "Pain", "photos": ["fake/path.jpg"]},
+            json={"title": "TEST_Notif_Creation", "category": "Pain", "photos": [_upload(token_f)]},
             headers=h(token_f), timeout=30,
         )
         assert r.status_code == 200, r.text

@@ -11,14 +11,25 @@ Chaque test qui a besoin d'un total d'XP exact enregistre un compte neuf
 compte partagé accumulerait de l'XP d'un test à l'autre et rendrait les
 assertions exactes fragiles.
 """
+import io
 import os
 import uuid
 
 import pytest
 import requests
+from PIL import Image
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 API = f"{BASE_URL}/api"
+
+
+def _upload(token):
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40), (180, 120, 70)).save(buf, format="JPEG")
+    buf.seek(0)
+    r = requests.post(f"{API}/upload", files={"file": ("photo.jpg", buf, "image/jpeg")}, headers=h(token), timeout=30)
+    assert r.status_code == 200, r.text
+    return r.json()["path"]
 
 
 def register():
@@ -224,7 +235,7 @@ class TestDeletedCreationKeepsXp:
         token, _ = register()
         r = requests.post(
             f"{API}/creations", headers=h(token),
-            json={"title": "Ma création", "description": "desc", "category": "Pain", "photos": ["x/y.jpg"]},
+            json={"title": "Ma création", "description": "desc", "category": "Pain", "photos": [_upload(token)]},
             timeout=30,
         )
         assert r.status_code == 200
