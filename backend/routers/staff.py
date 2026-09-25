@@ -179,6 +179,19 @@ async def duplicate_schedule(
         raise HTTPException(404, "Emploi du temps introuvable")
 
     week_start = _validate_week_start((inp or {}).get("week_start") or "")
+    employees = [
+        {**e, "employee_id": str(uuid.uuid4())}
+        for e in (source.get("employees") or [])
+    ]
+    # Une duplication insère une grille de plus, exactement comme
+    # create_schedule — sans ce contrôle, dupliquer indéfiniment une grille
+    # déjà possédée contournerait le plafond `schedules_total` d'un compte
+    # Free (schedule_employees ne peut pas être dépassé ici, l'effectif
+    # copié ayant déjà passé ce contrôle à la création de la source, mais
+    # schedules_total, lui, l'était).
+    await check(user, feature="staff_schedule",
+                quotas=[("schedules_total", 1), ("schedule_employees", len(employees))],
+                org=org)
     now = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
@@ -186,10 +199,7 @@ async def duplicate_schedule(
         "week_start": week_start,
         # The note belongs to its week ("Armand off jeudi"), so it is not copied.
         "notes": "",
-        "employees": [
-            {**e, "employee_id": str(uuid.uuid4())}
-            for e in (source.get("employees") or [])
-        ],
+        "employees": employees,
         "created_at": now,
         "updated_at": now,
     }

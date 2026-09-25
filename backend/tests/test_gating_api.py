@@ -293,3 +293,26 @@ class TestQuotasEssaiGratuit:
             "employees": [{"name": "Employé recree", "days": [{} for _ in range(7)]}],
         }, headers=_h(token), timeout=30)
         assert r.status_code == 200, r.text
+
+    def test_dupliquer_ne_contourne_pas_schedules_total(self):
+        """`POST /schedules/{id}/duplicate` insère une grille de plus, tout
+        comme `POST /schedules` — sans son propre contrôle de quota, un
+        compte à la limite pourrait dupliquer indéfiniment une grille déjà
+        possédée pour dépasser le plafond `schedules_total`."""
+        token = _token()
+        if not _plan(token)["enforced"]:
+            pytest.skip("ENTITLEMENTS_ENFORCED est éteint sur ce serveur")
+        source_id = None
+        for i, week in enumerate(["2026-03-01", "2026-03-08", "2026-03-15"]):
+            r = requests.post(f"{API}/schedules", json={
+                "week_start": week,
+                "employees": [{"name": f"Employé {i}", "days": [{} for _ in range(7)]}],
+            }, headers=_h(token), timeout=30)
+            assert r.status_code == 200, r.text
+            source_id = r.json()["id"]
+        r = requests.post(f"{API}/schedules/{source_id}/duplicate",
+                          json={"week_start": "2026-03-22"}, headers=_h(token), timeout=30)
+        assert r.status_code == 403, r.text
+        detail = r.json()["detail"]
+        assert detail["error"] == "plan_limit_reached"
+        assert detail["quota"] == "schedules_total"
