@@ -200,6 +200,32 @@ class TestApplicationDUnAbonnement:
 
 
 @requires_webhook_secret
+class TestInjectionNoSQL:
+    """`app_user_id` arrive en JSON brut (pas de modèle Pydantic sur cette
+    route, voir sa docstring) et finit directement dans un filtre Mongo
+    (`db.users.find_one({"user_id": app_user_id}, ...)`). Sans garde de type,
+    un `app_user_id` qui est un objet plutôt qu'une chaîne (`{"$regex": ...}`,
+    `{"$ne": ...}`) se comporte comme un opérateur de requête et peut
+    sélectionner un compte que l'appelant n'a jamais désigné littéralement —
+    y compris un compte dont il ne connaît pas l'identifiant exact."""
+
+    def test_un_operateur_mongo_ne_cible_pas_un_compte_reel(self):
+        token, uid = _register()
+        # Un dict plutôt qu'une chaîne — mais qui, en filtre Mongo non
+        # validé, correspond exactement à `uid` via une regex d'ancrage.
+        r = _webhook(_event({"$regex": f"^{uid}$"}, product_id="levanea_pro_plus_monthly"))
+        assert r.status_code == 200
+        assert r.json() == {"status": "ignored", "reason": "utilisateur inconnu"}
+        assert _plan(token)["plan"] == "free"
+        assert _subscription(token)["status"] is None
+
+    def test_ne_egal_a_rien_de_reel_ne_selectionne_personne(self):
+        r = _webhook(_event({"$ne": "id-que-personne-ne-possede"}))
+        assert r.status_code == 200
+        assert r.json() == {"status": "ignored", "reason": "utilisateur inconnu"}
+
+
+@requires_webhook_secret
 class TestIdempotence:
     """Rejouer le même `event.id` — ce que tout fournisseur de webhook fait
     en cas de doute sur la livraison — ne doit produire aucun effet visible

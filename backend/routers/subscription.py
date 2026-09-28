@@ -77,9 +77,21 @@ async def revenuecat_webhook(request: Request,
         return {"status": "ignored", "reason": "type non suivi"}
 
     # `app_user_id` est le `user_id` Levanea : c'est l'application qui le
-    # fournit à RevenueCat à la connexion, jamais l'inverse.
+    # fournit à RevenueCat à la connexion, jamais l'inverse. Le corps arrive
+    # en JSON brut (pas de modèle Pydantic ici, voir docstring du module), donc
+    # `app_user_id` pourrait être n'importe quelle valeur JSON — un objet
+    # (`{"$ne": null}`, `{"$regex": "^"}`…) injecté tel quel dans le filtre
+    # Mongo ci-dessous se comporterait comme un opérateur de requête plutôt
+    # que comme une égalité littérale, et sélectionnerait un compte arbitraire
+    # au lieu de celui réellement visé par l'événement. `isinstance(..., str)`
+    # est la seule garde nécessaire : tout ce qui n'est pas une chaîne est
+    # traité comme un utilisateur inconnu, jamais transmis à `find_one`.
     user_id = event.get("app_user_id")
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1}) if user_id else None
+    user = (
+        await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+        if isinstance(user_id, str) and user_id
+        else None
+    )
     if not user:
         return {"status": "ignored", "reason": "utilisateur inconnu"}
 
