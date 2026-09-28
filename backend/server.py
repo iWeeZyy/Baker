@@ -20,7 +20,7 @@ from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 from typing import Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -39,6 +39,7 @@ import recipe_adapt
 import instagram
 import gamification
 import badges
+import security
 from plans import resolve_plan, limits_for, production_quota, ads_config
 from families import CATEGORIES, FAMILIES, FAMILY_KEYS, family_of
 from tips_seed import TIP_CATEGORIES
@@ -49,6 +50,15 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ['JWT_SECRET']
+# Le dépôt est public : démarrer avec la valeur d'exemple de .env.example (ou
+# un secret trop court) permettrait à n'importe qui de forger un jeton de
+# n'importe quel compte. Mieux vaut refuser de démarrer.
+_jwt_problem = security.jwt_secret_problem(JWT_SECRET)
+if _jwt_problem:
+    raise RuntimeError(
+        f"{_jwt_problem} Génère-en un avec : "
+        "python3 -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 APP_NAME = "bakers-app"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -120,6 +130,42 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+# ---------- Security guards (voir security.py) ----------
+login_throttle = security.LoginThrottle()
+
+async def _increment_ai_usage(key: str, day: str, units: int, limit: int) -> bool:
+    """Ajoute `units` au compteur (key, day) SEULEMENT si le total reste
+    sous `limit` — atomique : deux requêtes simultanées ne peuvent pas
+    dépasser le plafond ensemble. Un document existant déjà au plafond ne
+    correspond pas au filtre, l'upsert tente alors une insertion que l'index
+    unique (key, day) refuse : c'est ce refus qui signifie "plafond atteint"."""
+    if units > limit:
+        return False
+    try:
+        await db.ai_usage.update_one(
+            {"key": key, "day": day, "count": {"$lte": limit - units}},
+            {"$inc": {"count": units},
+             "$setOnInsert": {"expires_at": datetime.now(timezone.utc) + timedelta(days=7)}},
+            upsert=True,
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+
+async def _consume_ai_quota(user: dict, units: int = 1) -> None:
+    """Débite le quota IA avant tout appel Anthropic ; 429 si épuisé.
+    Plafond par utilisateur (équité) puis plafond GLOBAL (protection du
+    crédit Anthropic, quel que soit le nombre de comptes créés)."""
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    user_limit = security.ai_daily_limit(resolve_plan(user))
+    if not await _increment_ai_usage(user["user_id"], day, units, user_limit):
+        raise HTTPException(429, f"Limite quotidienne de l'assistant IA atteinte ({user_limit} par jour). Réessaie demain.")
+    if not await _increment_ai_usage(security.GLOBAL_AI_KEY, day, units, security.ai_global_daily_limit()):
+        # Rend à l'utilisateur ce qui vient de lui être débité : ce n'est pas
+        # son quota à lui qui est épuisé.
+        await db.ai_usage.update_one({"key": user["user_id"], "day": day}, {"$inc": {"count": -units}})
+        raise HTTPException(429, "L'assistant IA a atteint sa limite du jour. Réessaie demain.")
 
 # ---------- Storage Helpers (local disk) ----------
 def _resolve_upload_path(path: str) -> Path:
@@ -466,6 +512,7 @@ class CostHistoryInput(BaseModel):
 # familles perdrait cette information plutôt que de l'exprimer.
 CREATION_CATEGORIES = ["Pain", "Viennoiserie", "Pâtisserie", "Traiteur", "Autre"]
 CREATION_DESCRIPTION_MAX_LENGTH = 500
+CREATION_MAX_PHOTOS = 10
 
 class CreationInput(BaseModel):
     title: str
@@ -513,6 +560,13 @@ async def email_available(email: str):
 
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
+    # Le client exigeait déjà 8 caractères, mais un appel direct à l'API
+    # passait sans rien ; et au-delà de 72 octets bcrypt lève (erreur 500).
+    pw_problem = security.password_problem(inp.password)
+    if pw_problem:
+        raise HTTPException(422, pw_problem)
+    if len(inp.name) > security.MAX_NAME_LENGTH:
+        raise HTTPException(422, f"Le nom ne peut pas dépasser {security.MAX_NAME_LENGTH} caractères.")
     existing = await db.users.find_one({"email": inp.email.lower()}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Email déjà utilisé")
@@ -575,11 +629,21 @@ async def register(inp: RegisterInput):
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(inp: LoginInput):
-    user = await db.users.find_one({"email": inp.email.lower()}, {"_id": 0})
-    if not user or not user.get("password_hash"):
+    email = inp.email.lower()
+    # Anti brute-force : trop d'échecs récents sur cet email -> refus
+    # temporaire, AVANT même de vérifier le mot de passe.
+    wait = login_throttle.retry_after(email)
+    if wait > 0:
+        minutes = max(1, int(wait // 60) + 1)
+        raise HTTPException(429, f"Trop de tentatives de connexion. Réessaie dans {minutes} min.")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    password_ok = False
+    if user and user.get("password_hash") and len(inp.password.encode()) <= security.BCRYPT_MAX_BYTES:
+        password_ok = bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode())
+    if not password_ok:
+        login_throttle.record_failure(email)
         raise HTTPException(401, "Email ou mot de passe invalide")
-    if not bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode()):
-        raise HTTPException(401, "Email ou mot de passe invalide")
+    login_throttle.reset(email)
     token = sign_jwt(user["user_id"])
     return {"token": token, "user": {
         "user_id": user["user_id"], "email": user["email"], "name": user["name"],
@@ -693,7 +757,7 @@ async def set_profile_picture(file: UploadFile = File(...), user: dict = Depends
     réellement décodable, modération) ; seul un résultat BLOCKED est
     refusé — une photo de profil n'a pas de mécanisme de flou/révélation,
     donc rien à gagner à bloquer une simple ambiguïté (SENSITIVE)."""
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -976,7 +1040,7 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
 
     image_blocks = []
     for f in files:
-        raw = await f.read()
+        raw = await f.read(MAX_PHOTO_UPLOAD_BYTES + 1)
         if not raw:
             raise HTTPException(400, "Fichier vide")
         if len(raw) > MAX_PHOTO_UPLOAD_BYTES:
@@ -990,6 +1054,8 @@ async def analyze_scanned_recipe(files: List[UploadFile] = File(...), user: dict
             "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(prepared).decode("ascii")},
         })
 
+    # Une page = un appel image facture : le quota compte les pages.
+    await _consume_ai_quota(user, units=len(image_blocks))
     content = image_blocks + [{"type": "text", "text": "Extrais les informations de cette fiche recette."}]
 
     try:
@@ -1099,6 +1165,7 @@ async def analyze_instagram_caption(inp: InstagramCaptionInput, user: dict = Dep
         raise HTTPException(400, "Aucun texte reçu")
     if len(caption) > MAX_CAPTION_LENGTH:
         raise HTTPException(400, f"{MAX_CAPTION_LENGTH} caractères maximum")
+    await _consume_ai_quota(user)
 
     try:
         response = await anthropic_client.messages.create(
@@ -1211,6 +1278,11 @@ async def interpret_recipe_adaptation(recipe_id: str, inp: RecipeAdaptTextInput,
         raise HTTPException(404, "Recette introuvable")
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    if not inp.text.strip():
+        raise HTTPException(400, "Aucun texte reçu")
+    if len(inp.text) > security.MAX_ADAPT_TEXT_LENGTH:
+        raise HTTPException(400, f"{security.MAX_ADAPT_TEXT_LENGTH} caractères maximum")
+    await _consume_ai_quota(user)
 
     try:
         response = await anthropic_client.messages.create(
@@ -1593,6 +1665,15 @@ def _validate_creation_input(inp: CreationInput):
         raise HTTPException(422, f"La description ne peut pas dépasser {CREATION_DESCRIPTION_MAX_LENGTH} caractères.")
     if not inp.photos:
         raise HTTPException(422, "Ajoutez au moins une photo.")
+    if len(inp.photos) > CREATION_MAX_PHOTOS:
+        raise HTTPException(422, f"{CREATION_MAX_PHOTOS} photos maximum.")
+
+def _check_own_photos(photos: List[str], user_id: str) -> None:
+    """Une création ne peut référencer que des fichiers envoyés par son
+    auteur : sinon, référencer la photo (ou l'avatar) d'un autre puis
+    supprimer la création effaçait le fichier de la victime."""
+    if any(not security.is_own_upload_path(p, user_id, APP_NAME) for p in photos):
+        raise HTTPException(422, "Photo invalide.")
 
 @api_router.get("/creations/mine")
 async def my_creations(user: dict = Depends(get_current_user)):
@@ -1603,6 +1684,7 @@ async def my_creations(user: dict = Depends(get_current_user)):
 @api_router.post("/creations")
 async def create_creation(inp: CreationInput, user: dict = Depends(get_current_user)):
     _validate_creation_input(inp)
+    _check_own_photos(inp.photos, user["user_id"])
     if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
         raise HTTPException(404, "Recette introuvable")
 
@@ -1638,6 +1720,9 @@ async def update_creation(creation_id: str, inp: CreationInput, user: dict = Dep
     if c["user_id"] != user["user_id"]:
         raise HTTPException(403, "Vous ne pouvez modifier que vos propres créations")
     _validate_creation_input(inp)
+    # Les photos DÉJÀ sur la création restent acceptées (données antérieures
+    # à ce contrôle) ; toute NOUVELLE photo doit appartenir à l'auteur.
+    _check_own_photos([p for p in inp.photos if p not in (c.get("photos") or [])], user["user_id"])
     if inp.recipe_id and not await db.recipes.find_one({"id": inp.recipe_id}, {"_id": 0, "id": 1}):
         raise HTTPException(404, "Recette introuvable")
 
@@ -1648,7 +1733,8 @@ async def update_creation(creation_id: str, inp: CreationInput, user: dict = Dep
     # même principe que le remplacement de l'avatar : pas de fichier orphelin.
     removed = set(c.get("photos") or []) - set(inp.photos)
     for path in removed:
-        await run_in_threadpool(delete_object, path)
+        if security.is_own_upload_path(path, user["user_id"], APP_NAME):
+            await run_in_threadpool(delete_object, path)
 
     updates = {
         "title": inp.title.strip(), "description": inp.description.strip(), "category": inp.category,
@@ -1666,7 +1752,10 @@ async def delete_creation(creation_id: str, user: dict = Depends(get_current_use
     if c["user_id"] != user["user_id"]:
         raise HTTPException(403, "Vous ne pouvez supprimer que vos propres créations")
     for path in c.get("photos") or []:
-        await run_in_threadpool(delete_object, path)
+        # Jamais le fichier d'un autre, même s'il avait été référencé avant
+        # l'ajout du contrôle d'appartenance.
+        if security.is_own_upload_path(path, user["user_id"], APP_NAME):
+            await run_in_threadpool(delete_object, path)
     await db.creations.delete_one({"id": creation_id})
     await db.creation_likes.delete_many({"creation_id": creation_id})
     return {"deleted": True}
@@ -3044,7 +3133,7 @@ async def send_photo_message(
     if not await _can_message(me, friend_id):
         raise HTTPException(403, "Vous ne pouvez pas échanger de messages avec cette personne")
 
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -3317,6 +3406,15 @@ async def _generate_bot_reply(bot: dict, human_id: str, incoming: str) -> str:
         "Je ne peux pas te répondre en détail pour le moment, mais c'est bien arrivé !"
     )
     if not anthropic_client:
+        return fallback
+    # Parler à un bot déclenche un appel Anthropic : même quota que le reste,
+    # et la réponse de secours plutôt qu'une erreur une fois le quota épuisé.
+    human = await db.users.find_one({"user_id": human_id}, {"_id": 0, "user_id": 1, "email": 1, "plan": 1})
+    if not human:
+        return fallback
+    try:
+        await _consume_ai_quota(human)
+    except HTTPException:
         return fallback
     pk = _pair_key(bot["user_id"], human_id)
     history = await db.messages.find({"pair": pk}, {"_id": 0}).sort("created_at", -1).limit(BOT_HISTORY_LIMIT).to_list(BOT_HISTORY_LIMIT)
@@ -3991,7 +4089,7 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
     doit jamais être bloquée pour une simple ambiguïté). La sortie est
     toujours un JPEG, donc le chemin porte toujours `.jpg`, quel que soit le
     format d'origine — même convention que `prepare_avatar`."""
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -4012,11 +4110,15 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
 
 @api_router.get("/files/{path:path}")
 async def download_file(path: str):
+    # Les fichiers .meta sont internes (type MIME stocké), jamais servis.
+    if path.endswith(".meta"):
+        raise HTTPException(404, "Fichier introuvable")
     try:
         content, ctype = await run_in_threadpool(get_object, path)
-    except Exception as e:
-        raise HTTPException(404, f"File not found: {e}")
-    return Response(content=content, media_type=ctype)
+    except Exception:
+        # Message générique : ne renvoie ni chemin ni détail interne.
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(content=content, media_type=ctype, headers={"X-Content-Type-Options": "nosniff"})
 
 # ---------- AI Chat ----------
 CHAT_SYSTEM_PROMPT = (
@@ -4030,11 +4132,21 @@ CHAT_SYSTEM_PROMPT = (
 async def chat(inp: ChatMessageInput, user: dict = Depends(get_current_user)):
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    if not inp.message.strip():
+        raise HTTPException(400, "Message vide")
+    if len(inp.message) > security.MAX_CHAT_MESSAGE_LENGTH:
+        raise HTTPException(400, f"{security.MAX_CHAT_MESSAGE_LENGTH} caractères maximum par message")
+    if inp.session_id and len(inp.session_id) > security.MAX_CHAT_SESSION_ID_LENGTH:
+        raise HTTPException(400, "Identifiant de conversation invalide")
     session_id = inp.session_id or f"{user['user_id']}_default"
+    await _consume_ai_quota(user)
 
+    # Les 50 messages les PLUS RÉCENTS (l'ancien tri croissant renvoyait les
+    # 50 premiers de la conversation et ignorait toute la suite).
     history = await db.chat_messages.find(
         {"user_id": user["user_id"], "session_id": session_id}, {"_id": 0}
-    ).sort("created_at", 1).to_list(50)
+    ).sort("created_at", -1).to_list(50)
+    history.reverse()
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": inp.message})
 
@@ -4115,6 +4227,10 @@ async def startup():
     # n'ont pas ce champ — ne doivent jamais entrer en collision entre eux.
     await db.users.create_index("username", unique=True, sparse=True)
     await db.recipes.create_index("id", unique=True)
+    # Quota IA (voir _consume_ai_quota) : l'unicité (key, day) est ce qui
+    # rend le plafond atomique ; expiration automatique après 7 jours.
+    await db.ai_usage.create_index([("key", 1), ("day", 1)], unique=True)
+    await db.ai_usage.create_index("expires_at", expireAfterSeconds=0)
     await db.recipes.create_index("category")
     await db.favorites.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
     await db.likes.create_index([("user_id", 1), ("recipe_id", 1)], unique=True)
