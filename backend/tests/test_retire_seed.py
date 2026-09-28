@@ -22,7 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # fonction qui n'a besoin que de deux collections.
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "bakers_retire_test")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+# core.py refuse un secret court (voir security.jwt_secret_problem).
+os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret-for-retire-seed-0123456789abcdef")
 import motor.motor_asyncio  # noqa: E402
 
 motor.motor_asyncio.AsyncIOMotorClient = lambda *a, **kw: AsyncMongoMockClient()

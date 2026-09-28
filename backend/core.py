@@ -19,6 +19,8 @@ from dotenv import load_dotenv
 from fastapi import Header, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
+import security
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -27,6 +29,15 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ['JWT_SECRET']
+# Le dépôt est public : démarrer avec la valeur d'exemple de .env.example (ou
+# un secret trop court) permettrait à n'importe qui de forger un jeton de
+# n'importe quel compte. Mieux vaut refuser de démarrer.
+_jwt_problem = security.jwt_secret_problem(JWT_SECRET)
+if _jwt_problem:
+    raise RuntimeError(
+        f"{_jwt_problem} Génère-en un avec : "
+        "python3 -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 
 
 def _b64url(data: bytes) -> str:

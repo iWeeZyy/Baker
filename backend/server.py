@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 from typing import Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -26,6 +26,7 @@ load_dotenv(ROOT_DIR / '.env')
 from seed_data import RECIPES_SEED, TIPS_SEED, DEMO_BOTS
 from core import db, client, get_current_user, sign_jwt, verify_jwt
 from gating import record_ai_usage, require
+import security
 import leaderboard
 import imaging
 import moderation
@@ -416,6 +417,13 @@ async def email_available(email: str):
 
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(inp: RegisterInput):
+    # Le client exigeait déjà 8 caractères, mais un appel direct à l'API
+    # passait sans rien ; et au-delà de 72 octets bcrypt lève (erreur 500).
+    pw_problem = security.password_problem(inp.password)
+    if pw_problem:
+        raise HTTPException(422, pw_problem)
+    if len(inp.name) > security.MAX_NAME_LENGTH:
+        raise HTTPException(422, f"Le nom ne peut pas dépasser {security.MAX_NAME_LENGTH} caractères.")
     existing = await db.users.find_one({"email": inp.email.lower()}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Email déjà utilisé")
@@ -479,11 +487,21 @@ async def register(inp: RegisterInput):
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(inp: LoginInput):
-    user = await db.users.find_one({"email": inp.email.lower()}, {"_id": 0})
-    if not user or not user.get("password_hash"):
+    email = inp.email.lower()
+    # Anti brute-force : trop d'échecs récents sur cet email -> refus
+    # temporaire, AVANT même de vérifier le mot de passe.
+    wait = login_throttle.retry_after(email)
+    if wait > 0:
+        minutes = max(1, int(wait // 60) + 1)
+        raise HTTPException(429, f"Trop de tentatives de connexion. Réessaie dans {minutes} min.")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    password_ok = False
+    if user and user.get("password_hash") and len(inp.password.encode()) <= security.BCRYPT_MAX_BYTES:
+        password_ok = bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode())
+    if not password_ok:
+        login_throttle.record_failure(email)
         raise HTTPException(401, "Email ou mot de passe invalide")
-    if not bcrypt.checkpw(inp.password.encode(), user["password_hash"].encode()):
-        raise HTTPException(401, "Email ou mot de passe invalide")
+    login_throttle.reset(email)
     token = sign_jwt(user["user_id"], user.get("token_version", 0))
     return {"token": token, "user": {
         "user_id": user["user_id"], "email": user["email"], "name": user["name"],
@@ -616,7 +634,7 @@ async def set_profile_picture(file: UploadFile = File(...), user: dict = Depends
     réellement décodable, modération) ; seul un résultat BLOCKED est
     refusé — une photo de profil n'a pas de mécanisme de flou/révélation,
     donc rien à gagner à bloquer une simple ambiguïté (SENSITIVE)."""
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -906,7 +924,7 @@ async def analyze_scanned_recipe(
 
     image_blocks = []
     for f in files:
-        raw = await f.read()
+        raw = await f.read(MAX_PHOTO_UPLOAD_BYTES + 1)
         if not raw:
             raise HTTPException(400, "Fichier vide")
         if len(raw) > MAX_PHOTO_UPLOAD_BYTES:
@@ -920,6 +938,8 @@ async def analyze_scanned_recipe(
             "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(prepared).decode("ascii")},
         })
 
+    # Une page = une image facturée : le plafond compte les pages.
+    await _consume_ai_safety_cap(user, units=len(image_blocks))
     content = image_blocks + [{"type": "text", "text": "Extrais les informations de cette fiche recette."}]
 
     # Vérifié ici, juste avant le seul appel réseau réel de cette route —
@@ -1049,6 +1069,7 @@ async def analyze_instagram_caption(
         raise HTTPException(400, "Aucun texte reçu")
     if len(caption) > MAX_CAPTION_LENGTH:
         raise HTTPException(400, f"{MAX_CAPTION_LENGTH} caractères maximum")
+    await _consume_ai_safety_cap(user)
 
     try:
         response = await anthropic_client.messages.create(
@@ -1169,6 +1190,11 @@ async def interpret_recipe_adaptation(
         raise HTTPException(404, "Recette introuvable")
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    if not inp.text.strip():
+        raise HTTPException(400, "Aucun texte reçu")
+    if len(inp.text) > security.MAX_ADAPT_TEXT_LENGTH:
+        raise HTTPException(400, f"{security.MAX_ADAPT_TEXT_LENGTH} caractères maximum")
+    await _consume_ai_safety_cap(user)
 
     try:
         response = await anthropic_client.messages.create(
@@ -3025,7 +3051,7 @@ async def send_photo_message(
     if not await _can_message(me, friend_id):
         raise HTTPException(403, "Vous ne pouvez pas échanger de messages avec cette personne")
 
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -3306,6 +3332,15 @@ async def _generate_bot_reply(bot: dict, human_id: str, incoming: str) -> str:
     )
     if not anthropic_client:
         return fallback
+    # Parler à un bot déclenche un appel Anthropic : même plafond de sécurité
+    # que le reste, et la réponse de secours une fois le plafond atteint.
+    human = await db.users.find_one({"user_id": human_id}, {"_id": 0, "password_hash": 0})
+    if not human:
+        return fallback
+    try:
+        await _consume_ai_safety_cap(human)
+    except HTTPException:
+        return fallback
     pk = _pair_key(bot["user_id"], human_id)
     history = await db.messages.find({"pair": pk}, {"_id": 0}).sort("created_at", -1).limit(BOT_HISTORY_LIMIT).to_list(BOT_HISTORY_LIMIT)
     history.reverse()
@@ -3423,7 +3458,7 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
     doit jamais être bloquée pour une simple ambiguïté). La sortie est
     toujours un JPEG, donc le chemin porte toujours `.jpg`, quel que soit le
     format d'origine — même convention que `prepare_avatar`."""
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_PHOTO_UPLOAD_BYTES + 1)
     if not raw_bytes:
         raise HTTPException(400, "Fichier vide")
     if len(raw_bytes) > MAX_PHOTO_UPLOAD_BYTES:
@@ -3444,11 +3479,56 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
 
 @api_router.get("/files/{path:path}")
 async def download_file(path: str):
+    # Les fichiers .meta sont internes (type MIME stocké), jamais servis.
+    if path.endswith(".meta"):
+        raise HTTPException(404, "Fichier introuvable")
     try:
         content, ctype = await run_in_threadpool(get_object, path)
-    except Exception as e:
-        raise HTTPException(404, f"File not found: {e}")
-    return Response(content=content, media_type=ctype)
+    except Exception:
+        # Message générique : ne renvoie ni chemin ni détail interne.
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(content=content, media_type=ctype, headers={"X-Content-Type-Options": "nosniff"})
+
+# ---------- Security guards (voir security.py) ----------
+login_throttle = security.LoginThrottle()
+
+async def _increment_ai_cap(key: str, day: str, units: int, limit: int) -> bool:
+    """Ajoute `units` au compteur (key, day) SEULEMENT si le total reste
+    sous `limit` — atomique : deux requêtes simultanées ne peuvent pas
+    dépasser le plafond ensemble. Un document déjà au plafond ne correspond
+    pas au filtre, l'upsert tente alors une insertion que l'index unique
+    (key, day) refuse : c'est ce refus qui signifie "plafond atteint".
+    Collection à part (`ai_safety_caps`), pas `ai_usage` : celle-ci est le
+    journal des quotas commerciaux de gating.py, avec un autre format."""
+    if units > limit:
+        return False
+    try:
+        await db.ai_safety_caps.update_one(
+            {"key": key, "day": day, "count": {"$lte": limit - units}},
+            {"$inc": {"count": units},
+             "$setOnInsert": {"expires_at": datetime.now(timezone.utc) + timedelta(days=7)}},
+            upsert=True,
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+
+async def _consume_ai_safety_cap(user: dict, units: int = 1) -> None:
+    """Plafond de sécurité avant TOUT appel Anthropic ; 429 si atteint.
+    Toujours actif, contrairement aux quotas commerciaux de gating.py qui
+    dépendent d'ENTITLEMENTS_ENFORCED : il protège le crédit Anthropic,
+    pas l'offre. Par utilisateur (équité) puis GLOBAL (quel que soit le
+    nombre de comptes créés)."""
+    import subscriptions
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    user_limit = security.ai_daily_limit(await subscriptions.plan_for(user))
+    if not await _increment_ai_cap(user["user_id"], day, units, user_limit):
+        raise HTTPException(429, f"Limite quotidienne de l'assistant IA atteinte ({user_limit} par jour). Réessaie demain.")
+    if not await _increment_ai_cap(security.GLOBAL_AI_KEY, day, units, security.ai_global_daily_limit()):
+        # Rend à l'utilisateur ce qui vient de lui être débité : ce n'est
+        # pas son plafond à lui qui est atteint.
+        await db.ai_safety_caps.update_one({"key": user["user_id"], "day": day}, {"$inc": {"count": -units}})
+        raise HTTPException(429, "L'assistant IA a atteint sa limite du jour. Réessaie demain.")
 
 # ---------- AI Chat ----------
 CHAT_SYSTEM_PROMPT = (
@@ -3462,11 +3542,21 @@ CHAT_SYSTEM_PROMPT = (
 async def chat(inp: ChatMessageInput, user: dict = Depends(require(feature="ai_assistant", quota="ai_messages_per_month"))):
     if not anthropic_client:
         raise HTTPException(503, "L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante)")
+    if not inp.message.strip():
+        raise HTTPException(400, "Message vide")
+    if len(inp.message) > security.MAX_CHAT_MESSAGE_LENGTH:
+        raise HTTPException(400, f"{security.MAX_CHAT_MESSAGE_LENGTH} caractères maximum par message")
+    if inp.session_id and len(inp.session_id) > security.MAX_CHAT_SESSION_ID_LENGTH:
+        raise HTTPException(400, "Identifiant de conversation invalide")
     session_id = inp.session_id or f"{user['user_id']}_default"
+    await _consume_ai_safety_cap(user)
 
+    # Les 50 messages les PLUS RÉCENTS (l'ancien tri croissant renvoyait les
+    # 50 premiers de la conversation et ignorait toute la suite).
     history = await db.chat_messages.find(
         {"user_id": user["user_id"], "session_id": session_id}, {"_id": 0}
-    ).sort("created_at", 1).to_list(50)
+    ).sort("created_at", -1).to_list(50)
+    history.reverse()
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": inp.message})
 
@@ -3596,6 +3686,10 @@ async def startup():
     # Journal d'usage IA : sert les quotas mensuels (gating.usage), toujours
     # interrogé par (user_id, kind, created_at).
     await db.ai_usage.create_index([("user_id", 1), ("kind", 1), ("created_at", 1)])
+    # Plafond de sécurité IA (voir _consume_ai_safety_cap) : l'unicité
+    # (key, day) rend le plafond atomique ; expiration après 7 jours.
+    await db.ai_safety_caps.create_index([("key", 1), ("day", 1)], unique=True)
+    await db.ai_safety_caps.create_index("expires_at", expireAfterSeconds=0)
     # Un abonnement par utilisateur : l'unicité est ce qui empêche deux
     # documents concurrents d'accorder deux paliers différents au même compte.
     await db.subscriptions.create_index("user_id", unique=True)
