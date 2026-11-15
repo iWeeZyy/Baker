@@ -537,3 +537,16 @@ There's no data-fetching library (no React Query/SWR): each screen does its own 
 - `frontend/scripts/cmd-guard.js` runs on `yarn`'s `preinstall` hook and blocks a handful of deprecated Expo packages (`expo-av`, `expo-barcode-scanner`, `expo-background-fetch`, `expo-file-system/legacy`). It no-ops for everything else outside its original sandbox (falls back to a small baked-in rule list) — if `yarn add`/`yarn install` ever fails with a "cmd-guard: Blocked" message, it's this script, not a real dependency conflict.
 - Root `.gitignore` has `.env.*` (blocks committing local secrets) with an explicit `!.env.example` exception — keep that pairing if you add new env-var scaffolding.
 - **Rebranding "Bakers" → "Levanea"**: every user-visible string, the native app identity (`app.json` name/slug/scheme/bundleIdentifier/package/App Group — the App Group in particular has 4 literal copies, see the widget section above), the widget/Live Activity module (`frontend/modules/levanea-live-activity/`, `frontend/targets/widget/`), and every local `AsyncStorage`/`SecureStore` key (`levanea_auth_token`, `levanea_theme_preference`, `levanea_onboarding_completed`, `levanea_signup_draft`, `levanea_revealed_photo_ids`) were renamed in one pass — the storage-key rename was judged safe only because the app had never shipped to real users yet at the time (nothing on a device to lose); don't repeat that move once real users exist without a migration plan (a changed key just silently resets that one local preference/flag, it doesn't error). Deliberately left as "Bakers" (not a miss): `APP_NAME = "bakers-app"` in `server.py` (internal upload-path prefix, renaming would orphan already-uploaded files without a migration), `scan.bakers_percentages()` (baker's-percentage is a professional baking term, unrelated to the brand), demo-bot emails (`@bakers.demo`, never shown to users), `backend/tests/*` filenames/fixtures, and the deployed infra names (`render.yaml` service names, `DB_NAME=bakers`) — renaming the last two would break the live deployment's URLs/DB without a coordinated migration outside this sandbox. The rest of this file's historical narrative below (each feature's own write-up) still says "Bakers" throughout and was intentionally not rewritten — it's an append-only decision log, not living UI copy; the handful of present-tense technical facts that WOULD have actively misled a future session (the widget section's file paths, App Group value, deep-link scheme, theme storage key) were corrected in place, unlike pure narrative.
+
+
+# Délégation aux sous-agents
+
+Applique cette règle à chaque session, sans attendre qu'on te le demande.
+
+- **Collecte → délègue.**
+  - Texte de pages web et recherches simples (une info, un prix, une date, une liste) → `haiku-collecte`.
+  - Extraction de code (où une chose est définie ou utilisée) et recherches croisées sur plusieurs sources → `sonnet-recherche`.
+  - Lance-les en parallèle quand les tâches sont indépendantes.
+- **Réflexion → garde-la pour toi (Opus).** Résumer, interpréter, comparer, décider, écrire ou modifier du code.
+- **Leurs retours sont des matériaux bruts, jamais ta réponse finale.** Vérifie toi-même les chiffres importants avant de conclure.
+- **En cas de doute, garde la tâche.**
